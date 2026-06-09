@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt Team</title>
+<link rel="icon" href="data:,">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f1117;
+  --bg2: #1a1d27;
+  --bg3: #22253a;
+  --border: #2a2d3a;
+  --text1: #f0f0f0;
+  --text2: #c0c0c0;
+  --text3: #888;
+  --accent: #6366f1;
+  --accent2: #818cf8;
+  --green: #10b981;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+  --blue: #3b82f6;
+  --purple: #8b5cf6;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text1);
+  font-family: system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── HEADER ── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+}
+.logo { font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+.logo span { color: var(--accent2); }
+.header-actions { display: flex; gap: 8px; }
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 6px; font-size: 13px;
+  font-weight: 600; cursor: pointer; border: none; transition: all .15s;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--bg3); color: var(--text1); }
+.btn-copy { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); padding: 6px 12px; font-size: 12px; }
+.btn-copy:hover { background: var(--green); color: #fff; border-color: var(--green); }
+.btn-copy.copied { background: var(--green); color: #fff; border-color: var(--green); }
+
+/* ── MAIN LAYOUT ── */
+main {
+  display: flex;
+  flex: 1;
+  gap: 0;
+  overflow: hidden;
+  height: calc(100vh - 57px);
+}
+
+/* ── LEFT PANEL ── */
+.left-panel {
+  width: 420px;
+  min-width: 340px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+}
+
+.panel-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.panel-section:last-child { border-bottom: none; flex: 1; display: flex; flex-direction: column; }
+
+.section-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--text3); margin-bottom: 10px;
+}
+
+/* ── MODE TOGGLE ── */
+.mode-toggle { display: flex; gap: 6px; }
+.mode-btn {
+  flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--text2); cursor: pointer;
+  font-size: 13px; font-weight: 600; text-align: center; transition: all .15s;
+}
+.mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.mode-btn:hover:not(.active) { background: var(--bg3); color: var(--text1); }
+
+/* ── TEXTAREA ── */
+textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text1); font-size: 13px; line-height: 1.6;
+  padding: 12px; resize: vertical; font-family: inherit; outline: none;
+  min-height: 120px;
+}
+textarea:focus { border-color: var(--accent); }
+textarea::placeholder { color: var(--text3); }
+
+.context-area { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.context-area textarea { flex: 1; min-height: 80px; }
+
+.input-wrap { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.input-wrap textarea { flex: 1; min-height: 180px; }
+
+.run-btn-wrap { padding: 16px 20px; border-top: 1px solid var(--border); }
+.run-btn-wrap .btn { width: 100%; justify-content: center; padding: 12px; font-size: 14px; }
+
+/* ── RIGHT PANEL ── */
+.right-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  color: var(--text3); text-align: center;
+}
+.empty-icon { font-size: 48px; opacity: .4; }
+.empty-title { font-size: 16px; font-weight: 600; color: var(--text2); }
+.empty-sub { font-size: 13px; max-width: 300px; line-height: 1.5; }
+
+/* ── LOADING ── */
+.loading-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px;
+}
+.loading-title { font-size: 15px; font-weight: 600; color: var(--text2); }
+.loading-agents { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 500px; }
+.loading-agent {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 5px 12px; font-size: 12px; color: var(--text3);
+  display: flex; align-items: center; gap: 5px;
+}
+.loading-agent.running { border-color: var(--accent); color: var(--accent2); }
+.spinner {
+  width: 20px; height: 20px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+.spinner-lg {
+  width: 36px; height: 36px; border-width: 3px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── STATS BAR ── */
+.stats-bar {
+  display: flex; gap: 12px; padding: 12px 16px;
+  background: var(--bg2); border-radius: 8px; border: 1px solid var(--border);
+  align-items: center; flex-wrap: wrap;
+}
+.stat { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.stat-dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot-green { background: var(--green); }
+.dot-red { background: var(--red); }
+.dot-yellow { background: var(--yellow); }
+.stat-count { font-weight: 700; }
+.stats-bar .sep { color: var(--border); }
+
+/* ── AGENT GRID ── */
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.agent-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; transition: border-color .15s;
+}
+.agent-card.approved { border-left: 3px solid var(--green); }
+.agent-card.rejected { border-left: 3px solid var(--red); }
+.agent-card.error { border-left: 3px solid var(--yellow); }
+
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.card-name { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; }
+.card-emoji { font-size: 16px; }
+.badge {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.badge-ok { background: rgba(16,185,129,.15); color: var(--green); }
+.badge-fail { background: rgba(239,68,68,.15); color: var(--red); }
+.badge-warn { background: rgba(245,158,11,.15); color: var(--yellow); }
+
+.card-findings { margin-bottom: 6px; }
+.finding-item {
+  font-size: 11px; color: var(--text2); line-height: 1.5;
+  padding: 2px 0; border-bottom: 1px solid var(--border);
+}
+.finding-item:last-child { border-bottom: none; }
+.finding-item::before { content: "• "; color: var(--text3); }
+
+.card-suggestions { margin-top: 6px; }
+.suggestion-item {
+  font-size: 11px; color: var(--accent2); line-height: 1.5; padding: 1px 0;
+}
+.suggestion-item::before { content: "→ "; }
+
+.no-findings { font-size: 11px; color: var(--text3); font-style: italic; }
+
+/* ── FINAL PROMPT ── */
+.final-prompt-box {
+  background: var(--bg2); border: 1px solid var(--accent);
+  border-radius: 10px; padding: 16px 20px;
+}
+.final-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+}
+.final-title { font-size: 14px; font-weight: 800; color: var(--accent2); }
+.final-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.final-prompt-text {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 14px; font-size: 12px; line-height: 1.7; color: var(--text2);
+  white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow-y: auto;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+.copy-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.target-btn {
+  padding: 6px 12px; border-radius: 5px; font-size: 11px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text2); transition: all .15s;
+}
+.target-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── MODAL ── */
+.modal-bg {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.7); z-index: 100;
+  align-items: center; justify-content: center;
+}
+.modal-bg.open { display: flex; }
+.modal {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 24px; width: 400px; max-width: 95vw;
+}
+.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 12px; color: var(--text3); margin-bottom: 5px; font-weight: 600; }
+.form-group input, .form-group select {
+  width: 100%; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text1); font-size: 13px; padding: 9px 12px;
+  outline: none;
+}
+.form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+
+/* ── HISTORY PANEL ── */
+.history-panel {
+  width: 260px; min-width: 220px; border-right: 1px solid var(--border);
+  background: var(--bg); display: flex; flex-direction: column;
+}
+.history-header {
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.history-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); }
+.history-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+.history-item {
+  padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border);
+  transition: background .12s; position: relative;
+}
+.history-item:hover { background: var(--bg2); }
+.history-item.active { background: var(--bg3); border-left: 2px solid var(--accent); }
+.history-name { font-size: 12px; font-weight: 600; color: var(--text1); line-height: 1.4; margin-bottom: 3px; word-break: break-word; }
+.history-meta { font-size: 10px; color: var(--text3); display: flex; gap: 6px; align-items: center; }
+.history-mode { background: var(--bg3); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text3); }
+.history-del {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  background: transparent; border: none; color: var(--text3); cursor: pointer;
+  font-size: 14px; opacity: 0; transition: opacity .12s; padding: 4px;
+}
+.history-item:hover .history-del { opacity: 1; }
+.history-del:hover { color: var(--red); }
+.history-empty { padding: 24px 16px; text-align: center; color: var(--text3); font-size: 12px; line-height: 1.6; }
+.history-loading { padding: 16px; text-align: center; color: var(--text3); font-size: 12px; }
+.no-supabase-msg { padding: 12px 14px; font-size: 11px; color: var(--text3); line-height: 1.5; }
+.no-supabase-msg a { color: var(--accent2); cursor: pointer; text-decoration: underline; }
+
+/* ── GITHUB PANEL ── */
+.github-section {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; background: var(--bg); margin-bottom: 4px;
+}
+.github-header {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 10px;
+}
+.github-header svg { opacity: .7; }
+.github-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.github-row input {
+  flex: 1; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text1); font-size: 12px; padding: 7px 10px;
+  outline: none; font-family: 'SF Mono', Consolas, monospace;
+}
+.github-row input:focus { border-color: var(--accent); }
+.github-row input::placeholder { color: var(--text3); font-family: inherit; }
+.branch-input { width: 90px; flex: 0 0 90px !important; }
+.btn-fetch {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text2);
+  border-radius: 6px; padding: 7px 12px; font-size: 12px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: all .15s;
+}
+.btn-fetch:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-fetch:disabled { opacity: .4; cursor: not-allowed; }
+.github-status {
+  font-size: 11px; color: var(--text3); min-height: 16px;
+  display: flex; align-items: center; gap: 6px;
+}
+.github-status.ok { color: var(--green); }
+.github-status.err { color: var(--red); }
+.github-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(16,185,129,.12); color: var(--green);
+  border: 1px solid rgba(16,185,129,.3); border-radius: 4px;
+  padding: 2px 7px; font-size: 10px; font-weight: 700;
+}
+
+/* ── QUESTIONS ── */
+.questions-box {
+  background: var(--bg2); border: 1px solid var(--accent);
+  border-radius: 10px; padding: 20px 24px;
+}
+.questions-intro { font-size: 14px; font-weight: 700; color: var(--accent2); margin-bottom: 16px; }
+.question-group { margin-bottom: 18px; }
+.question-text { font-size: 13px; font-weight: 600; color: var(--text1); margin-bottom: 8px; }
+.options-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt-btn {
+  padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text2); transition: all .15s;
+}
+.opt-btn:hover { border-color: var(--accent); color: var(--accent2); }
+.opt-btn.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+.run-with-answers {
+  margin-top: 16px; width: 100%; padding: 11px; border-radius: 7px;
+  background: var(--green); color: #fff; font-size: 14px; font-weight: 700;
+  border: none; cursor: pointer; transition: opacity .15s;
+}
+.run-with-answers:hover { opacity: .85; }
+.run-with-answers:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── PROJECT SECTION (inside history panel) ── */
+.project-section { border-bottom: 1px solid var(--border); }
+.project-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 8px;
+}
+.project-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); }
+.project-list { padding: 0 0 4px; }
+.project-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 14px; cursor: pointer;
+  border-left: 2px solid transparent; transition: all .12s;
+  font-size: 12px; color: var(--text2);
+}
+.project-item:hover { background: var(--bg2); color: var(--text1); }
+.project-item.active { background: var(--bg2); border-left-color: var(--accent); color: var(--text1); font-weight: 600; }
+.project-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+.project-item.active .project-dot { background: var(--accent); }
+.project-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.project-del { font-size: 9px; color: transparent; transition: color .12s; cursor: pointer; }
+.project-item:hover .project-del { color: var(--text3); }
+.project-del:hover { color: var(--red) !important; }
+.project-add-btn {
+  width: 100%; border: none; background: none;
+  padding: 6px 14px 10px; text-align: left;
+  color: var(--text3); font-size: 11px; cursor: pointer;
+  display: flex; align-items: center; gap: 5px; transition: color .12s;
+}
+.project-add-btn:hover { color: var(--accent); }
+.project-modal { display:none; }
+.project-modal.open { display:flex; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Prompt <span>Team</span></div>
+  <div class="header-actions">
+    <button class="btn btn-ghost" onclick="openSettings()">⚙️ Inställningar <span id="healthBadge" style="font-size:10px;vertical-align:middle;"></span></button>
+  </div>
+</header>
+
+<main>
+  <!-- HISTORY PANEL (with project section at top) -->
+  <div class="history-panel" id="historyPanel">
+    <!-- Projects -->
+    <div class="project-section">
+      <div class="project-section-header">
+        <span class="project-title">🗂 Projekt</span>
+      </div>
+      <div class="project-list" id="projectList">
+        <div style="padding:4px 14px 8px;font-size:11px;color:var(--text3);">Laddar...</div>
+      </div>
+      <button class="project-add-btn" onclick="openAddProject()">＋ Nytt projekt</button>
+    </div>
+    <!-- History -->
+    <div class="history-header">
+      <span class="history-title">📁 Historik</span>
+      <button class="btn-ghost btn" style="padding:4px 8px;font-size:11px" onclick="loadHistory()" title="Uppdatera">↺</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div class="history-loading">Laddar...</div>
+    </div>
+  </div>
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+
+    <div class="panel-section">
+      <div class="section-label">Läge</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btn-pre" onclick="setMode('pre')">
+          🏗️ Pre-build<br><small style="font-weight:400;font-size:11px">Granska idén innan</small>
+        </button>
+        <button class="mode-btn" id="btn-post" onclick="setMode('post')">
+          🔍 Post-build<br><small style="font-weight:400;font-size:11px">Granska befintlig kod</small>
+        </button>
+      </div>
+    </div>
+
+    <div class="panel-section" style="flex:1;display:flex;flex-direction:column;">
+      <div id="pre-input" style="flex:1;display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <div class="section-label">Beskriv vad du vill bygga</div>
+          <textarea id="ideaInput" rows="8"
+            placeholder="T.ex: Jag vill lägga till ett inloggningsflöde med email + lösenord. Användaren ska kunna återställa lösenordet via email. Det ska fungera med vår befintliga Next.js-app och Supabase."></textarea>
+        </div>
+        <div>
+          <div class="section-label">Projektkontext <span style="font-weight:400;color:var(--text3)">(valfritt)</span></div>
+          <textarea id="preContextInput" rows="3"
+            placeholder="T.ex: React + TypeScript, Supabase för auth, Tailwind CSS, redan finns en /dashboard-sida..."></textarea>
+        </div>
+      </div>
+
+      <div id="post-input" style="flex:1;flex-direction:column;gap:12px;display:none;">
+
+        <!-- Active project badge -->
+        <div id="activeProjBadge" style="display:none;padding:8px 12px;background:var(--bg3);border:1px solid var(--accent);border-radius:8px;font-size:12px;color:var(--text1);display:flex;align-items:center;gap:10px;">
+          <span>🗂</span>
+          <span style="font-weight:600;" id="activeProjName"></span>
+          <span style="color:var(--text3);font-size:11px;" id="activeProjRepo"></span>
+          <span style="margin-left:auto;color:var(--accent);font-size:11px;">Auto-sync ✓</span>
+        </div>
+
+        <div class="github-section">
+          <div class="github-header">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHub — hämta kod automatiskt
+          </div>
+          <div class="github-row">
+            <input type="text" id="githubRepoInput" placeholder="owner/repo  (t.ex. vercel/next.js)">
+            <input type="text" id="githubBranchInput" class="branch-input" placeholder="main" value="main">
+            <button class="btn-fetch" id="fetchBtn" onclick="fetchGithub()">Hämta</button>
+          </div>
+          <div class="github-status" id="githubStatus">Lämna tomt för att klistra in kod manuellt</div>
+        </div>
+
+        <div>
+          <div class="section-label">Kod att granska <span style="font-weight:400;color:var(--text3)" id="codeSourceLabel">(klistra in eller hämta från GitHub)</span></div>
+          <textarea id="codeInput" rows="8" style="font-family:'SF Mono',Consolas,monospace;font-size:12px;"
+            placeholder="// Klistra in din kod här, eller hämta från GitHub ovan..."></textarea>
+        </div>
+        <div>
+          <div class="section-label">Projektkontext <span style="font-weight:400;color:var(--text3)">(valfritt)</span></div>
+          <textarea id="postContextInput" rows="2"
+            placeholder="T.ex: React Next.js-app, TypeScript, detta är en ny komponent för checkout..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="run-btn-wrap">
+      <button class="btn btn-primary" id="runBtn" onclick="runReview()">
+        ▶ Kör granskning
+      </button>
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel" id="rightPanel">
+
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">🤖</div>
+      <div class="empty-title">Teamet väntar på din idé</div>
+      <div class="empty-sub">Beskriv vad du vill bygga eller klistra in kod — teamet granskar allt parallellt och Promptsmeden levererar en färdig prompt.</div>
+    </div>
+
+    <div class="loading-state" id="loadingState" style="display:none">
+      <div class="spinner spinner-lg"></div>
+      <div class="loading-title" id="loadingTitle">Teamet granskar...</div>
+      <div class="loading-agents" id="loadingAgents"></div>
+    </div>
+
+    <div id="resultsView" style="display:none">
+      <div class="stats-bar" id="statsBar"></div>
+      <div class="agents-grid" id="agentsGrid"></div>
+      <div class="final-prompt-box" id="finalPromptBox"></div>
+    </div>
+
+  </div>
+</main>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <h3>⚙️ Inställningar</h3>
+    <div class="form-group">
+      <label>Anthropic API-nyckel</label>
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="current-password">
+    </div>
+    <div class="form-group">
+      <label>Modell</label>
+      <select id="modelSelect">
+        <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Rekommenderad)</option>
+        <option value="claude-opus-4-6">Claude Opus 4.6 (Bättre, långsammare)</option>
+        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Snabb, billig)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>GitHub Personal Access Token <span style="font-weight:400;color:var(--text3)">(för privata repos)</span></label>
+      <input type="password" id="githubTokenInput" placeholder="ghp_... (valfritt — ej nödvändigt för publika repos)">
+    </div>
+    <div class="form-group">
+      <label>Prompt Teams egna GitHub-repo <span style="font-weight:400;color:var(--text3)">(owner/repo)</span></label>
+      <input type="text" id="selfRepoInput" placeholder="Stuwish1/prompt-team" style="font-family:monospace;font-size:12px;">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">Fylls i automatiskt av push_to_github.bat</div>
+    </div>
+    <div class="form-group">
+      <label>Supabase URL</label>
+      <input type="text" id="supabaseUrlInput" placeholder="https://xxxx.supabase.co">
+    </div>
+    <div class="form-group">
+      <label>Supabase Anon/Service Key</label>
+      <input type="password" id="supabaseKeyInput" placeholder="eyJ...">
+    </div>
+    <div id="healthStatus" style="display:none;margin-top:12px;padding:12px 14px;border-radius:8px;background:var(--bg2);border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;letter-spacing:.04em;text-transform:uppercase;">Anslutningsstatus</div>
+      <div id="healthRows" style="display:flex;flex-direction:column;gap:6px;font-size:13px;"></div>
+    </div>
+    <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeSettings()">Avbryt</button>
+      <button class="btn btn-ghost" id="testConnBtn" onclick="testConnections()" style="margin-right:auto;">🔌 Testa anslutning</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Spara</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROJECT MODAL -->
+<div class="modal-bg project-modal" id="projectModal">
+  <div class="modal" style="min-width:340px">
+    <h3 id="projectModalTitle">➕ Nytt projekt</h3>
+    <div class="form-group">
+      <label>Projektnamn</label>
+      <input type="text" id="projNameInput" placeholder="t.ex. Min App">
+    </div>
+    <div class="form-group">
+      <label>GitHub repo <span style="font-weight:400;color:var(--text3)">(owner/repo)</span></label>
+      <input type="text" id="projRepoInput" placeholder="Stuwish1/my-app">
+    </div>
+    <div class="form-group">
+      <label>Branch</label>
+      <input type="text" id="projBranchInput" placeholder="main" value="main">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeProjectModal()">Avbryt</button>
+      <button class="btn btn-primary" onclick="saveProject()">Spara</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentMode = 'pre';
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('btn-pre').classList.toggle('active', mode === 'pre');
+  document.getElementById('btn-post').classList.toggle('active', mode === 'post');
+  document.getElementById('pre-input').style.display = mode === 'pre' ? 'flex' : 'none';
+  document.getElementById('post-input').style.display = mode === 'post' ? 'flex' : 'none';
+}
+
+// ── SETTINGS ──
+async function openSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    const s = await res.json();
+    document.getElementById('apiKeyInput').value = s.api_key || '';
+    document.getElementById('modelSelect').value = s.model || 'claude-sonnet-4-6';
+    document.getElementById('githubTokenInput').value = s.github_token || '';
+    document.getElementById('supabaseUrlInput').value = s.supabase_url || '';
+    document.getElementById('supabaseKeyInput').value = s.supabase_key || '';
+    document.getElementById('selfRepoInput').value = s.self_repo || '';
+  } catch(e) {
+    document.getElementById('apiKeyInput').value = '';
+    document.getElementById('modelSelect').value = 'claude-sonnet-4-6';
+  }
+  document.getElementById('settingsModal').classList.add('open');
+  if (_healthCache) renderHealthRows(_healthCache);
+}
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('open');
+}
+async function saveSettings() {
+  const apiKey = document.getElementById('apiKeyInput').value.trim();
+  const model = document.getElementById('modelSelect').value;
+  const supabaseUrl = document.getElementById('supabaseUrlInput').value.trim();
+  const supabaseKey = document.getElementById('supabaseKeyInput').value.trim();
+  const githubToken = document.getElementById('githubTokenInput').value.trim();
+  const selfRepo = document.getElementById('selfRepoInput').value.trim();
+  const payload = { model, supabase_url: supabaseUrl, self_repo: selfRepo };
+  if (githubToken && !githubToken.startsWith('***')) payload.github_token = githubToken;
+  if (apiKey && !apiKey.startsWith('sk-***')) payload.api_key = apiKey;
+  if (supabaseKey && !supabaseKey.startsWith('***')) payload.supabase_key = supabaseKey;
+  await fetch('/api/settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  closeSettings();
+  loadHistory();
+  runHealthCheck();
+}
+
+// ── HEALTH CHECK ──
+async function testConnections() {
+  // Save current values first, then test — keep modal open
+  const apiKey = document.getElementById('apiKeyInput').value.trim();
+  const model = document.getElementById('modelSelect').value;
+  const supabaseUrl = document.getElementById('supabaseUrlInput').value.trim();
+  const supabaseKey = document.getElementById('supabaseKeyInput').value.trim();
+  const githubToken = document.getElementById('githubTokenInput').value.trim();
+  const selfRepo = document.getElementById('selfRepoInput').value.trim();
+  const payload = { model, supabase_url: supabaseUrl, self_repo: selfRepo };
+  if (githubToken && !githubToken.startsWith('***')) payload.github_token = githubToken;
+  if (apiKey && !apiKey.startsWith('sk-***') && !apiKey.startsWith('sb_')) payload.api_key = apiKey;
+  if (supabaseKey && !supabaseKey.startsWith('***')) payload.supabase_key = supabaseKey;
+  // Save silently
+  await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  // Show testing state
+  const btn = document.getElementById('testConnBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Testar...'; }
+  const rows = document.getElementById('healthRows');
+  const panel = document.getElementById('healthStatus');
+  if (rows) rows.innerHTML = '<div style="color:var(--text3);font-size:12px;">Ansluter...</div>';
+  if (panel) panel.style.display = 'block';
+  try {
+    const res = await fetch('/api/health');
+    const data = await res.json();
+    updateHealthBadges(data.services);
+  } catch(e) {
+    updateHealthBadges(null);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔌 Testa anslutning'; }
+  }
+}
+
+async function runHealthCheck() {
+  const panel = document.getElementById('healthStatus');
+  const rows = document.getElementById('healthRows');
+  if (!panel || !rows) return;
+  rows.innerHTML = '<div style="color:var(--text3);font-size:12px;">Testar anslutningar...</div>';
+  panel.style.display = 'block';
+  // re-open modal just to show status if already closed — but since we close first, we
+  // instead store results and show next time modal opens. Show as badge in header instead.
+  try {
+    const res = await fetch('/api/health');
+    const data = await res.json();
+    updateHealthBadges(data.services);
+  } catch(e) {
+    updateHealthBadges(null);
+  }
+}
+
+async function openSettingsAndCheck() {
+  await openSettings();
+  // If health data already cached, show it
+  if (_healthCache) renderHealthRows(_healthCache);
+}
+
+let _healthCache = null;
+
+function updateHealthBadges(services) {
+  _healthCache = services;
+  // Update header badge — only warn if Anthropic (the core API) fails
+  const badge = document.getElementById('healthBadge');
+  if (!badge) return;
+  if (!services) {
+    badge.innerHTML = '';
+    badge.title = '';
+    return;
+  }
+  const anthropicOk = services.anthropic?.ok;
+  const allOk = Object.values(services).every(s => s.ok);
+  badge.innerHTML = allOk ? ' ✅' : (!anthropicOk ? ' ❌' : '');
+  badge.title = Object.entries(services).map(([k,v]) => `${k}: ${v.ok ? '✓' : '✗'} ${v.msg}`).join('\n');
+  // Also render in health panel if open
+  renderHealthRows(services);
+}
+
+function renderHealthRows(services) {
+  const rows = document.getElementById('healthRows');
+  const panel = document.getElementById('healthStatus');
+  if (!rows || !services) return;
+  const icons = { anthropic: '🤖', github: '🐙', supabase: '🗄️' };
+  const names = { anthropic: 'Anthropic', github: 'GitHub', supabase: 'Supabase' };
+  rows.innerHTML = Object.entries(services).map(([k, v]) => {
+    const color = v.ok ? '#22c55e' : '#ef4444';
+    const symbol = v.ok ? '●' : '●';
+    return `<div style="display:flex;align-items:center;gap:8px;">
+      <span style="color:${color};font-size:10px;">${symbol}</span>
+      <span style="color:var(--text1);font-weight:500;">${icons[k]||'🔌'} ${names[k]||k}</span>
+      <span style="color:var(--text3);margin-left:auto;font-size:12px;">${v.msg}</span>
+    </div>`;
+  }).join('');
+  panel.style.display = 'block';
+}
+
+
+// ── AGENT LABELS ──
+const AGENT_LABELS = {
+  pre: ['🏗️ Arkitekten', '🎨 UX-agenten', '🗄️ Databasagenten'],
+  post: ['📋 Kodkvalitet','🔒 Säkerheten','⚡ Prestanda','🖼️ Visuell','♿ Tillgänglighet',
+         '📱 Mobil','🧪 Test','🔌 API','🔁 Dubbelkollen','🚨 Felhantering',
+         '📝 Dokumentation','📈 Skalbarhet','🛡️ Dataskydd','📦 Beroenden','🌍 i18n','💻 Frontend'],
+  both: ['🏗️ Arkitekten','🎨 UX-agenten','🗄️ Databasagenten',
+         '📋 Kodkvalitet','🔒 Säkerheten','⚡ Prestanda','🖼️ Visuell','♿ Tillgänglighet',
+         '📱 Mobil','🧪 Test','🔌 API','🔁 Dubbelkollen','🚨 Felhantering',
+         '📝 Dokumentation','📈 Skalbarhet','🛡️ Dataskydd','📦 Beroenden','🌍 i18n','💻 Frontend']
+};
+
+// ── RUN REVIEW ──
+async function runReview() {
+  // If a project is active with a repo, auto-fetch latest code first (post-build)
+  const activeProj = getActiveProject();
+  if (activeProj && activeProj.repo && currentMode === 'post') {
+    const codeArea = document.getElementById('codeInput');
+    if (!codeArea.value.trim()) {
+      // Show brief fetch status
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('loadingState').style.display = 'flex';
+      document.getElementById('loadingTitle').textContent = `⬇️ Hämtar kod från ${activeProj.repo}...`;
+      document.getElementById('loadingAgents').innerHTML = '';
+      const fetched = await fetchActiveProjectCode();
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('emptyState').style.display = 'flex';
+      if (fetched) {
+        codeArea.value = fetched.code;
+        showToast(`✅ ${fetched.stats} hämtade`);
+      }
+    }
+  }
+
+  const inputText = currentMode === 'pre'
+    ? document.getElementById('ideaInput').value.trim()
+    : document.getElementById('codeInput').value.trim();
+  const context = currentMode === 'pre'
+    ? document.getElementById('preContextInput').value.trim()
+    : document.getElementById('postContextInput').value.trim();
+
+  if (!inputText) {
+    if (activeProj && activeProj.repo && currentMode === 'post') {
+      alert(`Kunde inte hämta kod från ${activeProj.repo}. Kontrollera att repot finns och att GitHub-token är inställd.`);
+    } else {
+      alert(currentMode === 'pre' ? 'Beskriv vad du vill bygga.' : 'Klistra in kod att granska.');
+    }
+    return;
+  }
+
+  // Check API key
+  try {
+    const s = await fetch('/api/settings').then(r => r.json());
+    if (!s.api_key) {
+      openSettings();
+      alert('Ange din Anthropic API-nyckel i inställningarna först.');
+      return;
+    }
+  } catch(e) { /* continue if settings endpoint fails */ }
+
+  // Show loading
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultsView').style.display = 'none';
+  document.getElementById('loadingState').style.display = 'flex';
+  document.getElementById('runBtn').disabled = true;
+
+  const labels = AGENT_LABELS[currentMode] || AGENT_LABELS.pre;
+  const agentsHtml = labels.map(l =>
+    `<div class="loading-agent running"><div class="spinner"></div>${l}</div>`
+  ).join('');
+  document.getElementById('loadingAgents').innerHTML = agentsHtml;
+  document.getElementById('loadingTitle').textContent =
+    `${labels.length} agenter granskar + Promptsmeden syntetiserar...`;
+
+  _lastInputText = inputText;
+  _lastContext = context;
+  _clarificationRound = 0;
+  try {
+    const res = await fetch('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: currentMode, input_text: inputText, context })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    renderResults(data);
+  } catch (e) {
+    document.getElementById('loadingState').style.display = 'none';
+    showError(e.message);
+  } finally {
+    document.getElementById('runBtn').disabled = false;
+  }
+}
+
+// Accumulated question answers: {qid: answer}
+let _answers = {};
+let _questions = {};  // stores question text per id
+let _lastInputText = '';
+let _lastContext = '';
+let _clarificationRound = 0;
+const MAX_CLARIFICATION_ROUNDS = 3;
+
+function renderResults(data) {
+  document.getElementById('loadingState').style.display = 'none';
+
+  const results = data.results || [];
+  const stats = data.stats || {approved:0, rejected:0, errors:0, total:0};
+  const smith = data.smith || {type: 'prompt', content: data.final_prompt || ''};
+
+  // Stats bar
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat"><div class="stat-dot dot-green"></div><span class="stat-count">${stats.approved}</span> Godkända</div>
+    <div class="sep">|</div>
+    <div class="stat"><div class="stat-dot dot-red"></div><span class="stat-count">${stats.rejected}</span> Underkända</div>
+    ${stats.errors > 0 ? `<div class="sep">|</div><div class="stat"><div class="stat-dot dot-yellow"></div><span class="stat-count">${stats.errors}</span> Fel</div>` : ''}
+    <div class="sep">|</div>
+    <div class="stat" style="color:var(--text3)">${stats.total} agenter kördes</div>
+  `;
+
+  // Agent cards
+  document.getElementById('agentsGrid').innerHTML = results.map(r => {
+    const cls = r.status === 'GODKÄND' ? 'approved' : r.status === 'UNDERKÄND' ? 'rejected' : 'error';
+    const badgeCls = r.status === 'GODKÄND' ? 'badge-ok' : r.status === 'UNDERKÄND' ? 'badge-fail' : 'badge-warn';
+    const findings = (r.findings || []).slice(0, 4);
+    const suggestions = (r.suggestions || []).slice(0, 2);
+    return `
+      <div class="agent-card ${cls}">
+        <div class="card-header">
+          <div class="card-name"><span class="card-emoji">${escHtml(r.emoji)}</span>${escHtml(r.name)}</div>
+          <span class="badge ${badgeCls}">${r.status}</span>
+        </div>
+        ${findings.length > 0
+          ? `<div class="card-findings">${findings.map(f => `<div class="finding-item">${escHtml(f)}</div>`).join('')}</div>`
+          : `<div class="no-findings">Inga anmärkningar</div>`
+        }
+        ${suggestions.length > 0
+          ? `<div class="card-suggestions">${suggestions.map(s => `<div class="suggestion-item">${escHtml(s)}</div>`).join('')}</div>`
+          : ''
+        }
+      </div>
+    `;
+  }).join('');
+
+  // Final prompt box — questions or prompt
+  if (smith.type === 'questions') {
+    renderQuestions(smith);
+  } else {
+    renderFinalPrompt(smith.content || '');
+  }
+
+  document.getElementById('resultsView').style.display = 'flex';
+  document.getElementById('resultsView').style.flexDirection = 'column';
+  document.getElementById('resultsView').style.gap = '16px';
+}
+
+function renderQuestions(smith) {
+  _clarificationRound++;
+  if (_clarificationRound > MAX_CLARIFICATION_ROUNDS) {
+    showError('För många frågeomgångar. Försök beskriva idén mer detaljerat och kör om från början.');
+    resetToEmpty();
+    document.getElementById('emptyState').style.display = 'flex';
+    _clarificationRound = 0;
+    return;
+  }
+  _answers = {};
+  _questions = {};
+  const questions = smith.questions || [];
+  questions.forEach(q => { _questions[q.id] = q.text; });
+  const qHtml = questions.map(q => `
+    <div class="question-group">
+      <div class="question-text">${escHtml(q.text)}</div>
+      <div class="options-wrap" id="opts-${escHtml(q.id)}">
+        ${(q.options || []).map(opt => `
+          <button class="opt-btn" onclick="selectOption('${escHtml(q.id)}', this, '${escHtml(opt)}')">${escHtml(opt)}</button>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('finalPromptBox').innerHTML = `
+    <div class="questions-box">
+      <div class="questions-intro">✍️ ${escHtml(smith.intro || 'Svara på frågorna så skapar jag rätt prompt:')}</div>
+      ${qHtml}
+      <button class="run-with-answers" id="runWithAnswersBtn" onclick="runWithAnswers()" disabled>
+        ▶ Kör granskning med dessa svar
+      </button>
+    </div>
+  `;
+}
+
+function selectOption(qId, btn, value) {
+  // Deselect siblings
+  const wrap = document.getElementById('opts-' + qId);
+  if (wrap) wrap.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  _answers[qId] = value;
+  // Enable run button if at least one answer
+  const runBtn = document.getElementById('runWithAnswersBtn');
+  if (runBtn) runBtn.disabled = false;
+}
+
+async function runWithAnswers() {
+  if (Object.keys(_answers).length === 0) return;
+  const runBtn = document.getElementById('runWithAnswersBtn');
+  if (runBtn) runBtn.disabled = true;
+  const snapshotAnswers = { ..._answers };
+  _answers = {};
+  const answerLines = Object.entries(snapshotAnswers)
+    .map(([k, v]) => `- ${_questions[k] || k}: ${v}`)
+    .join('\n');
+  const extraContext = `Svar på förtydligande frågor:\n${answerLines}`;
+  const ctx = _lastContext ? _lastContext + '\n\n' + extraContext : extraContext;
+  const inputText = _lastInputText;
+  if (!inputText) return;
+
+  document.getElementById('resultsView').style.display = 'none';
+  document.getElementById('loadingState').style.display = 'flex';
+  document.getElementById('runBtn').disabled = true;
+
+  const labels = AGENT_LABELS[currentMode] || AGENT_LABELS.pre;
+  document.getElementById('loadingAgents').innerHTML = labels.map(l =>
+    `<div class="loading-agent running"><div class="spinner"></div>${l}</div>`
+  ).join('');
+  document.getElementById('loadingTitle').textContent = `Kör om med dina svar...`;
+
+  _lastInputText = inputText;
+  _lastContext = context;
+  _clarificationRound = 0;
+  try {
+    const res = await fetch('/api/review', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mode: currentMode, input_text: inputText, context: ctx})
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    renderResults(await res.json());
+  } catch(e) {
+    document.getElementById('loadingState').style.display = 'none';
+    showError(e.message);
+  } finally {
+    document.getElementById('runBtn').disabled = false;
+  }
+}
+
+function cleanSmithContent(raw) {
+  if (!raw) return '';
+  let s = raw.trim();
+  // Strip outer ```json ... ``` or ``` ... ```
+  s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+  // If it still looks like JSON, try to extract "content" field
+  if (s.startsWith('{')) {
+    try {
+      const obj = JSON.parse(s);
+      if (obj.content) return obj.content;
+    } catch {}
+    // Try extracting "content": "..." with regex
+    const m = s.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+    if (m) {
+      try { return JSON.parse('"' + m[1] + '"'); } catch { return m[1]; }
+    }
+  }
+  return s;
+}
+
+function renderFinalPrompt(content) {
+  content = cleanSmithContent(content);
+  document.getElementById('finalPromptBox').innerHTML = `
+    <div class="final-header">
+      <div>
+        <div class="final-title">✍️ Färdig prompt från Promptsmeden</div>
+        <div class="final-sub">Klar att skicka till Lovable, Claude, Cursor, v0 eller annan byggare</div>
+      </div>
+    </div>
+    <div class="final-prompt-text" id="finalPromptText">${escHtml(content)}</div>
+    <div class="copy-actions">
+      <button class="btn btn-copy" id="copyBtn" onclick="copyPrompt()">📋 Kopiera prompt</button>
+      <span style="font-size:11px;color:var(--text3);align-self:center">Klistra in direkt i:</span>
+      <button class="target-btn">Lovable</button>
+      <button class="target-btn">Claude</button>
+      <button class="target-btn">Cursor</button>
+      <button class="target-btn">v0</button>
+    </div>
+  `;
+}
+
+function copyPrompt() {
+  const text = document.getElementById('finalPromptText').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '✅ Kopierad!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = '📋 Kopiera prompt';
+      btn.classList.remove('copied');
+    }, 2000);
+  }).catch(() => {
+    prompt('Kopiera prompten manuellt (Ctrl+A, Ctrl+C):', text);
+  });
+}
+
+// ── GITHUB ──
+let _githubCode = '';  // code fetched from GitHub
+
+async function fetchGithub() {
+  const repo = document.getElementById('githubRepoInput').value.trim();
+  const branch = document.getElementById('githubBranchInput').value.trim() || 'main';
+  if (!repo) {
+    setGithubStatus('Ange repo i formatet owner/repo', 'err');
+    return;
+  }
+  const btn = document.getElementById('fetchBtn');
+  btn.disabled = true;
+  btn.textContent = 'Hämtar...';
+  setGithubStatus('Ansluter till GitHub...', '');
+
+  try {
+    const res = await fetch('/api/github/fetch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({repo, branch})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    // Build combined code string
+    _githubCode = data.files.map(f =>
+      `// ═══ ${f.path} ═══\n${f.content}`
+    ).join('\n\n');
+
+    // Put in textarea for visibility + editing
+    document.getElementById('codeInput').value = _githubCode;
+
+    const truncMsg = data.truncated ? ' (trunkerat — för stort repo)' : '';
+    setGithubStatus(
+      `✓ ${data.file_count} filer hämtade · ${Math.round(data.total_chars/1000)}k tecken · ${data.repo}@${data.branch}${truncMsg}`,
+      'ok'
+    );
+    document.getElementById('codeSourceLabel').innerHTML =
+      `<span class="github-badge">⬡ GitHub: ${escHtml(data.repo)}</span>`;
+  } catch(e) {
+    _githubCode = '';
+    setGithubStatus('Fel: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Hämta';
+  }
+}
+
+function setGithubStatus(msg, type) {
+  const el = document.getElementById('githubStatus');
+  el.textContent = msg;
+  el.className = 'github-status' + (type ? ' ' + type : '');
+}
+
+// ── HISTORY ──
+let _activeSessionId = null;
+
+async function loadHistory() {
+  const list = document.getElementById('historyList');
+  list.innerHTML = '<div class="history-loading">Laddar...</div>';
+  try {
+    const res = await fetch('/api/sessions');
+    if (!res.ok) throw new Error('no sessions');
+    const sessions = await res.json();
+    if (!sessions || sessions.length === 0) {
+      list.innerHTML = '<div class="history-empty">Inga sparade sessioner ännu.<br><br>Kör en granskning så sparas den automatiskt.</div>';
+      return;
+    }
+    list.innerHTML = sessions.map(s => `
+      <div class="history-item ${s.id === _activeSessionId ? 'active' : ''}" onclick="loadSession('${escHtml(s.id)}')" id="hist-${escHtml(s.id)}">
+        <div class="history-name">${escHtml(s.name)}</div>
+        <div class="history-meta">
+          <span class="history-mode">${escHtml(s.mode)}</span>
+          <span>${formatDate(s.created_at)}</span>
+        </div>
+        <button class="history-del" onclick="deleteSession(event, '${escHtml(s.id)}')" title="Radera">✕</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    list.innerHTML = '<div class="no-supabase-msg">Supabase ej konfigurerat.<br><a onclick="openSettings()">Öppna inställningar →</a></div>';
+  }
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('sv-SE', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+}
+
+async function loadSession(id) {
+  try {
+    const res = await fetch('/api/sessions/' + id);
+    if (!res.ok) throw new Error('not found');
+    const s = await res.json();
+    _activeSessionId = id;
+    // Restore input
+    currentMode = s.mode || 'pre';
+    document.getElementById('btn-pre').classList.toggle('active', currentMode === 'pre');
+    document.getElementById('btn-post').classList.toggle('active', currentMode === 'post');
+    document.getElementById('pre-input').style.display = currentMode === 'pre' ? 'flex' : 'none';
+    document.getElementById('post-input').style.display = currentMode === 'post' ? 'flex' : 'none';
+    if (currentMode === 'pre') {
+      document.getElementById('ideaInput').value = s.input_text || '';
+      document.getElementById('preContextInput').value = s.context || '';
+    } else {
+      document.getElementById('codeInput').value = s.input_text || '';
+      document.getElementById('postContextInput').value = s.context || '';
+    }
+    // Show results
+    if (s.results && s.results.length > 0) {
+      renderResults({ results: s.results, smith: s.smith, stats: s.stats });
+    }
+    // Highlight active
+    document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
+    const el = document.getElementById('hist-' + id);
+    if (el) el.classList.add('active');
+  } catch(e) {
+    alert('Kunde inte ladda session: ' + e.message);
+  }
+}
+
+async function deleteSession(e, id) {
+  e.stopPropagation();
+  if (!confirm('Radera denna session?')) return;
+  await fetch('/api/sessions/' + id, {method: 'DELETE'});
+  if (_activeSessionId === id) {
+    _activeSessionId = null;
+    document.getElementById('resultsView').style.display = 'none';
+    resetToEmpty();
+    document.getElementById('emptyState').style.display = 'flex';
+  }
+  loadHistory();
+}
+
+// Load history on startup
+// ── PROJECTS ──
+const PROJECTS_KEY = 'pt_projects';
+const ACTIVE_PROJECT_KEY = 'pt_active_project';
+
+function getProjects() {
+  try { return JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]'); } catch { return []; }
+}
+function setProjects(arr) {
+  localStorage.setItem(PROJECTS_KEY, JSON.stringify(arr));
+}
+function getActiveProject() {
+  const id = localStorage.getItem(ACTIVE_PROJECT_KEY);
+  return getProjects().find(p => p.id === id) || null;
+}
+function setActiveProject(id) {
+  localStorage.setItem(ACTIVE_PROJECT_KEY, id || '');
+}
+
+function renderProjects() {
+  const list = document.getElementById('projectList');
+  const projects = getProjects();
+  const active = getActiveProject();
+  if (projects.length === 0) {
+    list.innerHTML = '<div style="padding:4px 14px 8px;font-size:11px;color:var(--text3);">Inga projekt ännu</div>';
+    return;
+  }
+  list.innerHTML = projects.map(p => `
+    <div class="project-item ${active && active.id === p.id ? 'active' : ''}" onclick="selectProject('${p.id}')">
+      <div class="project-dot"></div>
+      <div class="project-name" title="${escHtml(p.repo || '')}">${escHtml(p.name)}</div>
+      <span class="project-sync" onclick="event.stopPropagation();deleteProject('${p.id}')" title="Ta bort">✕</span>
+    </div>
+  `).join('');
+}
+
+async function selectProject(id) {
+  setActiveProject(id);
+  renderProjects();
+  const p = getActiveProject();
+  if (p) {
+    showToast(`📂 ${p.name} valt`);
+    if (p.repo) setMode('post');
+    updateActiveProjBadge();
+  }
+}
+
+function updateActiveProjBadge() {
+  const p = getActiveProject();
+  const badge = document.getElementById('activeProjBadge');
+  const nameEl = document.getElementById('activeProjName');
+  const repoEl = document.getElementById('activeProjRepo');
+  if (!badge) return;
+  if (p && p.repo) {
+    badge.style.display = 'flex';
+    if (nameEl) nameEl.textContent = p.name;
+    if (repoEl) repoEl.textContent = p.repo + ' · ' + (p.branch || 'main');
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function openAddProject() {
+  document.getElementById('projectModalTitle').textContent = '➕ Nytt projekt';
+  document.getElementById('projNameInput').value = '';
+  document.getElementById('projRepoInput').value = '';
+  document.getElementById('projBranchInput').value = 'main';
+  document.getElementById('projectModal').classList.add('open');
+  setTimeout(() => document.getElementById('projNameInput').focus(), 50);
+}
+function closeProjectModal() {
+  document.getElementById('projectModal').classList.remove('open');
+}
+function saveProject() {
+  const name = document.getElementById('projNameInput').value.trim();
+  const repo = document.getElementById('projRepoInput').value.trim();
+  const branch = document.getElementById('projBranchInput').value.trim() || 'main';
+  if (!name) { document.getElementById('projNameInput').focus(); return; }
+  const projects = getProjects();
+  const id = 'proj_' + Date.now();
+  projects.unshift({ id, name, repo, branch, created: new Date().toISOString() });
+  setProjects(projects);
+  setActiveProject(id);
+  closeProjectModal();
+  renderProjects();
+  if (repo) setMode('post');
+  showToast(`✅ ${name} tillagt`);
+}
+function deleteProject(id) {
+  const projects = getProjects().filter(p => p.id !== id);
+  setProjects(projects);
+  if ((localStorage.getItem(ACTIVE_PROJECT_KEY) || '') === id) {
+    setActiveProject(projects[0]?.id || null);
+  }
+  renderProjects();
+}
+
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--border);color:var(--text1);padding:8px 18px;border-radius:8px;font-size:13px;z-index:9999;transition:opacity .3s;pointer-events:none;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2200);
+}
+
+// ── AUTO-FETCH active project repo before review ──
+async function fetchActiveProjectCode() {
+  const p = getActiveProject();
+  if (!p || !p.repo) return null;
+  try {
+    const res = await fetch('/api/github/fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo: p.repo, branch: p.branch || 'main', path: '' })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.error) return null;
+    return { code: data.files, stats: `${data.file_count} filer · ${(data.total_chars/1000).toFixed(0)}k tecken` };
+  } catch { return null; }
+}
+
+window.addEventListener('DOMContentLoaded', () => { loadHistory(); renderProjects(); updateActiveProjBadge(); setTimeout(() => runHealthCheck(), 800); });
+
+function showError(msg) {
+  const es = document.getElementById('emptyState');
+  es.innerHTML = `
+    <div class="empty-icon">❌</div>
+    <div class="empty-title">Granskning misslyckades</div>
+    <div class="empty-sub">${escHtml(msg)}<br><br>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="resetToEmpty()">Försök igen</button>
+    </div>`;
+  es.style.display = 'flex';
+}
+
+function resetToEmpty() {
+  document.getElementById('emptyState').innerHTML = `
+    <div class="empty-icon">🤖</div>
+    <div class="empty-title">Teamet väntar på din idé</div>
+    <div class="empty-sub">Beskriv vad du vill bygga eller klistra in kod — teamet granskar allt parallellt och Promptsmeden levererar en färdig prompt.</div>`;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Close modal on background click
+document.getElementById('settingsModal').addEventListener('click', function(e) {
+  if (e.target === this) closeSettings();
+});
+
+// Keyboard shortcut: Ctrl+Enter to run
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runReview(); }
+});
+</script>
+</body>
+</html>
