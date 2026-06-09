@@ -3,6 +3,10 @@ __pycache__/
 settings.json
 sessions.json
 backlog.json
+build_queue.json
+build_results/
+ai_eval_results.json
+_blueprint.md
 *.tmp
 _final_design.md
 _audit_plan.md

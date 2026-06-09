@@ -329,6 +329,240 @@ def _norm(s: str) -> str:
 
 
 # ──────────────────────────────────────────────
+# BUILD QUEUE — byggkön: specs in logical order, builder-ready
+# ──────────────────────────────────────────────
+# Status lifecycle (4 states a non-coder understands):
+#   kö → byggs → klar | behover_dig → byggs (resend) ...
+# WIP limit: max 1 'byggs' per project — makes the order real.
+# The builder contract: /send returns a `job` object; today a human copies
+# spec_markdown, tomorrow a webhook/CLI adapter POSTs the same job and calls
+# /result + /review. Zero refactoring needed to plug a builder in.
+
+BUILD_QUEUE_FILE = BASE_DIR / "build_queue.json"
+BUILD_RESULTS_DIR = BASE_DIR / "build_results"
+_queue_lock = threading.Lock()
+QUEUE_STATUSES = ("kö", "byggs", "behover_dig", "klar")
+
+def _queue_load() -> list:
+    if BUILD_QUEUE_FILE.exists():
+        try:
+            data = json.loads(BUILD_QUEUE_FILE.read_text(encoding="utf-8"))
+            return data if isinstance(data, list) else []
+        except Exception as e:
+            logger.error("build_queue.json corrupt (%s) — returning empty; not overwriting.", e)
+    return []
+
+def _queue_write(items: list) -> None:
+    """Caller must hold _queue_lock."""
+    tmp = BUILD_QUEUE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(BUILD_QUEUE_FILE)
+
+def _queue_log(item: dict, event: str, detail: str = ""):
+    item.setdefault("log", []).append({
+        "at": datetime.now().isoformat(timespec="seconds"), "event": event, "detail": detail[:300]})
+    item["updated_at"] = datetime.now().isoformat(timespec="seconds")
+
+def queue_create_item(project_id: str, title: str, spec_markdown: str,
+                      spec_bestallare: str = "", source: dict = None) -> dict:
+    now = datetime.now().isoformat(timespec="seconds")
+    with _queue_lock:
+        items = _queue_load()
+        proj_positions = [i.get("position", 0) for i in items
+                          if i.get("project_id") == project_id and not i.get("deleted_at")]
+        item = {
+            "id": str(uuid.uuid4()),
+            "project_id": project_id,
+            "title": (title or "Namnlös spec").strip()[:200],
+            "spec_markdown": spec_markdown,
+            "spec_bestallare": spec_bestallare or "",
+            "position": (max(proj_positions) + 10) if proj_positions else 10,
+            "status": "kö",
+            "source": source or {"type": "manuell"},
+            "byggsatt_used": None,
+            "attempt_nr": 0,
+            "sent_at": None,
+            "result_ref": None,
+            "result_summary": {},
+            "review_started_at": None,
+            "last_verdict": {},
+            "log": [],
+            "deleted_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        _queue_log(item, "skapad", source.get("type") if source else "manuell")
+        items.append(item)
+        _queue_write(items)
+    return item
+
+
+@app.get("/api/build-queue")
+async def get_build_queue(project_id: str = ""):
+    items = _queue_load()
+    if project_id:
+        items = [i for i in items if i.get("project_id") == project_id]
+    items = [i for i in items if not i.get("deleted_at")]
+    items.sort(key=lambda i: i.get("position", 0))
+    return {"items": items}
+
+
+@app.post("/api/build-queue")
+async def post_build_queue(payload: dict):
+    spec = (payload.get("spec_markdown") or "").strip()
+    if not spec:
+        return JSONResponse({"error": "spec_markdown krävs."}, status_code=400)
+    item = queue_create_item(
+        payload.get("project_id", ""),
+        payload.get("title", ""),
+        spec,
+        payload.get("spec_bestallare", ""),
+        payload.get("source") or {"type": "manuell"},
+    )
+    return {"ok": True, "item": item}
+
+
+@app.patch("/api/build-queue/{item_id}")
+async def patch_build_queue(item_id: str, payload: dict):
+    with _queue_lock:
+        items = _queue_load()
+        item = next((i for i in items if i.get("id") == item_id), None)
+        if not item:
+            return JSONResponse({"error": "Item hittades inte."}, status_code=404)
+        if "status" in payload:
+            if payload["status"] not in QUEUE_STATUSES:
+                return JSONResponse({"error": f"Ogiltig status. Tillåtna: {', '.join(QUEUE_STATUSES)}"}, status_code=400)
+            item["status"] = payload["status"]
+            _queue_log(item, "status_override", payload["status"])
+        if "title" in payload:
+            item["title"] = str(payload["title"]).strip()[:200]
+        if "spec_markdown" in payload:
+            item["spec_markdown"] = payload["spec_markdown"]
+        if payload.get("deleted"):
+            item["deleted_at"] = datetime.now().isoformat(timespec="seconds")
+            _queue_log(item, "borttagen")
+        _queue_write(items)
+    return {"ok": True, "item": item}
+
+
+@app.post("/api/build-queue/reorder")
+async def reorder_build_queue(payload: dict):
+    project_id = payload.get("project_id", "")
+    ordered_ids = payload.get("ordered_ids") or []
+    with _queue_lock:
+        items = _queue_load()
+        proj_ids = {i["id"] for i in items if i.get("project_id") == project_id and not i.get("deleted_at")}
+        if set(ordered_ids) != proj_ids:
+            return JSONResponse({"error": "ordered_ids matchar inte köns innehåll."}, status_code=400)
+        pos = {iid: (n + 1) * 10 for n, iid in enumerate(ordered_ids)}
+        for i in items:
+            if i["id"] in pos:
+                i["position"] = pos[i["id"]]
+                i["updated_at"] = datetime.now().isoformat(timespec="seconds")
+        _queue_write(items)
+    return {"ok": True}
+
+
+@app.post("/api/build-queue/{item_id}/send")
+async def send_build_queue_item(item_id: str, payload: dict):
+    """kö|behover_dig → byggs. Returns the builder `job` contract.
+    Today: human copies job.spec_markdown. Tomorrow: an adapter POSTs job to a builder."""
+    byggsatt = payload.get("byggsatt") or {}
+    profile = payload.get("profile") or {}
+    with _queue_lock:
+        items = _queue_load()
+        item = next((i for i in items if i.get("id") == item_id and not i.get("deleted_at")), None)
+        if not item:
+            return JSONResponse({"error": "Item hittades inte."}, status_code=404)
+        if item["status"] not in ("kö", "behover_dig"):
+            return JSONResponse({"error": f"Kan inte skicka i status '{item['status']}'."}, status_code=409)
+        # WIP limit: one build at a time per project keeps the order real
+        busy = next((i for i in items if i.get("project_id") == item["project_id"]
+                     and i.get("status") == "byggs" and not i.get("deleted_at")), None)
+        if busy:
+            return JSONResponse({"error": f"Ett bygge pågår redan: '{busy['title']}'. Slutför det först.",
+                                 "busy_item_id": busy["id"]}, status_code=409)
+        item["attempt_nr"] = item.get("attempt_nr", 0) + 1
+        item["status"] = "byggs"
+        item["sent_at"] = datetime.now().isoformat(timespec="seconds")
+        item["byggsatt_used"] = byggsatt or None
+        _queue_log(item, "skickad", f"försök {item['attempt_nr']}")
+        _queue_write(items)
+
+    feedback = ""
+    lv = item.get("last_verdict") or {}
+    if lv.get("kvarstaende"):
+        feedback = "FÖREGÅENDE FÖRSÖK UNDERKÄNDES. Kvarstående problem:\n" + \
+                   "\n".join(f"- {k}" for k in lv["kvarstaende"][:10])
+
+    job = {
+        "queue_item_id": item["id"],
+        "attempt_nr": item["attempt_nr"],
+        "project_id": item["project_id"],
+        "title": item["title"],
+        "spec_markdown": item["spec_markdown"],
+        "feedback": feedback,
+        "byggsatt": item.get("byggsatt_used") or {},
+        "project_context": build_project_context(profile),
+        "repo": {"name": profile.get("repo", ""), "branch": profile.get("branch", "main")},
+        "callback": {
+            "result": f"/api/build-queue/{item['id']}/result",
+            "review": f"/api/build-queue/{item['id']}/review",
+        },
+    }
+    return {"ok": True, "status": "byggs", "job": job}
+
+
+@app.post("/api/build-queue/{item_id}/result")
+async def build_queue_result(item_id: str, payload: dict):
+    """Builder (or human) reports the build output. Idempotent per attempt.
+    Never runs review inline — call /review for that."""
+    with _queue_lock:
+        items = _queue_load()
+        item = next((i for i in items if i.get("id") == item_id and not i.get("deleted_at")), None)
+        if not item:
+            return JSONResponse({"error": "Item hittades inte."}, status_code=404)
+        if item["status"] != "byggs":
+            return JSONResponse({"error": f"Resultat accepteras bara i status 'byggs' (nu: {item['status']})."}, status_code=409)
+        attempt = payload.get("attempt_nr", item.get("attempt_nr"))
+        if attempt != item.get("attempt_nr"):
+            return JSONResponse({"error": "attempt_nr matchar inte aktuellt försök."}, status_code=409)
+        if item.get("result_ref") and str(item["result_ref"]).endswith(f"_{attempt}.json"):
+            return {"ok": True, "duplicate": True}
+        BUILD_RESULTS_DIR.mkdir(exist_ok=True)
+        ref = f"{item_id}_{attempt}.json"
+        (BUILD_RESULTS_DIR / ref).write_text(json.dumps({
+            "code": payload.get("code", ""),
+            "diff": payload.get("diff", ""),
+            "files": payload.get("files", []),
+            "log": payload.get("log", ""),
+        }, ensure_ascii=False), encoding="utf-8")
+        item["result_ref"] = ref
+        item["result_summary"] = {
+            "received_at": datetime.now().isoformat(timespec="seconds"),
+            "commit_sha": payload.get("commit_sha"),
+            "builder_meta": payload.get("builder_meta"),
+            "build_status": payload.get("status", "byggd"),
+        }
+        _queue_log(item, "resultat", payload.get("status", "byggd"))
+        _queue_write(items)
+    return {"ok": True}
+
+
+@app.post("/api/build-queue/advance")
+async def advance_build_queue(project_id: str = ""):
+    """Next buildable item per position, if nothing is building.
+    Drives the 'Bygg nästa' button today; the auto-dispatch hook tomorrow."""
+    items = [i for i in _queue_load()
+             if i.get("project_id") == project_id and not i.get("deleted_at")]
+    if any(i.get("status") == "byggs" for i in items):
+        return {"next_item": None, "reason": "Ett bygge pågår redan."}
+    queued = sorted([i for i in items if i.get("status") == "kö"],
+                    key=lambda i: i.get("position", 0))
+    return {"next_item": queued[0] if queued else None}
+
+
+# ──────────────────────────────────────────────
 # SESSION STORAGE (lokal JSON + Supabase fallback)
 # ──────────────────────────────────────────────
 
@@ -563,6 +797,8 @@ def delete_session(session_id: str) -> bool:
 
 _SEVERITY_GUIDE = (
     " Severity: HIGH=kritisk/måste åtgärdas, MEDIUM=bör åtgärdas, LOW=rekommendation."
+    " Severity sätts efter ditt ALLVARLIGASTE fynd — inte genomsnittet."
+    " En enda bekräftad injection, trasig auth eller exponerad hemlighet ⇒ HIGH."
     " Om inga verkliga problem hittas: returnera status GODKÄND med tomma listor."
     " Returnera ENBART JSON: "
     '{"status":"GODKÄND"|"UNDERKÄND","findings":["konket problem..."],"severity":"LOW"|"MEDIUM"|"HIGH","suggestions":["åtgärd..."]}'
@@ -660,6 +896,8 @@ SPECIALIST_AGENTS = [
             "• Breaking changes — riskerar ändringen att bryta befintlig funktionalitet (regression)?\n"
             "• Deploy-ordning — finns det beroenden mellan delar som kräver specifik deploy-sekvens?\n"
             "• Test-strategi — vilka befintliga tester behöver uppdateras?\n"
+            "Rapportera enbart integrationsspecifika problem — upprepa INTE säkerhets- eller kvalitetsfynd "
+            "som andra agenter äger, även om du ser dem.\n"
             "Om projektkontext saknas och du inte kan avgöra integrationen: returnera GODKÄND med notering."
             + _SEVERITY_GUIDE
         ),
@@ -845,6 +1083,8 @@ SPECIALIST_AGENTS = [
             "• N+1-risk — hämtas poster en-och-en i loop istället för JOIN/IN?\n"
             "• Obegränsade queries — saknas LIMIT på listor som kan växa obegränsat?\n"
             "• Råa SQL-strängar — används string-konkatenering istället för parametriserade queries?\n"
+            "Rapportera enbart problem med konkret kodbevis — spekulera inte om index, constraints eller "
+            "schema som inte syns i underlaget. Svara på svenska.\n"
             "Om beskrivningen inte involverar databas: returnera GODKÄND."
             + _SEVERITY_GUIDE
         ),
@@ -866,7 +1106,8 @@ SPECIALIST_AGENTS = [
             "• Lås & låstid — låses stora tabeller på ett sätt som orsakar driftstopp?\n"
             "• Dataförlust-risk — tas kolumner/tabeller bort innan all data migrerats?\n"
             "• Dual-write/konsistens — om data skrivs till två ställen, hur hålls de i synk?\n"
-            "Om ingen schemaändring är inblandad: returnera GODKÄND."
+            "Om ingen schemaändring är inblandad: returnera GODKÄND — rapportera ALDRIG fynd från andra "
+            "domäner (säkerhet, kodkvalitet, prestanda); de ägs av andra agenter."
             + _SEVERITY_GUIDE
         ),
     },
@@ -996,6 +1237,7 @@ SPECIALIST_AGENTS = [
             "• Privata nycklar — -----BEGIN PRIVATE KEY-----, .pem-innehåll?\n"
             "• .env-läckor — committas .env-filer med riktiga värden istället för .env.example?\n"
             "Varje fynd är minst HIGH. Ange exakt var (fil/rad/variabel) och MASKERA värdet i din rapport (visa bara prefix+****).\n"
+            "Skriv alla findings och suggestions på svenska.\n"
             "Om inga hemligheter hittas: returnera GODKÄND."
             + _SEVERITY_GUIDE
         ),
@@ -1232,6 +1474,8 @@ BACKLOG_AGENT = {
         "• Titel — kort, handlingsdriven ('Lägg till rate limiting på /login').\n"
         "• REGRESSION — om prompten listar TIDIGARE ÅTGÄRDADE problem och ett nytt fynd är SAMMA underliggande "
         "problem (även om det formuleras annorlunda): sätt \"regression\": true på det itemet.\n"
+        "• DUBBLETT — om prompten listar REDAN ÖPPNA backlog-items och ett fynd är samma underliggande "
+        "problem (även omformulerat): utelämna det helt ur ditt svar.\n"
         "• Cappa till de ~10 viktigaste actionable items; nämn i en not om fler rullades till 'senare'.\n\n"
         "Returnera ENBART JSON:\n"
         '{"items":[{"title":"...","priority":"P0"|"P1"|"P2","effort":"S"|"M"|"L",'
@@ -1255,7 +1499,8 @@ BESTALLARE_AGENT = {
         '"punkter":[{"vad":"problem/förslag i affärsspråk","varfor":"varför det spelar roll för användare/verksamhet","insats":"liten|mellan|stor"}],'
         '"beslut":["beslut beställaren behöver fatta, om något"]}'
         "\nRegler: expandera akronymer (API, XSS) första gången. Skilj på 'bekräftat problem' och 'rekommendation'. "
-        "Översätt teknik till verksamhetsnytta ('kunder kan se andras ordrar', inte 'IDOR i /orders')."
+        "Översätt teknik till verksamhetsnytta ('kunder kan se andras ordrar', inte 'IDOR i /orders'). "
+        "Även 'beslut'-listan ska vara klarspråk — skriv 'attacker via databasen', inte 'SQL-injektion'."
     ),
 }
 
@@ -1398,9 +1643,86 @@ def build_project_context(profile: dict) -> str:
         branch = profile.get("branch", "main")
         lines.append(f"Repo: {profile['repo']}@{branch}")
     if len(lines) == 1:
-        return ""
+        byggsatt = build_byggsatt_block(profile)
+        return byggsatt if byggsatt else ""
     lines.append("Beakta dessa constraints i din granskning.")
-    return "\n".join(lines)
+    return "\n".join(lines) + build_byggsatt_block(profile)
+
+
+_TEST_LEVEL_TEXT = {
+    "inga": "Inga formella testkrav",
+    "kritiska": "Tester krävs för kritiska flöden",
+    "alltid": "ALLTID tester — varje acceptanskriterium ska ha minst ett testfall",
+}
+_COMMENT_TEXT = {
+    "minimal": "Minimal — kommentera endast VARFÖR, aldrig VAD",
+    "standard": "Standard",
+    "utforlig": "Utförlig — docstrings på alla publika funktioner",
+}
+
+def build_byggsatt_block(profile: dict) -> str:
+    """[BYGGSÄTT]-block appended to every specialist's project context.
+    The byggsätt governs HOW everything gets built for this project."""
+    b = (profile or {}).get("byggsatt") or {}
+    lines = []
+    lang = b.get("primary_language", "").strip()
+    if lang:
+        lines.append(f"Primärt språk: {lang} — all exempelkod ska vara {lang}")
+    tl = b.get("test_level")
+    if tl in _TEST_LEVEL_TEXT:
+        fw = b.get("test_framework", "").strip()
+        lines.append(f"Testkrav: {_TEST_LEVEL_TEXT[tl]}" + (f" ({fw})" if fw else ""))
+    cp = b.get("comment_policy")
+    if cp in _COMMENT_TEXT:
+        lines.append(f"Kommentarspolicy: {_COMMENT_TEXT[cp]}")
+    if not lines:
+        return ""
+    return ("\n\n[BYGGSÄTT — styrande för detta projekt]\n"
+            + "\n".join(lines)
+            + "\nFynd och förslag som bryter mot byggsättet är felaktiga.")
+
+
+_BUILDER_DIRECTIVE = {
+    "lovable": "Målbyggare är Lovable: skriv specen som EN sammanhängande prompt utan filsökvägar eller terminalkommandon. Beskriv UI i ord.",
+    "cursor": "Målbyggare är Cursor: referera exakta filsökvägar, var diff-orienterad, terminalkommandon tillåtna.",
+    "claude_code": "Målbyggare är Claude Code: filsökvägar, stegvis plan och verifieringskommandon ingår.",
+    "v0": "Målbyggare är v0: komponentfokuserat, anta React/Tailwind/shadcn-konventioner.",
+}
+_SPEC_LANG_DIRECTIVE = {
+    "sv": "Skriv HELA specen på svenska, inklusive rubriker.",
+    "en": "Write the ENTIRE spec in English, including acceptance criteria.",
+    "mixed": "Rubriker på engelska, acceptanskriterier på svenska (standard).",
+}
+
+def byggsatt_smith_directives(profile: dict) -> str:
+    """Absolute spec-writing rules for Promptsmeden (and Kompletthetsgranskaren),
+    derived from the project's byggsätt. Empty byggsätt → empty string (today's behavior)."""
+    b = (profile or {}).get("byggsatt") or {}
+    rules = []
+    lang = b.get("primary_language", "").strip()
+    if lang:
+        rules.append(f"All kod i exempel och kodblock ska vara {lang}.")
+    sl = b.get("spec_language")
+    if sl in _SPEC_LANG_DIRECTIVE:
+        rules.append(_SPEC_LANG_DIRECTIVE[sl])
+    tl = b.get("test_level")
+    fw = b.get("test_framework", "").strip() or "lämpligt ramverk"
+    if tl == "alltid":
+        rules.append(f"Varje acceptanskriterium ska ha ett konkret testfall ({fw}). "
+                     "Lägg sektionen ## TEST CASES efter acceptance criteria.")
+    elif tl == "kritiska":
+        rules.append("Inkludera testfall för kritiska flöden under ## TEST CASES.")
+    tb = b.get("target_builder")
+    if tb in _BUILDER_DIRECTIVE:
+        rules.append(_BUILDER_DIRECTIVE[tb])
+    conv = (profile or {}).get("conventions", "").strip()
+    if conv:
+        rules.append(f"Följ kodkonventionerna: {conv}")
+    if not rules:
+        return ""
+    return ("\n\n[BYGGSÄTT — ABSOLUTA REGLER FÖR SPECEN]\n"
+            + "\n".join(f"• {r}" for r in rules)
+            + "\nEn spec som bryter mot dessa regler är felaktig och måste skrivas om.")
 
 
 def run_agent(agent: dict, user_input: str, model: str, client,
@@ -1573,15 +1895,21 @@ def run_krav_agent(user_input: str, model: str, client, project_context: str = "
         return FALLBACK
 
 
-def run_completeness_agent(spec_content: str, model: str, client, usage_out: list = None) -> dict:
-    """Run Kompletthetsgranskaren on a generated spec. Returns completeness assessment."""
+def run_completeness_agent(spec_content: str, model: str, client, usage_out: list = None,
+                           profile: dict = None) -> dict:
+    """Run Kompletthetsgranskaren on a generated spec. Returns completeness assessment.
+    Gets the same byggsätt directives so it can fail specs that violate them."""
     FALLBACK = {"status": "OKÄND", "completeness_score": 0, "saknas": [], "styrkor": []}
     if not spec_content or not spec_content.strip():
         return FALLBACK
     try:
         comp_model = get_agent_model("completeness", COMPLETENESS_AGENT["model"])
+        directives = byggsatt_smith_directives(profile or {})
+        comp_system = COMPLETENESS_AGENT["system"]
+        if directives:
+            comp_system += directives + "\nKontrollera även att specen följer reglerna ovan — bryter den mot dem är den OFULLSTÄNDIG."
         raw = _call_model(
-            comp_model, COMPLETENESS_AGENT["system"],
+            comp_model, comp_system,
             f"Granska denna specifikation:\n\n{spec_content[:12000]}", 800, client,
             usage_out=usage_out
         )
@@ -1605,9 +1933,11 @@ def run_completeness_agent(spec_content: str, model: str, client, usage_out: lis
 
 
 def run_prompt_smith(original_input: str, agent_results: list, model: str, client,
-                     usage_out: list = None) -> dict:
-    """Run Promptsmeden. Returns {type: prompt|questions, ...}."""
+                     usage_out: list = None, profile: dict = None) -> dict:
+    """Run Promptsmeden. Returns {type: prompt|questions, ...}.
+    profile → byggsätt directives so the spec OBEYS the project's build rules."""
     model = get_agent_model("prompt_smith", PROMPT_SMITH.get("model", "claude-sonnet-4-6"))
+    smith_system = PROMPT_SMITH["system"] + byggsatt_smith_directives(profile or {})
     failed = [r for r in agent_results if r.get("status") == "UNDERKÄND"]
     passed = [r for r in agent_results if r.get("status") == "GODKÄND"]
     errors = [r for r in agent_results if r.get("status") == "FEL"]
@@ -1629,7 +1959,7 @@ def run_prompt_smith(original_input: str, agent_results: list, model: str, clien
     combined = "\n".join(summary_parts)
     try:
         # 5000 tokens — the ONE user-facing artifact must never truncate mid-spec
-        raw = _call_model(model, PROMPT_SMITH["system"], combined, 5000, client, usage_out=usage_out)
+        raw = _call_model(model, smith_system, combined, 5000, client, usage_out=usage_out)
         parsed = None
         try:
             parsed = json.loads(raw.strip())
@@ -1663,16 +1993,24 @@ def run_backlog_agent(agent_results: list, model: str, client, project_id: str =
             sugg = (r.get("suggestions") or [""])[:1]
             lines.append(f"[{r.get('severity','?')}] ({r['name']}) {f} → {sugg[0] if sugg else ''}")
     combined = "FYND FRÅN GRANSKNINGEN:\n" + "\n".join(lines[:80])
-    # Resolved items for this project → semantic regression detection by the LLM
+    # Resolved + open items for this project → semantic regression AND duplicate detection
     if project_id:
         with _backlog_lock:
-            resolved = [i for i in _backlog_load()
-                        if i.get("project_id") == project_id and i.get("status") == "åtgärdad"]
+            all_items = _backlog_load()
+        proj_items = [i for i in all_items if i.get("project_id") == project_id]
+        resolved = [i for i in proj_items if i.get("status") == "åtgärdad"]
+        open_items = [i for i in proj_items if i.get("status") in ("öppen", "pågår", "återkommit")]
         if resolved:
             res_lines = "\n".join(f"- {i.get('title','')}: {i.get('finding','')[:150]}" for i in resolved[-20:])
             combined += (
                 f"\n\nTIDIGARE ÅTGÄRDADE PROBLEM I DETTA PROJEKT "
                 f"(om ett fynd ovan är samma underliggande problem → \"regression\": true):\n{res_lines}"
+            )
+        if open_items:
+            open_lines = "\n".join(f"- {i.get('title','')}: {i.get('finding','')[:150]}" for i in open_items[-30:])
+            combined += (
+                f"\n\nREDAN ÖPPNA BACKLOG-ITEMS I DETTA PROJEKT "
+                f"(om ett fynd ovan är samma underliggande problem → utelämna det helt):\n{open_lines}"
             )
     try:
         bl_model = get_agent_model("backloghallaren", BACKLOG_AGENT["model"])
@@ -1902,7 +2240,7 @@ async def review(payload: dict):
             return await asyncio.wait_for(
                 loop.run_in_executor(executor, run_krav_agent, full_input, model, client,
                                      project_context, synth_usage),
-                timeout=30.0
+                timeout=90.0
             )
         except asyncio.TimeoutError:
             logger.warning("[kravanalytikern] timeout")
@@ -1987,7 +2325,7 @@ async def review(payload: dict):
         try:
             return await asyncio.wait_for(
                 loop.run_in_executor(executor, run_prompt_smith, input_text, results,
-                                     model, client, synth_usage),
+                                     model, client, synth_usage, profile),
                 timeout=120.0
             )
         except asyncio.TimeoutError:
@@ -2005,8 +2343,8 @@ async def review(payload: dict):
             try:
                 return await asyncio.wait_for(
                     loop.run_in_executor(executor, run_completeness_agent, spec_content,
-                                         model, client, synth_usage),
-                    timeout=30.0
+                                         model, client, synth_usage, profile),
+                    timeout=90.0
                 )
             except asyncio.TimeoutError:
                 logger.warning("[kompletthetsgranskaren] timeout")
@@ -2017,7 +2355,7 @@ async def review(payload: dict):
                 return await asyncio.wait_for(
                     loop.run_in_executor(executor, run_bestallare_agent, spec_content, results,
                                          model, client, synth_usage),
-                    timeout=30.0
+                    timeout=90.0
                 )
             except asyncio.TimeoutError:
                 logger.warning("[bestallarsammanfattaren] timeout")
@@ -2155,10 +2493,11 @@ async def backlog_to_spec(item_id: str, payload: dict):
 
     loop = asyncio.get_running_loop()
     usage = []
+    profile = payload.get("profile", {}) or {}  # byggsätt governs spec writing
     try:
         smith_result = await asyncio.wait_for(
             loop.run_in_executor(executor, run_prompt_smith, seed_input, seed_results,
-                                 model, client, usage),
+                                 model, client, usage, profile),
             timeout=120.0)
     except asyncio.TimeoutError:
         return JSONResponse({"error": "Promptsmeden svarade inte i tid — försök igen."}, status_code=504)
@@ -2172,14 +2511,14 @@ async def backlog_to_spec(item_id: str, payload: dict):
             try:
                 return await asyncio.wait_for(
                     loop.run_in_executor(executor, run_completeness_agent, spec_content,
-                                         model, client, usage), timeout=30.0)
+                                         model, client, usage, profile), timeout=90.0)
             except asyncio.TimeoutError:
                 return {}
         async def _best():
             try:
                 return await asyncio.wait_for(
                     loop.run_in_executor(executor, run_bestallare_agent, spec_content,
-                                         seed_results, model, client, usage), timeout=30.0)
+                                         seed_results, model, client, usage), timeout=90.0)
             except asyncio.TimeoutError:
                 return {}
         completeness_result, bestallare_result = await asyncio.gather(_comp(), _best())
@@ -2195,6 +2534,27 @@ async def backlog_to_spec(item_id: str, payload: dict):
             item.get("project_id", ""),
         )
 
+    # enqueue:true — fynd → spec → byggkö in one click; backlog item moves to pågår
+    queue_item = None
+    if spec_content and payload.get("enqueue"):
+        queue_item = queue_create_item(
+            item.get("project_id", ""),
+            item.get("title", ""),
+            spec_content,
+            (bestallare_result or {}).get("sammanfattning", ""),
+            {"type": "backlog", "backlog_item_id": item_id, "session_id": session_id},
+        )
+        with _backlog_lock:
+            bitems = _backlog_load()
+            for b in bitems:
+                if b.get("id") == item_id:
+                    b["status"] = "pågår"
+                    b["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                    break
+            tmp = BACKLOG_FILE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(bitems, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(BACKLOG_FILE)
+
     cost = sum(u["cost_usd"] or 0 for u in usage)
     return {
         "item": item,
@@ -2203,6 +2563,7 @@ async def backlog_to_spec(item_id: str, payload: dict):
         "completeness_result": completeness_result,
         "bestallare_result": bestallare_result,
         "session_id": session_id if spec_content else None,
+        "queue_item": queue_item,
         "cost_summary": {"total_usd": round(cost, 4),
                          "tokens_in": sum(u["tokens_in"] for u in usage),
                          "tokens_out": sum(u["tokens_out"] for u in usage)},
@@ -2296,6 +2657,109 @@ async def backlog_verify_fix(item_id: str, payload: dict):
     return {"item_id": item_id, "verdict": verdict,
             "new_status": "åtgärdad" if verdict["fixad"] else item.get("status"),
             "cost_usd": round(cost, 5)}
+
+
+@app.post("/api/build-queue/{item_id}/review")
+async def build_queue_review(item_id: str, payload: dict):
+    """The closing loop: built code → full granska_kod review + verify against source finding
+    → verdict klar | behover_dig. Today a button; tomorrow the builder calls this itself.
+    payload: { code?: str, images?: [dataURL], profile?: {} } — code in body is saved as
+    the result first, so the manual 'Klar? Klistra in resultatet' flow is ONE call."""
+    items = _queue_load()
+    item = next((i for i in items if i.get("id") == item_id and not i.get("deleted_at")), None)
+    if not item:
+        return JSONResponse({"error": "Item hittades inte."}, status_code=404)
+
+    # Inline result (manual flow): save it via the same idempotent path
+    code = (payload.get("code") or "").strip()
+    if code:
+        r = await build_queue_result(item_id, {"attempt_nr": item.get("attempt_nr"), "code": code,
+                                               "status": "byggd"})
+        if isinstance(r, JSONResponse):
+            return r
+        items = _queue_load()
+        item = next((i for i in items if i.get("id") == item_id), None)
+
+    if not item.get("result_ref"):
+        return JSONResponse({"error": "Inget byggresultat att granska — klistra in koden eller skicka /result först."}, status_code=409)
+
+    # Load the built code from the side file
+    try:
+        result_data = json.loads((BUILD_RESULTS_DIR / item["result_ref"]).read_text(encoding="utf-8"))
+    except Exception:
+        return JSONResponse({"error": "Kunde inte läsa byggresultatet."}, status_code=500)
+    built_code = result_data.get("code") or result_data.get("diff") or ""
+    if not built_code.strip():
+        return JSONResponse({"error": "Byggresultatet är tomt."}, status_code=409)
+
+    with _queue_lock:
+        items = _queue_load()
+        item = next((i for i in items if i.get("id") == item_id), None)
+        item["review_started_at"] = datetime.now().isoformat(timespec="seconds")
+        _queue_write(items)
+
+    profile = payload.get("profile") or {}
+    # Full team review of the built code — reuses the entire pipeline in-process.
+    review_payload = {
+        "mode": "granska_kod",
+        "input_text": built_code[:78_000],
+        "context": f"Detta är ett bygge av specen: {item['title']}\n\nSPEC (utdrag):\n{item['spec_markdown'][:4000]}",
+        "images": payload.get("images") or [],
+        "project_id": item.get("project_id", ""),
+        "profile": profile,
+        "depth": payload.get("depth", "djup"),
+    }
+    review_res = await review(review_payload)
+    if isinstance(review_res, JSONResponse):
+        with _queue_lock:
+            items = _queue_load()
+            item = next((i for i in items if i.get("id") == item_id), None)
+            item["review_started_at"] = None
+            _queue_write(items)
+        return review_res
+
+    # New P0s counted on the RAW groomed items (pre-dedup) — dedup would mask persisting P0s
+    raw_items = (review_res.get("backlog_result") or {}).get("items", [])
+    new_p0 = [i for i in raw_items if i.get("priority") == "P0"]
+
+    # Verify against the ORIGINAL backlog finding if this spec came from one
+    fixad = None
+    verify_verdict = {}
+    src = item.get("source") or {}
+    if src.get("backlog_item_id"):
+        v = await backlog_verify_fix(src["backlog_item_id"], {"code": built_code[:40_000],
+                                                              "images": payload.get("images") or []})
+        if not isinstance(v, JSONResponse):
+            verify_verdict = v.get("verdict", {})
+            fixad = bool(verify_verdict.get("fixad"))
+
+    # The verdict rule: klar = no new P0 AND (no source finding OR source finding fixed)
+    is_klar = (len(new_p0) == 0) and (fixad is None or fixad)
+    verdict = {
+        "fixad": fixad,
+        "motivering": verify_verdict.get("motivering", ""),
+        "kvarstaende": (verify_verdict.get("kvarstaende") or []) + [i.get("title", "") for i in new_p0],
+        "new_p0": len(new_p0),
+        "review_session_id": review_res.get("session_id"),
+    }
+
+    with _queue_lock:
+        items = _queue_load()
+        item = next((i for i in items if i.get("id") == item_id), None)
+        item["status"] = "klar" if is_klar else "behover_dig"
+        item["last_verdict"] = verdict
+        item["review_started_at"] = None
+        _queue_log(item, "granskad", f"{'klar' if is_klar else 'behover_dig'} · {len(new_p0)} nya P0")
+        _queue_write(items)
+
+    return {
+        "item": item,
+        "verdict": verdict,
+        "new_status": item["status"],
+        "review_session_id": review_res.get("session_id"),
+        "review_stats": review_res.get("stats"),
+        "cost_summary": review_res.get("cost_summary"),
+    }
 
 
 # Filetypes to include in code review
