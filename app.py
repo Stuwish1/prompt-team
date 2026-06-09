@@ -639,6 +639,39 @@ def _sb_url(path: str) -> str:
     base = s.get("supabase_url", "").strip().rstrip("/")
     return f"{base}/rest/v1/{path}"
 
+
+# Latest migration version defined in supabase_setup.sql. Bump when you append a
+# new migration block there. The /api/health check reads the connected DB's
+# schema_migrations table and warns if it's behind this number.
+SUPABASE_SCHEMA_VERSION = 2
+
+def check_supabase_schema() -> dict:
+    """Read the applied schema version from Supabase via REST (no DDL — read-only).
+    Returns {ok, current, expected, msg}. Surfaces schema drift without a Postgres
+    connection: PostgREST can't run DDL, so migrations stay manual, but we CAN read
+    the schema_migrations ledger to tell the user if supabase_setup.sql needs re-running."""
+    headers = _sb_headers()
+    if not headers:
+        return {"ok": False, "current": None, "expected": SUPABASE_SCHEMA_VERSION, "msg": "Supabase ej konfigurerad"}
+    try:
+        r = httpx.get(_sb_url("schema_migrations?select=version&order=version.desc&limit=1"),
+                      headers=headers, timeout=8.0)
+        if r.status_code == 404 or (r.status_code == 400 and "schema_migrations" in r.text):
+            return {"ok": False, "current": 0, "expected": SUPABASE_SCHEMA_VERSION,
+                    "msg": "schema_migrations saknas — kör supabase_setup.sql i Supabase SQL Editor"}
+        if r.status_code != 200:
+            return {"ok": False, "current": None, "expected": SUPABASE_SCHEMA_VERSION,
+                    "msg": f"Kunde inte läsa schemaversion (HTTP {r.status_code})"}
+        rows = r.json()
+        current = rows[0]["version"] if rows else 0
+        if current < SUPABASE_SCHEMA_VERSION:
+            return {"ok": False, "current": current, "expected": SUPABASE_SCHEMA_VERSION,
+                    "msg": f"Schema ligger efter (v{current}, behöver v{SUPABASE_SCHEMA_VERSION}) — kör om supabase_setup.sql"}
+        return {"ok": True, "current": current, "expected": SUPABASE_SCHEMA_VERSION,
+                "msg": f"Schema v{current} ✓"}
+    except Exception as e:
+        return {"ok": False, "current": None, "expected": SUPABASE_SCHEMA_VERSION, "msg": str(e)[:80]}
+
 def _sb_available() -> bool:
     """Quick DNS check — only try Supabase if hostname resolves."""
     import socket
@@ -3135,7 +3168,13 @@ async def health_check():
             )
             if sb_resp.status_code == 200:
                 count = len(sb_resp.json())
-                results["supabase"] = {"ok": True, "msg": f"Ansluten · prompt_sessions finns ({count} rader synliga)"}
+                # Read the schema-migration ledger to surface drift (read-only, via REST)
+                schema = await loop.run_in_executor(executor, check_supabase_schema)
+                results["supabase"] = {
+                    "ok": schema["ok"],
+                    "msg": f"Ansluten · prompt_sessions finns ({count} rader) · {schema['msg']}",
+                    "schema": schema,
+                }
             elif sb_resp.status_code == 401:
                 results["supabase"] = {"ok": False, "msg": "Ogiltig nyckel — använd Legacy service_role (eyJ...) från API Keys-sidan"}
             elif sb_resp.status_code == 403:
@@ -3153,6 +3192,10 @@ async def health_check():
         except Exception as e:
             if "supabase" not in results:
                 results["supabase"] = {"ok": False, "msg": str(e)[:80]}
+
+    # Structured flag so the UI doesn't have to string-match the message
+    if "supabase" in results:
+        results["supabase"]["configured"] = bool(sb_url and sb_key)
 
     all_ok = all(v["ok"] for v in results.values())
     return {"ok": all_ok, "services": results}

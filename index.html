@@ -1432,19 +1432,26 @@ function updateHealthBadges(services) {
   const dot = document.getElementById('dbStatusDot');
   const banner = document.getElementById('dbWarningBanner');
   if (dot && services) {
-    const sbOk = services.supabase?.ok;
-    const sbConfigured = services.supabase?.msg && !services.supabase.msg.includes('saknas');
+    const sb = services.supabase || {};
+    const sbConfigured = sb.configured === true;  // structured flag, not string-match
+    const schemaBehind = sb.schema && sb.schema.ok === false && (sb.schema.current ?? null) !== null;
     if (!sbConfigured) {
       dot.textContent = '';
       if (banner) banner.style.display = 'none';
-    } else if (sbOk) {
+    } else if (sb.ok) {
       dot.textContent = '🟢';
-      dot.title = 'Supabase ansluten: ' + services.supabase.msg;
+      dot.title = 'Supabase ansluten: ' + sb.msg;
       if (banner) banner.style.display = 'none';
     } else {
-      dot.textContent = '🔴';
-      dot.title = 'Supabase fel: ' + services.supabase.msg;
-      if (banner) banner.style.display = 'block';
+      // Connected but schema drift → yellow + schema-specific banner; otherwise red + generic
+      dot.textContent = schemaBehind ? '🟡' : '🔴';
+      dot.title = 'Supabase: ' + sb.msg;
+      if (banner) {
+        banner.innerHTML = schemaBehind
+          ? `⚠️ Supabase-schemat ligger efter (v${sb.schema.current} av v${sb.schema.expected}) — kör om <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;">supabase_setup.sql</code> i SQL Editor.`
+          : `⚠️ Supabase ej ansluten — sessioner sparas endast lokalt. <span style="text-decoration:underline;cursor:pointer;" onclick="openSettings()">Konfigurera</span>`;
+        banner.style.display = 'block';
+      }
     }
   }
 
