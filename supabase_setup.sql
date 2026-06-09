@@ -10,11 +10,26 @@ create table if not exists prompt_sessions (
   context     text default '',
   results     jsonb default '[]',
   smith       jsonb default '{}',
-  stats       jsonb default '{}'
+  stats       jsonb default '{}',
+  project_id  text default ''
 );
+
+-- Om tabellen redan finns, lägg till project_id om den saknas
+alter table prompt_sessions
+  add column if not exists project_id text default '';
+
+-- Index för snabb filtrering per projekt
+create index if not exists idx_prompt_sessions_project_id
+  on prompt_sessions (project_id);
+
+create index if not exists idx_prompt_sessions_created_at
+  on prompt_sessions (created_at desc);
 
 -- Aktivera Row Level Security (tillåt allt via service role key)
 alter table prompt_sessions enable row level security;
+
+-- Ta bort gammal policy om den finns, skapa ny
+drop policy if exists "Allow all via service role" on prompt_sessions;
 
 create policy "Allow all via service role"
   on prompt_sessions

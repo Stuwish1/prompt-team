@@ -99,6 +99,55 @@ main {
 .mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .mode-btn:hover:not(.active) { background: var(--bg3); color: var(--text1); }
 
+/* ── DROPZONE (screenshots) ── */
+#dropzone.drag { border-color: var(--accent); background: var(--bg3); color: var(--text1); }
+
+/* ── DEPTH TOGGLE (snabb/djup) ── */
+.depth-btn {
+  flex: 1; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--border);
+  background: transparent; color: var(--text3); cursor: pointer;
+  font-size: 11px; font-weight: 600; transition: all .15s;
+}
+.depth-btn.active { background: var(--bg3); color: var(--text1); border-color: var(--accent); }
+.depth-btn:hover:not(.active) { color: var(--text1); }
+
+/* ── DUAL-OUTPUT TOGGLE ── */
+.view-toggle { display: inline-flex; gap: 4px; background: var(--bg3); padding: 3px; border-radius: 8px; }
+.view-btn {
+  padding: 4px 10px; border-radius: 6px; border: none; background: transparent;
+  color: var(--text3); cursor: pointer; font-size: 11px; font-weight: 600; transition: .15s;
+}
+.view-btn.active { background: var(--accent); color: #fff; }
+
+/* ── BESTÄLLARLÄGE ── */
+.bestallare-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.bp-summary { font-size: 14px; line-height: 1.6; color: var(--text1); margin-bottom: 14px; }
+.bp-list { display: flex; flex-direction: column; gap: 10px; }
+.bp-item { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.bp-vad { font-size: 13px; font-weight: 600; color: var(--text1); }
+.bp-varfor { font-size: 12px; color: var(--text2); margin-top: 4px; line-height: 1.5; }
+.bp-effort { font-size: 10px; color: var(--text3); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; margin-left: 6px; font-weight: 400; }
+.bp-beslut { margin-top: 14px; background: rgba(234,179,8,.08); border: 1px solid rgba(234,179,8,.3); border-radius: 8px; padding: 10px 12px; }
+.bp-beslut-title { font-size: 12px; font-weight: 700; color: var(--yellow); margin-bottom: 6px; }
+.bp-beslut-item { font-size: 12px; color: var(--text1); margin: 3px 0; }
+
+/* ── BACKLOG ── */
+#backlogBox { display: flex; flex-direction: column; gap: 8px; }
+.backlog-item { display: flex; gap: 12px; align-items: flex-start; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.backlog-item.done { opacity: .55; }
+.bl-prio { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap; margin-top: 2px; }
+.bl-prio.p0 { background: rgba(239,68,68,.15); color: var(--red); }
+.bl-prio.p1 { background: rgba(234,179,8,.15); color: var(--yellow); }
+.bl-prio.p2 { background: var(--bg3); color: var(--text3); }
+.bl-main { flex: 1; min-width: 0; }
+.bl-title { font-size: 13px; font-weight: 600; color: var(--text1); }
+.bl-regress { font-size: 10px; color: var(--red); font-weight: 700; }
+.bl-sugg { font-size: 12px; color: var(--text2); margin-top: 4px; line-height: 1.5; }
+.bl-src { font-size: 10px; color: var(--text3); margin-top: 4px; }
+.bl-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.bl-status { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; color: var(--text2); font-size: 11px; padding: 3px 6px; }
+.bl-tospec { padding: 4px 10px; font-size: 11px; white-space: nowrap; }
+
 /* ── TEXTAREA ── */
 textarea {
   width: 100%; background: var(--bg); border: 1px solid var(--border);
@@ -161,59 +210,86 @@ textarea::placeholder { color: var(--text3); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── STATS BAR ── */
-.stats-bar {
-  display: flex; gap: 12px; padding: 12px 16px;
-  background: var(--bg2); border-radius: 8px; border: 1px solid var(--border);
-  align-items: center; flex-wrap: wrap;
+/* ── PHASE LAYOUT ── */
+.phase-block { display: flex; flex-direction: column; gap: 10px; }
+.phase-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 2px;
 }
-.stat { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-.stat-dot { width: 8px; height: 8px; border-radius: 50%; }
-.dot-green { background: var(--green); }
-.dot-red { background: var(--red); }
-.dot-yellow { background: var(--yellow); }
-.stat-count { font-weight: 700; }
-.stats-bar .sep { color: var(--border); }
+.phase-label {
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--text3);
+}
+.phase-divider { flex: 1; height: 1px; background: var(--border); }
+.phase-stat { font-size: 11px; color: var(--text3); white-space: nowrap; }
+.phase-stat .ok { color: var(--green); font-weight: 700; }
+.phase-stat .fail { color: var(--red); font-weight: 700; }
+
+/* ── KRAV BOX ── */
+.krav-box {
+  background: var(--bg2); border: 1px solid rgba(99,102,241,.4);
+  border-radius: 10px; padding: 16px 20px;
+  border-left: 3px solid var(--accent);
+}
+.krav-title {
+  font-size: 12px; font-weight: 800; color: var(--accent2);
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px;
+}
+.krav-ide {
+  font-size: 13px; color: var(--text1); margin-bottom: 12px;
+  font-style: italic; line-height: 1.5;
+}
+.krav-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.krav-item {
+  font-size: 12px; color: var(--text2); line-height: 1.5;
+  padding: 5px 10px; background: rgba(99,102,241,.06);
+  border-radius: 5px; border-left: 2px solid rgba(99,102,241,.3);
+}
+.krav-secondary { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 8px; }
+.krav-section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text3); margin-bottom: 4px; }
+.krav-tag {
+  display: inline-block; font-size: 11px; padding: 2px 8px;
+  border-radius: 10px; margin: 2px;
+}
+.krav-tag.unclear { background: rgba(245,158,11,.1); color: var(--yellow); }
+.krav-tag.out { background: rgba(239,68,68,.08); color: var(--text3); text-decoration: line-through; }
 
 /* ── AGENT GRID ── */
 .agents-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
 }
 .agent-card {
   background: var(--bg2); border: 1px solid var(--border);
-  border-radius: 8px; padding: 12px 14px; transition: border-color .15s;
+  border-radius: 8px; padding: 11px 13px; transition: border-color .15s;
 }
 .agent-card.approved { border-left: 3px solid var(--green); }
 .agent-card.rejected { border-left: 3px solid var(--red); }
 .agent-card.error { border-left: 3px solid var(--yellow); }
 
-.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.card-name { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; }
-.card-emoji { font-size: 16px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+.card-name { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
+.card-emoji { font-size: 15px; }
 .badge {
-  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
-  text-transform: uppercase; letter-spacing: .05em;
+  font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px;
+  text-transform: uppercase; letter-spacing: .04em;
 }
-.badge-ok { background: rgba(16,185,129,.15); color: var(--green); }
-.badge-fail { background: rgba(239,68,68,.15); color: var(--red); }
-.badge-warn { background: rgba(245,158,11,.15); color: var(--yellow); }
+.badge-ok { background: rgba(16,185,129,.12); color: var(--green); }
+.badge-fail { background: rgba(239,68,68,.12); color: var(--red); }
+.badge-warn { background: rgba(245,158,11,.12); color: var(--yellow); }
 
-.card-findings { margin-bottom: 6px; }
+.card-findings { margin-bottom: 5px; }
 .finding-item {
-  font-size: 11px; color: var(--text2); line-height: 1.5;
+  font-size: 11px; color: var(--text2); line-height: 1.45;
   padding: 2px 0; border-bottom: 1px solid var(--border);
 }
 .finding-item:last-child { border-bottom: none; }
 .finding-item::before { content: "• "; color: var(--text3); }
 
-.card-suggestions { margin-top: 6px; }
-.suggestion-item {
-  font-size: 11px; color: var(--accent2); line-height: 1.5; padding: 1px 0;
-}
+.card-suggestions { margin-top: 5px; }
+.suggestion-item { font-size: 11px; color: var(--accent2); line-height: 1.45; padding: 1px 0; }
 .suggestion-item::before { content: "→ "; }
-
 .no-findings { font-size: 11px; color: var(--text3); font-style: italic; }
 
 /* ── FINAL PROMPT ── */
@@ -223,22 +299,59 @@ textarea::placeholder { color: var(--text3); }
 }
 .final-header {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+  flex-wrap: wrap; gap: 8px;
 }
 .final-title { font-size: 14px; font-weight: 800; color: var(--accent2); }
 .final-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
 .final-prompt-text {
   background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
   padding: 14px; font-size: 12px; line-height: 1.7; color: var(--text2);
-  white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow-y: auto;
+  white-space: pre-wrap; word-break: break-word; max-height: 500px; overflow-y: auto;
   font-family: 'SF Mono', Consolas, monospace;
 }
-.copy-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.copy-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
 .target-btn {
-  padding: 6px 12px; border-radius: 5px; font-size: 11px; font-weight: 600;
+  padding: 5px 11px; border-radius: 5px; font-size: 11px; font-weight: 600;
   cursor: pointer; border: 1px solid var(--border); background: var(--bg3);
   color: var(--text2); transition: all .15s;
 }
 .target-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── COMPLETENESS BOX ── */
+.completeness-box {
+  border-radius: 8px; padding: 12px 16px;
+  display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap;
+}
+.completeness-box.complete { background: rgba(16,185,129,.06); border: 1px solid rgba(16,185,129,.25); }
+.completeness-box.incomplete { background: rgba(245,158,11,.06); border: 1px solid rgba(245,158,11,.25); }
+.completeness-box.unknown { background: var(--bg2); border: 1px solid var(--border); }
+.completeness-score {
+  font-size: 28px; font-weight: 900; min-width: 48px; text-align: center; line-height: 1;
+}
+.completeness-score.complete { color: var(--green); }
+.completeness-score.incomplete { color: var(--yellow); }
+.completeness-detail { flex: 1; }
+.completeness-status { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.completeness-items { font-size: 11px; color: var(--text2); line-height: 1.6; }
+.completeness-items span { display: block; }
+.completeness-items .miss::before { content: "⚠ "; color: var(--yellow); }
+.completeness-items .str::before { content: "✓ "; color: var(--green); }
+
+/* ── LOADING PHASES ── */
+.loading-phases { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.loading-phase {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12px; color: var(--text3);
+}
+.loading-phase.active { color: var(--accent2); }
+.loading-phase.done { color: var(--green); }
+.phase-num {
+  width: 22px; height: 22px; border-radius: 50%; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg3); border: 1px solid var(--border); flex-shrink: 0;
+}
+.loading-phase.active .phase-num { background: var(--accent); border-color: var(--accent); color: #fff; }
+.loading-phase.done .phase-num { background: var(--green); border-color: var(--green); color: #fff; }
 
 /* ── MODAL ── */
 .modal-bg {
@@ -381,9 +494,12 @@ textarea::placeholder { color: var(--text3); }
 .project-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
 .project-item.active .project-dot { background: var(--accent); }
 .project-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.project-del { font-size: 9px; color: transparent; transition: color .12s; cursor: pointer; }
-.project-item:hover .project-del { color: var(--text3); }
-.project-del:hover { color: var(--red) !important; }
+.project-actions { display:flex; gap:2px; align-items:center; opacity:0; transition:opacity .12s; flex-shrink:0; }
+.project-item:hover .project-actions { opacity:1; }
+.project-del { font-size:10px; color:var(--text3); cursor:pointer; padding:2px 4px; border-radius:3px; transition:color .12s; }
+.project-del:hover { color: var(--red); }
+.project-edit { font-size:10px; cursor:pointer; padding:2px 4px; border-radius:3px; opacity:.6; transition:opacity .12s; }
+.project-edit:hover { opacity:1; }
 .project-add-btn {
   width: 100%; border: none; background: none;
   padding: 6px 14px 10px; text-align: left;
@@ -393,6 +509,44 @@ textarea::placeholder { color: var(--text3); }
 .project-add-btn:hover { color: var(--accent); }
 .project-modal { display:none; }
 .project-modal.open { display:flex; }
+
+/* ── PROJECT PROFILE TABS ── */
+.modal-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:16px; }
+.modal-tab {
+  padding:8px 16px; font-size:12px; font-weight:600; cursor:pointer;
+  border:none; background:transparent; color:var(--text3);
+  border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .15s;
+}
+.modal-tab.active { color:var(--accent2); border-bottom-color:var(--accent); }
+.modal-tab:hover:not(.active) { color:var(--text1); }
+.tab-pane { display:none; }
+.tab-pane.active { display:block; }
+.profile-chip-wrap { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.profile-chip {
+  padding:3px 10px; border-radius:12px; font-size:11px; font-weight:600;
+  cursor:pointer; border:1px solid var(--border); background:var(--bg3); color:var(--text2);
+  transition:all .15s;
+}
+.profile-chip:hover { border-color:var(--accent); color:var(--accent2); }
+.profile-chip.selected { background:var(--accent); color:#fff; border-color:var(--accent); }
+.profile-tag {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:3px 8px; border-radius:10px; font-size:11px;
+  background:rgba(99,102,241,.15); color:var(--accent2);
+  border:1px solid rgba(99,102,241,.3);
+}
+.profile-tag .remove { cursor:pointer; opacity:.6; font-size:10px; }
+.profile-tag .remove:hover { opacity:1; color:var(--red); }
+
+/* ── FOLDER CHIPS ── */
+.folder-chip {
+  padding: 4px 10px; border-radius: 14px; font-size: 11px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text2); transition: all .15s;
+}
+.folder-chip:hover { border-color: var(--accent); color: var(--accent2); }
+.folder-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
 </style>
 </head>
 <body>
@@ -420,7 +574,17 @@ textarea::placeholder { color: var(--text3); }
     <!-- History -->
     <div class="history-header">
       <span class="history-title">📁 Historik</span>
-      <button class="btn-ghost btn" style="padding:4px 8px;font-size:11px" onclick="loadHistory()" title="Uppdatera">↺</button>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span id="dbStatusDot" title="Databas-status" style="font-size:10px;cursor:pointer;" onclick="openSettings()"></span>
+        <button class="btn-ghost btn" style="padding:4px 8px;font-size:11px" onclick="loadHistory()" title="Uppdatera">↺</button>
+      </div>
+    </div>
+    <div id="dbWarningBanner" style="display:none;padding:8px 14px;background:rgba(245,158,11,.1);border-bottom:1px solid rgba(245,158,11,.3);font-size:11px;color:#f59e0b;line-height:1.4;">
+      ⚠️ Supabase ej ansluten — sessioner sparas endast lokalt.
+      <span style="text-decoration:underline;cursor:pointer;" onclick="openSettings()">Konfigurera</span>
+    </div>
+    <div id="mainNoRepoBanner" style="display:none;padding:8px 14px;background:rgba(99,102,241,.08);border-bottom:1px solid rgba(99,102,241,.2);font-size:11px;color:var(--accent2);line-height:1.5;">
+      🔗 Main har inget GitHub-repo kopplat. Kör <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;">push_to_github.bat</code> eller <span style="text-decoration:underline;cursor:pointer;" onclick="openEditProject('main')">sätt repo manuellt</span>.
     </div>
     <div class="history-list" id="historyList">
       <div class="history-loading">Laddar...</div>
@@ -431,50 +595,81 @@ textarea::placeholder { color: var(--text3); }
   <div class="left-panel">
 
     <div class="panel-section">
-      <div class="section-label">Läge</div>
+      <div class="section-label">Vad vill du göra?</div>
       <div class="mode-toggle">
-        <button class="mode-btn active" id="btn-pre" onclick="setMode('pre')">
-          🏗️ Pre-build<br><small style="font-weight:400;font-size:11px">Granska idén innan</small>
+        <button class="mode-btn active" id="btn-ny_funktion" onclick="setMode('ny_funktion')">
+          💡 Ny funktion<br><small style="font-weight:400;font-size:11px">Idé → färdig spec</small>
         </button>
-        <button class="mode-btn" id="btn-post" onclick="setMode('post')">
-          🔍 Post-build<br><small style="font-weight:400;font-size:11px">Granska befintlig kod</small>
+        <button class="mode-btn" id="btn-granska_kod" onclick="setMode('granska_kod')">
+          🔍 Granska kod<br><small style="font-weight:400;font-size:11px">Kod → backlog</small>
+        </button>
+        <button class="mode-btn" id="btn-buggrapport" onclick="setMode('buggrapport')">
+          🐛 Buggrapport<br><small style="font-weight:400;font-size:11px">Fel → fix-spec</small>
         </button>
       </div>
     </div>
 
     <div class="panel-section" style="flex:1;display:flex;flex-direction:column;">
-      <div id="pre-input" style="flex:1;display:flex;flex-direction:column;gap:12px;">
-        <div>
-          <div class="section-label">Beskriv vad du vill bygga</div>
-          <textarea id="ideaInput" rows="8"
-            placeholder="T.ex: Jag vill lägga till ett inloggningsflöde med email + lösenord. Användaren ska kunna återställa lösenordet via email. Det ska fungera med vår befintliga Next.js-app och Supabase."></textarea>
+      <div id="pre-input" style="flex:1;display:flex;flex-direction:column;gap:10px;">
+        <div class="input-wrap">
+          <div class="section-label">Beskriv din idé</div>
+          <textarea id="ideaInput" rows="10"
+            placeholder="Beskriv vad du vill uppnå — inte hur. T.ex: Jag vill att användare ska kunna logga in med email och lösenord, återställa lösenord via email, och se en dashboard med sina senaste ordrar."></textarea>
         </div>
         <div>
-          <div class="section-label">Projektkontext <span style="font-weight:400;color:var(--text3)">(valfritt)</span></div>
-          <textarea id="preContextInput" rows="3"
-            placeholder="T.ex: React + TypeScript, Supabase för auth, Tailwind CSS, redan finns en /dashboard-sida..."></textarea>
+          <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">
+            <span>Extra kontext <span style="font-weight:400;color:var(--text3)">(valfritt)</span></span>
+            <span style="font-size:10px;color:var(--text3);font-weight:400;">Projektprofil injiceras automatiskt</span>
+          </div>
+          <textarea id="preContextInput" rows="2" style="min-height:56px;"
+            placeholder="T.ex: Det här gäller specifikt checkout-flödet. Befintlig auth finns i /lib/auth.ts..."></textarea>
         </div>
       </div>
 
       <div id="post-input" style="flex:1;flex-direction:column;gap:12px;display:none;">
 
+        <!-- Bug description (buggrapport only) -->
+        <div id="bugDescWrap" style="display:none;">
+          <div class="section-label">🐛 Beskriv felet</div>
+          <textarea id="bugDescInput" rows="3" style="min-height:70px;"
+            placeholder="Vad händer som inte borde hända? När? Vilka steg leder till felet? T.ex: När jag klickar 'Spara' andra gången fryser sidan och badge-räknaren nollställs inte."></textarea>
+        </div>
+
         <!-- Active project badge -->
-        <div id="activeProjBadge" style="display:none;padding:8px 12px;background:var(--bg3);border:1px solid var(--accent);border-radius:8px;font-size:12px;color:var(--text1);display:flex;align-items:center;gap:10px;">
+        <div id="activeProjBadge" style="display:none;padding:8px 12px;background:var(--bg3);border:1px solid var(--accent);border-radius:8px;font-size:12px;color:var(--text1);align-items:center;gap:10px;">
           <span>🗂</span>
           <span style="font-weight:600;" id="activeProjName"></span>
           <span style="color:var(--text3);font-size:11px;" id="activeProjRepo"></span>
           <span style="margin-left:auto;color:var(--accent);font-size:11px;">Auto-sync ✓</span>
         </div>
 
-        <div class="github-section">
+        <div class="github-section" id="githubSection">
           <div class="github-header">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
             GitHub — hämta kod automatiskt
           </div>
-          <div class="github-row">
-            <input type="text" id="githubRepoInput" placeholder="owner/repo  (t.ex. vercel/next.js)">
-            <input type="text" id="githubBranchInput" class="branch-input" placeholder="main" value="main">
-            <button class="btn-fetch" id="fetchBtn" onclick="fetchGithub()">Hämta</button>
+          <!-- Project repo row (shown when active project has repo) -->
+          <div id="githubProjRow" style="display:none">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <span style="font-size:12px;color:var(--text2);flex:1;" id="githubProjLabel"></span>
+              <select id="githubBranchSelect" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text1);font-size:12px;padding:4px 8px;" onchange="onBranchChange()">
+                <option>main</option>
+              </select>
+              <button class="btn-fetch" id="fetchBtn" onclick="fetchGithub()">Hämta</button>
+            </div>
+            <!-- Folder picker -->
+            <div id="folderPickerWrap" style="display:none;margin-bottom:8px;">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Välj mappar att granska (eller lämna för allt):</div>
+              <div id="folderPickerList" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+            </div>
+          </div>
+          <!-- Manual row (shown when no project repo) -->
+          <div id="githubManualRow">
+            <div class="github-row">
+              <input type="text" id="githubRepoInput" placeholder="owner/repo  (t.ex. vercel/next.js)">
+              <input type="text" id="githubBranchInput" class="branch-input" placeholder="main" value="main">
+              <button class="btn-fetch" id="fetchBtnManual" onclick="fetchGithub()">Hämta</button>
+            </div>
           </div>
           <div class="github-status" id="githubStatus">Lämna tomt för att klistra in kod manuellt</div>
         </div>
@@ -484,6 +679,20 @@ textarea::placeholder { color: var(--text3); }
           <textarea id="codeInput" rows="8" style="font-family:'SF Mono',Consolas,monospace;font-size:12px;"
             placeholder="// Klistra in din kod här, eller hämta från GitHub ovan..."></textarea>
         </div>
+        <!-- Screenshot dropzone — feeds the Visuell QA-granskaren -->
+        <div id="screenshotWrap">
+          <div class="section-label">📸 Skärmdump av byggd UI <span style="font-weight:400;color:var(--text3)">(valfritt — aktiverar visuell granskning)</span></div>
+          <div id="dropzone" onclick="document.getElementById('shotFile').click()"
+            ondragover="event.preventDefault();this.classList.add('drag')"
+            ondragleave="this.classList.remove('drag')"
+            ondrop="handleDrop(event)"
+            style="border:1.5px dashed var(--border);border-radius:8px;padding:14px;text-align:center;cursor:pointer;font-size:12px;color:var(--text3);transition:.15s;">
+            Dra & släpp, klistra in (Ctrl+V), eller klicka för att välja bild
+          </div>
+          <input type="file" id="shotFile" accept="image/*" multiple style="display:none;" onchange="handleFilePick(event)">
+          <div id="shotThumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;"></div>
+        </div>
+
         <div>
           <div class="section-label">Projektkontext <span style="font-weight:400;color:var(--text3)">(valfritt)</span></div>
           <textarea id="postContextInput" rows="2"
@@ -493,8 +702,12 @@ textarea::placeholder { color: var(--text3); }
     </div>
 
     <div class="run-btn-wrap">
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <button class="depth-btn" id="depth-snabb" onclick="setDepth('snabb')" title="7 kärnagenter — snabb iteration (~25s)">⚡ Snabbläge</button>
+        <button class="depth-btn active" id="depth-djup" onclick="setDepth('djup')" title="Hela teamet — gedigen leverans (~60s)">🏢 Djupläge</button>
+      </div>
       <button class="btn btn-primary" id="runBtn" onclick="runReview()">
-        ▶ Kör granskning
+        ▶ Skicka till teamet
       </button>
     </div>
 
@@ -504,21 +717,79 @@ textarea::placeholder { color: var(--text3); }
   <div class="right-panel" id="rightPanel">
 
     <div class="empty-state" id="emptyState">
-      <div class="empty-icon">🤖</div>
-      <div class="empty-title">Teamet väntar på din idé</div>
-      <div class="empty-sub">Beskriv vad du vill bygga eller klistra in kod — teamet granskar allt parallellt och Promptsmeden levererar en färdig prompt.</div>
+      <div class="empty-icon">🏢</div>
+      <div class="empty-title">IT-teamet väntar på din beställning</div>
+      <div class="empty-sub" style="max-width:340px;">
+        Beskriv din idé — teamet analyserar krav, granskar parallellt och levererar en komplett specifikation redo att skicka till Lovable, Claude eller Cursor.
+        <br><br>
+        <span style="font-size:11px;color:var(--text3);">Fas 1 → Kravanalys &nbsp;·&nbsp; Fas 2 → Specialistgranskning &nbsp;·&nbsp; Fas 3 → Specifikation</span>
+      </div>
     </div>
 
     <div class="loading-state" id="loadingState" style="display:none">
       <div class="spinner spinner-lg"></div>
-      <div class="loading-title" id="loadingTitle">Teamet granskar...</div>
-      <div class="loading-agents" id="loadingAgents"></div>
+      <div class="loading-title" id="loadingTitle">Teamet arbetar...</div>
+      <div class="loading-phases" id="loadingPhases">
+        <div class="loading-phase active" id="lp1">
+          <div class="phase-num">1</div>
+          <span>Kravanalytikern tolkar din idé</span>
+        </div>
+        <div class="loading-phase" id="lp2">
+          <div class="phase-num">2</div>
+          <span id="lp2text">Specialisterna granskar parallellt</span>
+        </div>
+        <div class="loading-phase" id="lp3">
+          <div class="phase-num">3</div>
+          <span>Promptsmeden skriver spec · Kompletthetscheck</span>
+        </div>
+      </div>
     </div>
 
-    <div id="resultsView" style="display:none">
-      <div class="stats-bar" id="statsBar"></div>
-      <div class="agents-grid" id="agentsGrid"></div>
-      <div class="final-prompt-box" id="finalPromptBox"></div>
+    <div id="resultsView" style="display:none;flex-direction:column;gap:20px;">
+      <!-- Phase 1: Kravanalys -->
+      <div class="phase-block" id="phaseKrav" style="display:none;">
+        <div class="phase-header">
+          <span class="phase-label">Fas 1 — Kravanalys</span>
+          <div class="phase-divider"></div>
+        </div>
+        <div id="kravBox"></div>
+      </div>
+
+      <!-- Phase 2: Specialistgranskning -->
+      <div class="phase-block" id="phaseReview">
+        <div class="phase-header">
+          <span class="phase-label">Fas 2 — Specialistgranskning</span>
+          <div class="phase-divider"></div>
+          <span class="phase-stat" id="reviewStat"></span>
+        </div>
+        <div class="agents-grid" id="agentsGrid"></div>
+      </div>
+
+      <!-- Phase 3: Specifikation -->
+      <div class="phase-block" id="phaseSpec">
+        <div class="phase-header">
+          <span class="phase-label">Fas 3 — Specifikation</span>
+          <div class="phase-divider"></div>
+          <div class="view-toggle" id="viewToggle" style="display:none;margin-right:8px;">
+            <button class="view-btn active" id="vt-bestallare" onclick="setSpecView('bestallare')">🧑‍💼 Beställarläge</button>
+            <button class="view-btn" id="vt-teknisk" onclick="setSpecView('teknisk')">👩‍💻 Teknisk läge</button>
+          </div>
+          <button class="btn btn-ghost" onclick="exportSession()" style="padding:4px 10px;font-size:11px;white-space:nowrap;">⬇ Exportera</button>
+        </div>
+        <div id="bestallareBox"></div>
+        <div class="final-prompt-box" id="finalPromptBox"></div>
+        <div id="completenessBox"></div>
+      </div>
+
+      <!-- Phase 4: Backlog (review modes) -->
+      <div class="phase-block" id="phaseBacklog" style="display:none;">
+        <div class="phase-header">
+          <span class="phase-label">Fas 4 — Backlog</span>
+          <div class="phase-divider"></div>
+          <span class="phase-stat" id="backlogStat"></span>
+        </div>
+        <div id="backlogBox"></div>
+      </div>
     </div>
 
   </div>
@@ -528,17 +799,18 @@ textarea::placeholder { color: var(--text3); }
 <div class="modal-bg" id="settingsModal">
   <div class="modal">
     <h3>⚙️ Inställningar</h3>
+    <style>#settingsModal .modal{max-height:90vh;overflow-y:auto;width:500px;}</style>
     <div class="form-group">
-      <label>Anthropic API-nyckel</label>
-      <input type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="current-password">
+      <label>OpenRouter API-nyckel</label>
+      <input type="password" id="openrouterKeyInput" placeholder="sk-or-v1-...">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">Ger tillgång till Claude, GPT-4o, Gemini, DeepSeek m.fl. · <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent)">openrouter.ai/keys</a></div>
     </div>
     <div class="form-group">
-      <label>Modell</label>
-      <select id="modelSelect">
-        <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Rekommenderad)</option>
-        <option value="claude-opus-4-6">Claude Opus 4.6 (Bättre, långsammare)</option>
-        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Snabb, billig)</option>
-      </select>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <label style="margin:0;">Modell per agent</label>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;" onclick="resetAgentModels()">Återställ standard</button>
+      </div>
+      <div id="agentModelRows" style="display:flex;flex-direction:column;gap:5px;"></div>
     </div>
     <div class="form-group">
       <label>GitHub Personal Access Token <span style="font-weight:400;color:var(--text3)">(för privata repos)</span></label>
@@ -569,82 +841,267 @@ textarea::placeholder { color: var(--text3); }
   </div>
 </div>
 
+<!-- VERIFY FIX MODAL -->
+<div class="modal-bg" id="verifyModal">
+  <div class="modal" style="width:560px;max-width:95vw;">
+    <h3>🔍 Verifiera fix</h3>
+    <div style="font-size:12px;color:var(--text2);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;" id="verifyFinding"></div>
+    <div class="form-group">
+      <label>Uppdaterad kod <span style="font-weight:400;color:var(--text3)">(Fixverifieraren kontrollerar ENBART problemet ovan)</span></label>
+      <textarea id="verifyCodeInput" rows="10" style="font-family:'SF Mono',Consolas,monospace;font-size:12px;min-height:180px;" placeholder="// Klistra in den nya versionen av koden..."></textarea>
+    </div>
+    <div id="verifyResult" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeVerifyFix()">Stäng</button>
+      <button class="btn btn-primary" id="verifyRunBtn" onclick="runVerifyFix()">🔍 Verifiera</button>
+    </div>
+  </div>
+</div>
+
 <!-- PROJECT MODAL -->
 <div class="modal-bg project-modal" id="projectModal">
-  <div class="modal" style="min-width:360px">
-    <h3>🗂 Lägg till projekt</h3>
-    <p style="font-size:12px;color:var(--text3);margin:-4px 0 16px;">Verktyget läser koden från GitHub för att göra rätt bedömning — det skriver aldrig tillbaka.</p>
-    <div class="form-group">
-      <label>Projektnamn</label>
-      <input type="text" id="projNameInput" placeholder="t.ex. Min App">
+  <div class="modal" style="min-width:480px;max-width:560px;max-height:90vh;overflow-y:auto;">
+    <h3 id="projModalTitle">🗂 Lägg till projekt</h3>
+
+    <div class="modal-tabs">
+      <button class="modal-tab active" onclick="switchProjTab('connection')">🔗 Anslutning</button>
+      <button class="modal-tab" onclick="switchProjTab('profile')">📋 Projektprofil</button>
     </div>
-    <div class="form-group">
-      <label>GitHub-repo <span style="color:var(--red);font-size:11px;">obligatoriskt</span></label>
-      <div style="display:flex;gap:6px;align-items:center;">
-        <input type="text" id="projRepoInput" placeholder="owner/repo  (t.ex. Stuwish1/my-app)" style="font-family:monospace;font-size:12px;flex:1;" oninput="const b=document.getElementById('branchPickerBtn');if(b)b.disabled=!this.value.includes('/')">
-        <button class="btn btn-ghost" style="padding:6px 10px;font-size:11px;white-space:nowrap;" onclick="loadRepoList()" id="repoPickerBtn">📋 Välj</button>
+
+    <!-- TAB: ANSLUTNING -->
+    <div class="tab-pane active" id="tab-connection">
+      <p style="font-size:12px;color:var(--text3);margin:0 0 14px;">Läsbehörighet endast — appen pushar aldrig kod.</p>
+      <div class="form-group">
+        <label>Projektnamn</label>
+        <input type="text" id="projNameInput" placeholder="t.ex. Min App">
       </div>
-      <div id="repoPickerList" style="display:none;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-top:4px;background:var(--bg1);"></div>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px;">🔒 Läsbehörighet endast — appen pushar aldrig kod</div>
-    </div>
-    <div class="form-group">
-      <label>Branch</label>
-      <div style="display:flex;gap:6px;align-items:center;">
-        <input type="text" id="projBranchInput" placeholder="main" value="main" style="max-width:140px;font-family:monospace;font-size:12px;">
-        <button class="btn btn-ghost" style="padding:6px 10px;font-size:11px;white-space:nowrap;" onclick="loadBranchList()" id="branchPickerBtn" disabled>📋 Välj</button>
+      <div class="form-group">
+        <label>GitHub-repo <span style="color:var(--red);font-size:11px;">obligatoriskt</span></label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" id="projRepoInput" placeholder="owner/repo" style="font-family:monospace;font-size:12px;flex:1;"
+            oninput="const b=document.getElementById('branchPickerBtn');if(b)b.disabled=!this.value.includes('/')">
+          <button class="btn btn-ghost" style="padding:6px 10px;font-size:11px;white-space:nowrap;" onclick="loadRepoList()" id="repoPickerBtn">📋 Välj</button>
+        </div>
+        <div id="repoPickerList" style="display:none;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-top:4px;background:var(--bg);"></div>
       </div>
-      <div id="branchPickerList" style="display:none;max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-top:4px;background:var(--bg1);"></div>
+      <div class="form-group">
+        <label>Branch</label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" id="projBranchInput" placeholder="main" value="main" style="max-width:140px;font-family:monospace;font-size:12px;">
+          <button class="btn btn-ghost" style="padding:6px 10px;font-size:11px;white-space:nowrap;" onclick="loadBranchList()" id="branchPickerBtn" disabled>📋 Välj</button>
+        </div>
+        <div id="branchPickerList" style="display:none;max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-top:4px;background:var(--bg);"></div>
+      </div>
+      <div id="projFetchStatus" style="display:none;font-size:12px;padding:8px 10px;border-radius:6px;margin-top:4px;"></div>
     </div>
-    <div id="projFetchStatus" style="display:none;font-size:12px;padding:8px 10px;border-radius:6px;margin-top:4px;"></div>
-    <div class="modal-actions">
+
+    <!-- TAB: PROJEKTPROFIL -->
+    <div class="tab-pane" id="tab-profile">
+      <p style="font-size:12px;color:var(--text3);margin:0 0 14px;">
+        Fylls i en gång — injiceras automatiskt i varje agent så de förstår projektet.
+      </p>
+
+      <div class="form-group">
+        <label>Projektets syfte</label>
+        <textarea id="projPurposeInput" rows="2" placeholder="Vad gör appen? Vem är målgruppen?" style="font-size:12px;min-height:60px;"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Teknikstack</label>
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <input type="text" id="projStackInput" placeholder="Lägg till t.ex. React, TypeScript..." style="font-size:12px;flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addStackTag();}">
+          <button class="btn btn-ghost" style="padding:6px 10px;font-size:11px;" onclick="addStackTag()">＋</button>
+        </div>
+        <div class="profile-chip-wrap" id="projStackTags"></div>
+        <div class="profile-chip-wrap" style="margin-top:8px;" id="stackSuggestions"></div>
+      </div>
+
+      <div class="form-group">
+        <label>Arkitektur <span style="font-weight:400;color:var(--text3)">(valfritt)</span></label>
+        <textarea id="projArchInput" rows="2" placeholder="T.ex: Server components by default, client endast vid behov. Monorepo med apps/ och packages/." style="font-size:12px;min-height:60px;"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Kodkonventioner <span style="font-weight:400;color:var(--text3)">(valfritt)</span></label>
+        <textarea id="projConvInput" rows="2" placeholder="T.ex: camelCase för JS, snake_case för DB, kebab-case för filer. Inga klasser." style="font-size:12px;min-height:60px;"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Constraints <span style="font-weight:400;color:var(--text3)">(valfritt)</span></label>
+        <textarea id="projConstraintsInput" rows="2" placeholder="T.ex: Måste fungera offline. Får ej byta databas. Inga externa CDN-beroenden." style="font-size:12px;min-height:60px;"></textarea>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:20px;">
       <button class="btn btn-ghost" onclick="closeProjectModal()">Avbryt</button>
+      <button class="btn btn-ghost" id="projNextBtn" onclick="switchProjTab('profile')" style="margin-right:auto;">Nästa: Profil →</button>
       <button class="btn btn-primary" id="saveProjBtn" onclick="saveProject()">Anslut projekt</button>
     </div>
   </div>
 </div>
 
 <script>
-let currentMode = 'pre';
+let currentMode = 'ny_funktion';
+let _screenshots = [];  // base64 data URLs for visual agents
+let _reviewDepth = 'djup';  // 'snabb' = 7 core agents, 'djup' = full team
+
+function setDepth(d) {
+  _reviewDepth = d;
+  const sb = document.getElementById('depth-snabb');
+  const dj = document.getElementById('depth-djup');
+  if (sb) sb.classList.toggle('active', d === 'snabb');
+  if (dj) dj.classList.toggle('active', d === 'djup');
+}
+
+// Legacy mode names → new (for restoring old saved sessions)
+const _MODE_MIGRATE = { pre: 'ny_funktion', post: 'granska_kod', both: 'granska_kod' };
 
 function setMode(mode) {
+  mode = _MODE_MIGRATE[mode] || mode;
   currentMode = mode;
-  document.getElementById('btn-pre').classList.toggle('active', mode === 'pre');
-  document.getElementById('btn-post').classList.toggle('active', mode === 'post');
-  document.getElementById('pre-input').style.display = mode === 'pre' ? 'flex' : 'none';
-  document.getElementById('post-input').style.display = mode === 'post' ? 'flex' : 'none';
+  ['ny_funktion', 'granska_kod', 'buggrapport'].forEach(m => {
+    const btn = document.getElementById('btn-' + m);
+    if (btn) btn.classList.toggle('active', mode === m);
+  });
+  const isNy = mode === 'ny_funktion';
+  const usesCode = mode === 'granska_kod' || mode === 'buggrapport';
+  document.getElementById('pre-input').style.display = isNy ? 'flex' : 'none';
+  document.getElementById('post-input').style.display = usesCode ? 'flex' : 'none';
+  // Bug description only in buggrapport
+  const bugWrap = document.getElementById('bugDescWrap');
+  if (bugWrap) bugWrap.style.display = (mode === 'buggrapport') ? 'block' : 'none';
+  // Screenshots available in code/bug modes
+  const shotWrap = document.getElementById('screenshotWrap');
+  if (shotWrap) shotWrap.style.display = usesCode ? 'block' : 'none';
+  if (usesCode) updateGithubSection();
+}
+
+// ── SCREENSHOT HANDLING (→ base64 for Visuell QA-granskaren) ──
+function _addScreenshot(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  if (_screenshots.length >= 6) { alert('Max 6 skärmdumpar.'); return; }
+  const reader = new FileReader();
+  reader.onload = e => { _screenshots.push(e.target.result); renderShotThumbs(); };
+  reader.readAsDataURL(file);
+}
+function handleDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag');
+  for (const f of e.dataTransfer.files) _addScreenshot(f);
+}
+function handleFilePick(e) {
+  for (const f of e.target.files) _addScreenshot(f);
+  e.target.value = '';
+}
+function renderShotThumbs() {
+  const wrap = document.getElementById('shotThumbs');
+  if (!wrap) return;
+  wrap.innerHTML = _screenshots.map((src, i) =>
+    `<div style="position:relative;width:64px;height:64px;border-radius:6px;overflow:hidden;border:1px solid var(--border);">
+       <img src="${src}" style="width:100%;height:100%;object-fit:cover;">
+       <button onclick="_screenshots.splice(${i},1);renderShotThumbs()" title="Ta bort"
+         style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.7);color:#fff;border:none;border-radius:4px;width:18px;height:18px;cursor:pointer;font-size:11px;line-height:1;">×</button>
+     </div>`).join('');
 }
 
 // ── SETTINGS ──
+let _availableModels = { models: [], defaults: {}, configured: {} };
+
+const AGENT_DISPLAY_NAMES = {
+  kravanalytikern: '📋 Kravanalytikern',
+  architecture:    '🏗️ Arkitekten',
+  ux:              '🎨 UX-agenten',
+  database:        '🗄️ Databasagenten',
+  risk:            '⚠️ Riskvärderaren',
+  integration:     '🔗 Integrationsanalytikern',
+  prompt_smith:    '✍️ Promptsmeden',
+  completeness:    '✅ Kompletthetsgranskaren',
+};
+
 async function openSettings() {
   try {
-    const res = await fetch('/api/settings');
-    const s = await res.json();
-    document.getElementById('apiKeyInput').value = s.api_key || '';
-    document.getElementById('modelSelect').value = s.model || 'claude-sonnet-4-6';
+    const [settingsRes, modelsRes] = await Promise.all([
+      fetch('/api/settings'),
+      fetch('/api/models'),
+    ]);
+    const s = await settingsRes.json();
+    _availableModels = await modelsRes.json();
+    document.getElementById('openrouterKeyInput').value = s.openrouter_key || '';
     document.getElementById('githubTokenInput').value = s.github_token || '';
     document.getElementById('supabaseUrlInput').value = s.supabase_url || '';
     document.getElementById('supabaseKeyInput').value = s.supabase_key || '';
     document.getElementById('selfRepoInput').value = s.self_repo || '';
-  } catch(e) {
-    document.getElementById('apiKeyInput').value = '';
-    document.getElementById('modelSelect').value = 'claude-sonnet-4-6';
-  }
+    renderAgentModelRows(s.agent_models || {});
+  } catch(e) { /* ignore */ }
   document.getElementById('settingsModal').classList.add('open');
   if (_healthCache) renderHealthRows(_healthCache);
 }
+
+function renderAgentModelRows(configured) {
+  const container = document.getElementById('agentModelRows');
+  if (!container) return;
+  const allModels = _availableModels.models || [];
+  const agentIds = _availableModels.agent_ids || Object.keys(AGENT_DISPLAY_NAMES);
+  const defaults = _availableModels.defaults || {};
+
+  // Group models by provider for optgroups
+  const byProvider = {};
+  allModels.forEach(m => {
+    if (!byProvider[m.provider]) byProvider[m.provider] = [];
+    byProvider[m.provider].push(m);
+  });
+  const TIER_BADGE = { best: ' ⭐', reasoning: ' 🧠', fast: ' ⚡', balanced: '' };
+
+  container.innerHTML = agentIds.map(id => {
+    const current = configured[id] || defaults[id] || '';
+    const label = AGENT_DISPLAY_NAMES[id] || id;
+    const isCustom = !!configured[id];
+    const optgroups = Object.entries(byProvider).map(([prov, mods]) => {
+      const opts = mods.map(m => {
+        const sel = m.id === current ? 'selected' : '';
+        return `<option value="${m.id}" ${sel}>${m.name}${TIER_BADGE[m.tier]||''}</option>`;
+      }).join('');
+      return `<optgroup label="${prov}">${opts}</optgroup>`;
+    }).join('');
+    return `<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;background:var(--bg);">
+      <span style="font-size:11px;min-width:155px;color:var(--text2);">${label}</span>
+      <select data-agent-id="${id}" style="flex:1;font-size:11px;padding:3px 6px;border-color:${isCustom?'var(--accent)':'var(--border)'}"
+        onchange="this.style.borderColor=this.value!==((_availableModels.defaults||{})[this.dataset.agentId]||'')?'var(--accent)':'var(--border)'">
+        ${optgroups}
+      </select>
+    </div>`;
+  }).join('');
+}
+
+function resetAgentModels() {
+  renderAgentModelRows({});
+}
+
+function getAgentModelsFromUI() {
+  const rows = document.querySelectorAll('#agentModelRows select[data-agent-id]');
+  const defaults = _availableModels.defaults || {};
+  const result = {};
+  rows.forEach(sel => {
+    const id = sel.dataset.agentId;
+    if (sel.value && sel.value !== (defaults[id] || '')) result[id] = sel.value;
+  });
+  return result;
+}
+
 function closeSettings() {
   document.getElementById('settingsModal').classList.remove('open');
 }
+
 async function saveSettings() {
-  const apiKey = document.getElementById('apiKeyInput').value.trim();
-  const model = document.getElementById('modelSelect').value;
+  const orKey = document.getElementById('openrouterKeyInput').value.trim();
   const supabaseUrl = document.getElementById('supabaseUrlInput').value.trim();
   const supabaseKey = document.getElementById('supabaseKeyInput').value.trim();
   const githubToken = document.getElementById('githubTokenInput').value.trim();
   const selfRepo = document.getElementById('selfRepoInput').value.trim();
-  const payload = { model, supabase_url: supabaseUrl, self_repo: selfRepo };
+  const agentModels = getAgentModelsFromUI();
+  const payload = { supabase_url: supabaseUrl, self_repo: selfRepo, agent_models: agentModels };
   if (githubToken && !githubToken.startsWith('***')) payload.github_token = githubToken;
-  if (apiKey && !apiKey.startsWith('sk-***')) payload.api_key = apiKey;
+  if (orKey && !orKey.startsWith('sk-or-***')) payload.openrouter_key = orKey;
   if (supabaseKey && !supabaseKey.startsWith('***')) payload.supabase_key = supabaseKey;
   await fetch('/api/settings', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -658,15 +1115,14 @@ async function saveSettings() {
 // ── HEALTH CHECK ──
 async function testConnections() {
   // Save current values first, then test — keep modal open
-  const apiKey = document.getElementById('apiKeyInput').value.trim();
-  const model = document.getElementById('modelSelect').value;
   const supabaseUrl = document.getElementById('supabaseUrlInput').value.trim();
   const supabaseKey = document.getElementById('supabaseKeyInput').value.trim();
   const githubToken = document.getElementById('githubTokenInput').value.trim();
   const selfRepo = document.getElementById('selfRepoInput').value.trim();
-  const payload = { model, supabase_url: supabaseUrl, self_repo: selfRepo };
+  const orKey = document.getElementById('openrouterKeyInput').value.trim();
+  const payload = { supabase_url: supabaseUrl, self_repo: selfRepo };
   if (githubToken && !githubToken.startsWith('***')) payload.github_token = githubToken;
-  if (apiKey && !apiKey.startsWith('sk-***') && !apiKey.startsWith('sb_')) payload.api_key = apiKey;
+  if (orKey && !orKey.startsWith('sk-or-***')) payload.openrouter_key = orKey;
   if (supabaseKey && !supabaseKey.startsWith('***')) payload.supabase_key = supabaseKey;
   // Save silently
   await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
@@ -715,19 +1171,41 @@ let _healthCache = null;
 
 function updateHealthBadges(services) {
   _healthCache = services;
-  // Update header badge — only warn if Anthropic (the core API) fails
+
+  // Header badge — only flag if Anthropic (core API) fails
   const badge = document.getElementById('healthBadge');
-  if (!badge) return;
-  if (!services) {
-    badge.innerHTML = '';
-    badge.title = '';
-    return;
+  if (badge) {
+    if (!services) {
+      badge.innerHTML = '';
+      badge.title = '';
+    } else {
+      const orOk = services.openrouter?.ok;
+      const allOk = Object.values(services).every(s => s.ok);
+      badge.innerHTML = allOk ? ' ✅' : (!orOk ? ' ❌' : '');
+      badge.title = Object.entries(services).map(([k,v]) => `${k}: ${v.ok ? '✓' : '✗'} ${v.msg}`).join('\n');
+    }
   }
-  const anthropicOk = services.anthropic?.ok;
-  const allOk = Object.values(services).every(s => s.ok);
-  badge.innerHTML = allOk ? ' ✅' : (!anthropicOk ? ' ❌' : '');
-  badge.title = Object.entries(services).map(([k,v]) => `${k}: ${v.ok ? '✓' : '✗'} ${v.msg}`).join('\n');
-  // Also render in health panel if open
+
+  // DB status dot in history panel
+  const dot = document.getElementById('dbStatusDot');
+  const banner = document.getElementById('dbWarningBanner');
+  if (dot && services) {
+    const sbOk = services.supabase?.ok;
+    const sbConfigured = services.supabase?.msg && !services.supabase.msg.includes('saknas');
+    if (!sbConfigured) {
+      dot.textContent = '';
+      if (banner) banner.style.display = 'none';
+    } else if (sbOk) {
+      dot.textContent = '🟢';
+      dot.title = 'Supabase ansluten: ' + services.supabase.msg;
+      if (banner) banner.style.display = 'none';
+    } else {
+      dot.textContent = '🔴';
+      dot.title = 'Supabase fel: ' + services.supabase.msg;
+      if (banner) banner.style.display = 'block';
+    }
+  }
+
   renderHealthRows(services);
 }
 
@@ -735,8 +1213,8 @@ function renderHealthRows(services) {
   const rows = document.getElementById('healthRows');
   const panel = document.getElementById('healthStatus');
   if (!rows || !services) return;
-  const icons = { anthropic: '🤖', github: '🐙', supabase: '🗄️' };
-  const names = { anthropic: 'Anthropic', github: 'GitHub', supabase: 'Supabase' };
+  const icons = { openrouter: '🔀', github: '🐙', supabase: '🗄️' };
+  const names = { openrouter: 'OpenRouter', github: 'GitHub', supabase: 'Supabase' };
   rows.innerHTML = Object.entries(services).map(([k, v]) => {
     const color = v.ok ? '#22c55e' : '#ef4444';
     const symbol = v.ok ? '●' : '●';
@@ -752,28 +1230,32 @@ function renderHealthRows(services) {
 
 // ── AGENT LABELS ──
 const AGENT_LABELS = {
-  pre: ['🏗️ Arkitekten', '🎨 UX-agenten', '🗄️ Databasagenten'],
-  post: ['📋 Kodkvalitet','🔒 Säkerheten','⚡ Prestanda','🖼️ Visuell','♿ Tillgänglighet',
-         '📱 Mobil','🧪 Test','🔌 API','🔁 Dubbelkollen','🚨 Felhantering',
-         '📝 Dokumentation','📈 Skalbarhet','🛡️ Dataskydd','📦 Beroenden','🌍 i18n','💻 Frontend'],
-  both: ['🏗️ Arkitekten','🎨 UX-agenten','🗄️ Databasagenten',
-         '📋 Kodkvalitet','🔒 Säkerheten','⚡ Prestanda','🖼️ Visuell','♿ Tillgänglighet',
-         '📱 Mobil','🧪 Test','🔌 API','🔁 Dubbelkollen','🚨 Felhantering',
-         '📝 Dokumentation','📈 Skalbarhet','🛡️ Dataskydd','📦 Beroenden','🌍 i18n','💻 Frontend']
+  ny_funktion: ['🎯 Hotmodelleraren','⚖️ Dataskyddsjuristen','🏗️ Arkitekten','🔗 Integrationsanalytikern',
+         '⚠️ Riskvärderaren','🧭 UX-agenten','🎨 UI/Design','🧱 Frontend','📐 Responsivitet','♿ Tillgänglighet',
+         '🗄️ Databasagenten','📜 API','🧯 Felhantering','🪤 Edge-case'],
+  granska_kod: ['🏗️ Arkitekten','🔗 Integration','🧭 UX','🎨 UI/Design','🧱 Frontend','📐 Responsivitet',
+         '♿ Tillgänglighet','📸 Visuell QA','🗄️ Databas','🔀 Datamigration','📜 API','🧯 Felhantering',
+         '🪤 Edge-case','📋 Kodkvalitet','🔒 Säkerheten','🔑 Hemlighetsvakten','⚡ Prestanda','📈 Skalbarhet',
+         '🛡️ Dataskydd','🧪 Test'],
+  buggrapport: ['🔬 Rotorsaksanalytikern','🎯 Hotmodelleraren','⚖️ Dataskydd','🏗️ Arkitekten','🔗 Integration',
+         '🧭 UX','🎨 UI/Design','♿ Tillgänglighet','📸 Visuell QA','🗄️ Databas','🔀 Datamigration','📜 API',
+         '🧯 Felhantering','🪤 Edge-case','📋 Kodkvalitet','🔒 Säkerheten','🔑 Hemlighetsvakten','⚡ Prestanda',
+         '📈 Skalbarhet','🛡️ Dataskydd','🧪 Test']
 };
 
 // ── RUN REVIEW ──
 async function runReview() {
-  // If a project is active with a repo, auto-fetch latest code first (post-build)
+  const isNy = currentMode === 'ny_funktion';
+  const usesCode = !isNy;
+  // If a project is active with a repo, auto-fetch latest code first (code modes)
   const activeProj = getActiveProject();
-  if (activeProj && activeProj.repo && currentMode === 'post') {
+  if (activeProj && activeProj.repo && usesCode) {
     const codeArea = document.getElementById('codeInput');
     if (!codeArea.value.trim()) {
-      // Show brief fetch status
       document.getElementById('emptyState').style.display = 'none';
       document.getElementById('loadingState').style.display = 'flex';
       document.getElementById('loadingTitle').textContent = `⬇️ Hämtar kod från ${activeProj.repo}...`;
-      document.getElementById('loadingAgents').innerHTML = '';
+      ['lp1','lp2','lp3'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display='none'; });
       const fetched = await fetchActiveProjectCode();
       document.getElementById('loadingState').style.display = 'none';
       document.getElementById('emptyState').style.display = 'flex';
@@ -784,29 +1266,42 @@ async function runReview() {
     }
   }
 
-  const inputText = currentMode === 'pre'
-    ? document.getElementById('ideaInput').value.trim()
-    : document.getElementById('codeInput').value.trim();
-  const context = currentMode === 'pre'
+  const bugDesc = document.getElementById('bugDescInput')?.value.trim() || '';
+  const code = document.getElementById('codeInput').value.trim();
+  let inputText;
+  if (isNy) {
+    inputText = document.getElementById('ideaInput').value.trim();
+  } else if (currentMode === 'buggrapport') {
+    inputText = (bugDesc ? `FELBESKRIVNING:\n${bugDesc}\n\n` : '') + (code ? `KOD:\n${code}` : '');
+  } else {
+    inputText = code;
+  }
+  inputText = inputText.trim();
+  const context = isNy
     ? document.getElementById('preContextInput').value.trim()
     : document.getElementById('postContextInput').value.trim();
   const reviewProjectId = getActiveProject() ? getActiveProject().id : '';
+  const images = usesCode ? _screenshots.slice() : [];
 
   if (!inputText) {
-    if (activeProj && activeProj.repo && currentMode === 'post') {
+    if (activeProj && activeProj.repo && usesCode) {
       alert(`Kunde inte hämta kod från ${activeProj.repo}. Kontrollera att repot finns och att GitHub-token är inställd.`);
+    } else if (isNy) {
+      alert('Beskriv vad du vill bygga.');
+    } else if (currentMode === 'buggrapport') {
+      alert('Beskriv felet och/eller klistra in koden.');
     } else {
-      alert(currentMode === 'pre' ? 'Beskriv vad du vill bygga.' : 'Klistra in kod att granska.');
+      alert('Klistra in kod att granska.');
     }
     return;
   }
 
-  // Check API key
+  // Check OpenRouter key
   try {
     const s = await fetch('/api/settings').then(r => r.json());
-    if (!s.api_key) {
+    if (!s.openrouter_key) {
       openSettings();
-      alert('Ange din Anthropic API-nyckel i inställningarna först.');
+      alert('Ange din OpenRouter API-nyckel i inställningarna först.');
       return;
     }
   } catch(e) { /* continue if settings endpoint fails */ }
@@ -817,13 +1312,9 @@ async function runReview() {
   document.getElementById('loadingState').style.display = 'flex';
   document.getElementById('runBtn').disabled = true;
 
-  const labels = AGENT_LABELS[currentMode] || AGENT_LABELS.pre;
-  const agentsHtml = labels.map(l =>
-    `<div class="loading-agent running"><div class="spinner"></div>${l}</div>`
-  ).join('');
-  document.getElementById('loadingAgents').innerHTML = agentsHtml;
-  document.getElementById('loadingTitle').textContent =
-    `${labels.length} agenter granskar + Promptsmeden syntetiserar...`;
+  // REAL progress: poll /api/progress/{run_id} — no more simulated phases
+  const runId = 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  startProgressPolling(runId);
 
   _lastInputText = inputText;
   _lastContext = context;
@@ -832,7 +1323,13 @@ async function runReview() {
     const res = await fetch('/api/review', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: currentMode, input_text: inputText, context, project_id: reviewProjectId })
+      body: JSON.stringify({
+        mode: currentMode, input_text: inputText, context, images,
+        run_id: runId, depth: _reviewDepth,
+        project_id: reviewProjectId,
+        file_manifest: currentMode === 'ny_funktion' ? '' : _githubManifest,
+        profile: getActiveProject()?.profile || {}
+      })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -840,23 +1337,76 @@ async function runReview() {
     }
     const data = await res.json();
     renderResults(data);
+    // Show cloud-save status without requiring a health check round-trip
+    if (data.saved && !data.saved.cloud && _healthCache?.supabase?.ok !== false) {
+      const banner = document.getElementById('dbWarningBanner');
+      if (banner) banner.style.display = 'block';
+    }
   } catch (e) {
     document.getElementById('loadingState').style.display = 'none';
     showError(e.message);
   } finally {
     document.getElementById('runBtn').disabled = false;
+    stopProgressPolling();
   }
+}
+
+// ── REAL PROGRESS POLLING ─────────────────────────────────────────
+let _progressTimer = null;
+
+function startProgressPolling(runId) {
+  stopProgressPolling();
+  const lp1 = document.getElementById('lp1');
+  const lp2 = document.getElementById('lp2');
+  const lp2text = document.getElementById('lp2text');
+  const lp3 = document.getElementById('lp3');
+  ['lp1','lp2','lp3'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.className = 'loading-phase'; el.style.display = 'flex'; }
+  });
+  if (lp1) lp1.className = 'loading-phase active';
+
+  _progressTimer = setInterval(async () => {
+    try {
+      const p = await fetch('/api/progress/' + runId).then(r => r.json());
+      const agents = p.agents || {};
+      const done = Object.values(agents).filter(s => s !== 'kör').length;
+      const running = Object.values(agents).filter(s => s === 'kör').length;
+      const total = p.total || (done + running) || 0;
+      if (p.phase === 'krav') {
+        if (lp1) lp1.className = 'loading-phase active';
+      } else if (p.phase === 'specialister') {
+        if (lp1) lp1.className = 'loading-phase done';
+        if (lp2) lp2.className = 'loading-phase active';
+        if (lp2text && total) lp2text.textContent = `${done}/${total} specialister klara`;
+      } else if (p.phase === 'syntes' || p.phase === 'klar') {
+        if (lp1) lp1.className = 'loading-phase done';
+        if (lp2) { lp2.className = 'loading-phase done'; }
+        if (lp2text && total) lp2text.textContent = `${total} specialister klara`;
+        if (lp3) lp3.className = 'loading-phase active';
+      }
+    } catch (e) { /* polling is best-effort */ }
+  }, 1500);
+}
+
+function stopProgressPolling() {
+  if (_progressTimer) { clearInterval(_progressTimer); _progressTimer = null; }
 }
 
 // Accumulated question answers: {qid: answer}
 let _answers = {};
-let _questions = {};  // stores question text per id
+let _questions = {};
 let _lastInputText = '';
 let _lastContext = '';
 let _clarificationRound = 0;
 let _lastResults = [];
 let _lastSmith = null;
 let _lastStats = {};
+let _lastKrav = {};
+let _lastCompleteness = {};
+let _lastBestallare = {};
+let _lastBacklog = [];
+let _lastCost = {};
 const MAX_CLARIFICATION_ROUNDS = 3;
 
 function renderResults(data) {
@@ -865,56 +1415,303 @@ function renderResults(data) {
   const results = data.results || [];
   const stats = data.stats || {approved:0, rejected:0, errors:0, total:0};
   const smith = data.smith || {type: 'prompt', content: data.final_prompt || ''};
+  const krav = data.krav_result || {};
+  const completeness = data.completeness_result || {};
+  const bestallare = data.bestallare_result || {};
+  const backlogItems = data.backlog_items || [];
+  const cost = data.cost_summary || {};
 
-  // Store for "Spara till Main" button
   _lastResults = results;
   _lastSmith = smith;
   _lastStats = stats;
+  _lastKrav = krav;
+  _lastCompleteness = completeness;
+  _lastBestallare = bestallare;
+  _lastBacklog = backlogItems;
+  _lastCost = cost;
 
-  // Stats bar
-  document.getElementById('statsBar').innerHTML = `
-    <div class="stat"><div class="stat-dot dot-green"></div><span class="stat-count">${stats.approved}</span> Godkända</div>
-    <div class="sep">|</div>
-    <div class="stat"><div class="stat-dot dot-red"></div><span class="stat-count">${stats.rejected}</span> Underkända</div>
-    ${stats.errors > 0 ? `<div class="sep">|</div><div class="stat"><div class="stat-dot dot-yellow"></div><span class="stat-count">${stats.errors}</span> Fel</div>` : ''}
-    <div class="sep">|</div>
-    <div class="stat" style="color:var(--text3)">${stats.total} agenter kördes</div>
-  `;
+  // ── Phase 1: Kravanalys ──
+  const kravBox = document.getElementById('kravBox');
+  const phaseKrav = document.getElementById('phaseKrav');
+  if (krav && (krav.tolkad_ide || (krav.krav && krav.krav.length))) {
+    kravBox.innerHTML = renderKravBox(krav);
+    phaseKrav.style.display = 'flex';
+  } else {
+    phaseKrav.style.display = 'none';
+  }
 
-  // Agent cards
-  document.getElementById('agentsGrid').innerHTML = results.map(r => {
-    const cls = r.status === 'GODKÄND' ? 'approved' : r.status === 'UNDERKÄND' ? 'rejected' : 'error';
-    const badgeCls = r.status === 'GODKÄND' ? 'badge-ok' : r.status === 'UNDERKÄND' ? 'badge-fail' : 'badge-warn';
-    const findings = (r.findings || []).slice(0, 4);
-    const suggestions = (r.suggestions || []).slice(0, 2);
-    return `
-      <div class="agent-card ${cls}">
-        <div class="card-header">
-          <div class="card-name"><span class="card-emoji">${escHtml(r.emoji)}</span>${escHtml(r.name)}</div>
-          <span class="badge ${badgeCls}">${r.status}</span>
-        </div>
-        ${findings.length > 0
-          ? `<div class="card-findings">${findings.map(f => `<div class="finding-item">${escHtml(f)}</div>`).join('')}</div>`
-          : `<div class="no-findings">Inga anmärkningar</div>`
-        }
-        ${suggestions.length > 0
-          ? `<div class="card-suggestions">${suggestions.map(s => `<div class="suggestion-item">${escHtml(s)}</div>`).join('')}</div>`
-          : ''
-        }
-      </div>
-    `;
-  }).join('');
+  // ── Phase 2: Agent cards ──
+  const approved = stats.approved, rejected = stats.rejected, errs = stats.errors || 0;
+  const statEl = document.getElementById('reviewStat');
+  if (statEl) {
+    const costStr = (cost && cost.total_usd > 0)
+      ? ` · <span title="${(cost.tokens_in||0).toLocaleString()} in / ${(cost.tokens_out||0).toLocaleString()} ut tokens">💰 ~$${cost.total_usd.toFixed(3)}</span>`
+      : '';
+    statEl.innerHTML =
+      `<span class="ok">${approved} godkända</span> · <span class="fail">${rejected} underkända</span>` +
+      (errs > 0 ? ` · <span style="color:var(--yellow)">${errs} fel</span>` : '') +
+      ` · ${stats.total} agenter${costStr}`;
+  }
+  document.getElementById('agentsGrid').innerHTML = results.map(r => agentCardHtml(r)).join('');
 
-  // Final prompt box — questions or prompt
-  if (smith.type === 'questions') {
+  // ── Phase 3: Specifikation (dual output) ──
+  const viewToggle = document.getElementById('viewToggle');
+  const bestallareBox = document.getElementById('bestallareBox');
+  if (smith.type === 'error') {
+    document.getElementById('finalPromptBox').innerHTML =
+      `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:16px;">
+         <div style="font-weight:700;color:var(--red);">⚠️ Promptsmeden misslyckades</div>
+         <div style="font-size:13px;color:var(--text2);margin-top:6px;">${escHtml(smith.content || 'Okänt fel')}</div>
+         <div style="font-size:12px;color:var(--text3);margin-top:8px;">Agenternas fynd ovan är ändå giltiga — kör igen för att generera specen.</div>
+       </div>`;
+    document.getElementById('completenessBox').innerHTML = '';
+    bestallareBox.innerHTML = '';
+    if (viewToggle) viewToggle.style.display = 'none';
+  } else if (smith.type === 'questions') {
     renderQuestions(smith);
+    document.getElementById('completenessBox').innerHTML = '';
+    bestallareBox.innerHTML = '';
+    if (viewToggle) viewToggle.style.display = 'none';
   } else {
     renderFinalPrompt(smith.content || '');
+    document.getElementById('completenessBox').innerHTML = renderCompletenessBox(completeness);
+    const hasBestallare = bestallare && (bestallare.sammanfattning || (bestallare.punkter && bestallare.punkter.length));
+    bestallareBox.innerHTML = hasBestallare ? renderBestallareBox(bestallare) : '';
+    if (viewToggle) viewToggle.style.display = hasBestallare ? 'inline-flex' : 'none';
+    // Default to beställarläge (non-coder friendly) when available
+    setSpecView(hasBestallare ? 'bestallare' : 'teknisk');
+  }
+
+  // ── Phase 4: Backlog (review modes) ──
+  const phaseBacklog = document.getElementById('phaseBacklog');
+  if (backlogItems && backlogItems.length) {
+    renderBacklogBox(backlogItems);
+    phaseBacklog.style.display = 'flex';
+  } else {
+    phaseBacklog.style.display = 'none';
   }
 
   document.getElementById('resultsView').style.display = 'flex';
-  document.getElementById('resultsView').style.flexDirection = 'column';
-  document.getElementById('resultsView').style.gap = '16px';
+}
+
+// ── DUAL OUTPUT TOGGLE ──
+function setSpecView(view) {
+  const isBest = view === 'bestallare';
+  const vb = document.getElementById('vt-bestallare');
+  const vt = document.getElementById('vt-teknisk');
+  if (vb) vb.classList.toggle('active', isBest);
+  if (vt) vt.classList.toggle('active', !isBest);
+  const bestallareBox = document.getElementById('bestallareBox');
+  const finalBox = document.getElementById('finalPromptBox');
+  const compBox = document.getElementById('completenessBox');
+  if (bestallareBox) bestallareBox.style.display = isBest ? 'block' : 'none';
+  if (finalBox) finalBox.style.display = isBest ? 'none' : 'block';
+  if (compBox) compBox.style.display = isBest ? 'none' : 'block';
+}
+
+function renderBestallareBox(b) {
+  const punkter = (b.punkter || []).map(p => {
+    const insats = p.insats ? `<span class="bp-effort">${escHtml(p.insats)}</span>` : '';
+    return `<div class="bp-item">
+        <div class="bp-vad">${escHtml(p.vad || '')} ${insats}</div>
+        ${p.varfor ? `<div class="bp-varfor">${escHtml(p.varfor)}</div>` : ''}
+      </div>`;
+  }).join('');
+  const beslut = (b.beslut || []).filter(Boolean);
+  return `
+    <div class="bestallare-box">
+      ${b.sammanfattning ? `<div class="bp-summary">${escHtml(b.sammanfattning)}</div>` : ''}
+      ${punkter ? `<div class="bp-list">${punkter}</div>` : ''}
+      ${beslut.length ? `<div class="bp-beslut"><div class="bp-beslut-title">🤔 Beslut du behöver fatta</div>${beslut.map(d => `<div class="bp-beslut-item">${escHtml(d)}</div>`).join('')}</div>` : ''}
+    </div>`;
+}
+
+const _PRIO_LABEL = { P0: 'Kritisk', P1: 'Viktig', P2: 'Senare' };
+function renderBacklogBox(items) {
+  const stat = document.getElementById('backlogStat');
+  const open = items.filter(i => i.status === 'öppen' || i.status === 'återkommit').length;
+  if (stat) stat.textContent = `${open} öppna · ${items.length} totalt`;
+  document.getElementById('backlogBox').innerHTML = items.map(it => {
+    const pc = it.priority === 'P0' ? 'p0' : it.priority === 'P1' ? 'p1' : 'p2';
+    const done = it.status === 'åtgärdad';
+    const regressed = it.status === 'återkommit';
+    return `
+      <div class="backlog-item ${done ? 'done' : ''}">
+        <span class="bl-prio ${pc}">${it.priority} · ${_PRIO_LABEL[it.priority]||''}</span>
+        <div class="bl-main">
+          <div class="bl-title">${escHtml(it.title)}${regressed ? ' <span class="bl-regress">↩ återkommit</span>' : ''}</div>
+          ${it.suggestion ? `<div class="bl-sugg">${escHtml(it.suggestion)}</div>` : ''}
+          ${(it.source_agents && it.source_agents.length) ? `<div class="bl-src">${it.source_agents.length} agenter flaggade · ${escHtml(it.effort||'M')}</div>` : ''}
+        </div>
+        <div class="bl-actions">
+          <select onchange="updateBacklogStatus('${it.id}', this.value)" class="bl-status">
+            ${['öppen','pågår','åtgärdad','återkommit'].map(s => `<option value="${s}" ${s===it.status?'selected':''}>${s}</option>`).join('')}
+          </select>
+          <button class="btn btn-ghost bl-tospec" onclick="backlogToSpec('${it.id}', this)">→ Gör till spec</button>
+          ${!done ? `<button class="btn btn-ghost bl-tospec" onclick="openVerifyFix('${it.id}')" title="Klistra in den nya koden — Fixverifieraren kontrollerar att just detta problem är löst">🔍 Verifiera fix</button>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function updateBacklogStatus(id, status) {
+  try {
+    const res = await fetch('/api/backlog/' + id, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ status })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const it = (_lastBacklog || []).find(x => x.id === id);
+    if (it) it.status = status;
+    renderBacklogBox(_lastBacklog || []);
+    showToast('Status uppdaterad: ' + status);
+  } catch(e) { showToast('❌ Kunde inte uppdatera status'); }
+}
+
+async function backlogToSpec(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Skriver spec...'; }
+  try {
+    const res = await fetch('/api/backlog/' + id + '/to-spec', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}'
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    const smith = data.smith || {};
+    if (smith.type !== 'prompt' || !data.final_prompt) {
+      // Promptsmeden asked questions or errored — don't render an empty spec as success
+      showToast('⚠️ Promptsmeden behöver mer info för detta item — formulera om fyndet eller kör djupläge.');
+      return;
+    }
+    _lastSmith = smith;
+    _lastCompleteness = data.completeness_result || {};
+    _lastBestallare = data.bestallare_result || {};
+    renderFinalPrompt(data.final_prompt);
+    document.getElementById('completenessBox').innerHTML = renderCompletenessBox(_lastCompleteness);
+    const hasBest = _lastBestallare && (_lastBestallare.sammanfattning || (_lastBestallare.punkter||[]).length);
+    document.getElementById('bestallareBox').innerHTML = hasBest ? renderBestallareBox(_lastBestallare) : '';
+    document.getElementById('viewToggle').style.display = hasBest ? 'inline-flex' : 'none';
+    setSpecView(hasBest ? 'bestallare' : 'teknisk');
+    document.getElementById('phaseSpec').scrollIntoView({ behavior: 'smooth' });
+    const c = data.cost_summary || {};
+    showToast(`✅ Spec genererad & sparad i historiken${c.total_usd ? ` · ~$${c.total_usd.toFixed(3)}` : ''}`);
+  } catch(e) {
+    showToast('❌ Kunde inte generera spec: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '→ Gör till spec'; }
+  }
+}
+
+// ── VERIFY FIX — paste the new code, the verifier checks the ORIGINAL finding ──
+let _verifyItemId = null;
+
+function openVerifyFix(id) {
+  _verifyItemId = id;
+  const it = (_lastBacklog || []).find(x => x.id === id);
+  document.getElementById('verifyFinding').textContent = it ? (it.title + ' — ' + (it.finding || '')) : '';
+  document.getElementById('verifyCodeInput').value = document.getElementById('codeInput')?.value || '';
+  document.getElementById('verifyResult').style.display = 'none';
+  document.getElementById('verifyModal').classList.add('open');
+}
+
+function closeVerifyFix() {
+  document.getElementById('verifyModal').classList.remove('open');
+  _verifyItemId = null;
+}
+
+async function runVerifyFix() {
+  const code = document.getElementById('verifyCodeInput').value.trim();
+  if (!code || !_verifyItemId) { showToast('Klistra in den uppdaterade koden först.'); return; }
+  const btn = document.getElementById('verifyRunBtn');
+  btn.disabled = true; btn.textContent = '⏳ Verifierar...';
+  try {
+    const res = await fetch('/api/backlog/' + _verifyItemId + '/verify', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ code, images: _screenshots.slice(0, 3) })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+    const v = data.verdict || {};
+    const box = document.getElementById('verifyResult');
+    box.style.display = 'block';
+    box.innerHTML = v.fixad
+      ? `<div style="color:var(--green);font-weight:700;">✅ Fixen är verifierad — status satt till åtgärdad</div>
+         <div style="font-size:12px;color:var(--text2);margin-top:6px;">${escHtml(v.motivering || '')}</div>`
+      : `<div style="color:var(--red);font-weight:700;">❌ Problemet kvarstår</div>
+         <div style="font-size:12px;color:var(--text2);margin-top:6px;">${escHtml(v.motivering || '')}</div>
+         ${(v.kvarstaende||[]).map(k => `<div style="font-size:12px;color:var(--yellow);margin-top:4px;">⚠ ${escHtml(k)}</div>`).join('')}`;
+    const it = (_lastBacklog || []).find(x => x.id === _verifyItemId);
+    if (it && data.new_status) { it.status = data.new_status; renderBacklogBox(_lastBacklog); }
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '🔍 Verifiera';
+  }
+}
+
+function agentCardHtml(r) {
+  const cls = r.status === 'GODKÄND' ? 'approved' : r.status === 'UNDERKÄND' ? 'rejected' : 'error';
+  const badgeCls = r.status === 'GODKÄND' ? 'badge-ok' : r.status === 'UNDERKÄND' ? 'badge-fail' : 'badge-warn';
+  const findings = (r.findings || []).slice(0, 4);
+  const suggestions = (r.suggestions || []).slice(0, 2);
+  return `
+    <div class="agent-card ${cls}">
+      <div class="card-header">
+        <div class="card-name"><span class="card-emoji">${escHtml(r.emoji)}</span>${escHtml(r.name)}</div>
+        <span class="badge ${badgeCls}">${r.status}</span>
+      </div>
+      ${findings.length > 0
+        ? `<div class="card-findings">${findings.map(f => `<div class="finding-item">${escHtml(f)}</div>`).join('')}</div>`
+        : `<div class="no-findings">Inga anmärkningar</div>`
+      }
+      ${suggestions.length > 0
+        ? `<div class="card-suggestions">${suggestions.map(s => `<div class="suggestion-item">${escHtml(s)}</div>`).join('')}</div>`
+        : ''
+      }
+    </div>`;
+}
+
+function renderKravBox(krav) {
+  const kravItems = (krav.krav || []).map(k =>
+    `<div class="krav-item">${escHtml(k)}</div>`
+  ).join('');
+  const oklarheter = (krav.oklarheter || []).filter(Boolean);
+  const utanfor = (krav.utanfor_scope || []).filter(Boolean);
+  const secondary = (oklarheter.length || utanfor.length) ? `
+    <div class="krav-secondary">
+      ${oklarheter.length ? `<div><div class="krav-section-title">Oklarheter</div>${oklarheter.map(o => `<span class="krav-tag unclear">${escHtml(o)}</span>`).join('')}</div>` : ''}
+      ${utanfor.length ? `<div><div class="krav-section-title">Utanför scope</div>${utanfor.map(u => `<span class="krav-tag out">${escHtml(u)}</span>`).join('')}</div>` : ''}
+    </div>` : '';
+  return `
+    <div class="krav-box">
+      <div class="krav-title">📋 Kravanalytikern</div>
+      ${krav.tolkad_ide ? `<div class="krav-ide">"${escHtml(krav.tolkad_ide)}"</div>` : ''}
+      <div class="krav-list">${kravItems}</div>
+      ${secondary}
+    </div>`;
+}
+
+function renderCompletenessBox(c) {
+  if (!c || !c.status || c.status === 'OKÄND') return '';
+  const isComplete = c.status === 'KOMPLETT';
+  const score = c.completeness_score || 0;
+  const cls = isComplete ? 'complete' : 'incomplete';
+  const saknas = (c.saknas || []).filter(Boolean);
+  const styrkor = (c.styrkor || []).filter(Boolean);
+  const items = [
+    ...styrkor.slice(0, 2).map(s => `<span class="str">${escHtml(s)}</span>`),
+    ...saknas.slice(0, 3).map(s => `<span class="miss">${escHtml(s)}</span>`),
+  ].join('');
+  return `
+    <div class="completeness-box ${cls}">
+      <div class="completeness-score ${cls}">${score}<span style="font-size:12px;font-weight:400;">/10</span></div>
+      <div class="completeness-detail">
+        <div class="completeness-status">${isComplete ? '✅ Specifikationen är komplett' : '⚠️ Specifikationen kan förbättras'}</div>
+        <div class="completeness-items">${items}</div>
+      </div>
+    </div>`;
 }
 
 function renderQuestions(smith) {
@@ -930,12 +1727,13 @@ function renderQuestions(smith) {
   _questions = {};
   const questions = smith.questions || [];
   questions.forEach(q => { _questions[q.id] = q.text; });
+  // dataset + delegation — option text from the LLM must never be inlined into JS strings
   const qHtml = questions.map(q => `
     <div class="question-group">
       <div class="question-text">${escHtml(q.text)}</div>
-      <div class="options-wrap" id="opts-${escHtml(q.id)}">
+      <div class="options-wrap" data-qid="${escHtml(q.id)}">
         ${(q.options || []).map(opt => `
-          <button class="opt-btn" onclick="selectOption('${escHtml(q.id)}', this, '${escHtml(opt)}')">${escHtml(opt)}</button>
+          <button class="opt-btn" data-opt="${escHtml(opt)}" onclick="selectOption(this)">${escHtml(opt)}</button>
         `).join('')}
       </div>
     </div>
@@ -952,13 +1750,13 @@ function renderQuestions(smith) {
   `;
 }
 
-function selectOption(qId, btn, value) {
-  // Deselect siblings
-  const wrap = document.getElementById('opts-' + qId);
-  if (wrap) wrap.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
+function selectOption(btn) {
+  const wrap = btn.closest('.options-wrap');
+  if (!wrap) return;
+  const qId = wrap.dataset.qid;
+  wrap.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
-  _answers[qId] = value;
-  // Enable run button if at least one answer
+  _answers[qId] = btn.dataset.opt || btn.textContent.trim();
   const runBtn = document.getElementById('runWithAnswersBtn');
   if (runBtn) runBtn.disabled = false;
 }
@@ -980,12 +1778,12 @@ async function runWithAnswers() {
   document.getElementById('resultsView').style.display = 'none';
   document.getElementById('loadingState').style.display = 'flex';
   document.getElementById('runBtn').disabled = true;
+  document.getElementById('loadingTitle').textContent = 'Kör om med dina svar...';
 
-  const labels = AGENT_LABELS[currentMode] || AGENT_LABELS.pre;
-  document.getElementById('loadingAgents').innerHTML = labels.map(l =>
-    `<div class="loading-agent running"><div class="spinner"></div>${l}</div>`
-  ).join('');
-  document.getElementById('loadingTitle').textContent = `Kör om med dina svar...`;
+  // Same real-progress mechanism as the primary run — keep screenshots + depth
+  const runId = 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  startProgressPolling(runId);
+  const images = currentMode === 'ny_funktion' ? [] : _screenshots.slice();
 
   _lastInputText = inputText;
   _lastContext = ctx;
@@ -995,7 +1793,13 @@ async function runWithAnswers() {
     const res = await fetch('/api/review', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({mode: currentMode, input_text: inputText, context: ctx, project_id: rerunProjectId})
+      body: JSON.stringify({
+        mode: currentMode, input_text: inputText, context: ctx, images,
+        run_id: runId, depth: _reviewDepth,
+        project_id: rerunProjectId,
+        file_manifest: currentMode === 'ny_funktion' ? '' : _githubManifest,
+        profile: getActiveProject()?.profile || {}
+      })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -1007,6 +1811,7 @@ async function runWithAnswers() {
     showError(e.message);
   } finally {
     document.getElementById('runBtn').disabled = false;
+    stopProgressPolling();
   }
 }
 
@@ -1100,6 +1905,128 @@ async function saveToMain() {
   }
 }
 
+function exportSession() {
+  const krav = _lastKrav || {};
+  const results = _lastResults || [];
+  const smith = _lastSmith || {};
+  const completeness = _lastCompleteness || {};
+  const lines = [];
+  const ts = new Date().toLocaleString('sv-SE');
+
+  lines.push(`# Prompt Team — Sessionsexport`);
+  lines.push(`*Exporterad: ${ts}*\n`);
+
+  // Krav
+  if (krav.tolkad_ide || (krav.krav && krav.krav.length)) {
+    lines.push(`## 📋 Kravanalys\n`);
+    if (krav.tolkad_ide) lines.push(`**Tolkad idé:** ${krav.tolkad_ide}\n`);
+    if (krav.krav && krav.krav.length) {
+      lines.push(`### Krav`);
+      krav.krav.forEach(k => lines.push(`- ${k}`));
+      lines.push('');
+    }
+    if (krav.oklarheter && krav.oklarheter.length) {
+      lines.push(`### Oklarheter`);
+      krav.oklarheter.forEach(o => lines.push(`- ⚠️ ${o}`));
+      lines.push('');
+    }
+    if (krav.utanfor_scope && krav.utanfor_scope.length) {
+      lines.push(`### Utanför scope`);
+      krav.utanfor_scope.forEach(u => lines.push(`- ~~${u}~~`));
+      lines.push('');
+    }
+  }
+
+  // Agent results
+  if (results.length) {
+    lines.push(`## 🔍 Specialistgranskning\n`);
+    const approved = results.filter(r => r.status === 'GODKÄND');
+    const rejected = results.filter(r => r.status === 'UNDERKÄND');
+    const errors = results.filter(r => r.status === 'FEL');
+    const c = _lastCost || {};
+    const costLine = c.total_usd > 0 ? ` · kostnad ~$${c.total_usd.toFixed(3)} (${(c.tokens_in||0).toLocaleString()} in / ${(c.tokens_out||0).toLocaleString()} ut tokens)` : '';
+    lines.push(`**Resultat:** ${approved.length} godkända · ${rejected.length} underkända · ${errors.length} fel${costLine}\n`);
+
+    if (rejected.length) {
+      lines.push(`### ❌ Underkända`);
+      rejected.forEach(r => {
+        lines.push(`\n#### ${r.emoji} ${r.name} [${r.severity || 'MEDIUM'}]`);
+        (r.findings || []).forEach(f => lines.push(`- ${f}`));
+        if (r.suggestions && r.suggestions.length) {
+          lines.push(`\n*Förslag:*`);
+          r.suggestions.forEach(s => lines.push(`→ ${s}`));
+        }
+      });
+      lines.push('');
+    }
+
+    if (approved.length) {
+      lines.push(`### ✅ Godkända`);
+      lines.push(approved.map(r => `${r.emoji} ${r.name}`).join(' · '));
+      lines.push('');
+    }
+  }
+
+  // Beställarsammanfattning (klarspråk)
+  const best = _lastBestallare || {};
+  if (best.sammanfattning || (best.punkter && best.punkter.length)) {
+    lines.push(`## 🧑‍💼 Beställarsammanfattning (klarspråk)\n`);
+    if (best.sammanfattning) lines.push(best.sammanfattning + '\n');
+    (best.punkter || []).forEach(p => {
+      lines.push(`- **${p.vad || ''}**${p.insats ? ` _(insats: ${p.insats})_` : ''}`);
+      if (p.varfor) lines.push(`  - ${p.varfor}`);
+    });
+    if (best.beslut && best.beslut.length) {
+      lines.push(`\n**Beslut att fatta:**`);
+      best.beslut.forEach(d => lines.push(`- 🤔 ${d}`));
+    }
+    lines.push('');
+  }
+
+  // Spec
+  const specContent = smith.type === 'prompt' ? (smith.content || '') : '';
+  if (specContent) {
+    lines.push(`## ✍️ Specifikation (Promptsmeden — teknisk)\n`);
+    lines.push(specContent);
+    lines.push('');
+  }
+
+  // Backlog
+  const backlog = _lastBacklog || [];
+  if (backlog.length) {
+    lines.push(`## 🗂️ Backlog\n`);
+    backlog.forEach(it => {
+      lines.push(`- **[${it.priority}] ${it.title}** _(${it.effort || 'M'}, ${it.status})_`);
+      if (it.suggestion) lines.push(`  - ${it.suggestion}`);
+    });
+    lines.push('');
+  }
+
+  // Completeness
+  if (completeness.status && completeness.status !== 'OKÄND') {
+    lines.push(`## ✅ Kompletthetscheck\n`);
+    lines.push(`**Status:** ${completeness.status} (${completeness.completeness_score || '?'}/10)\n`);
+    if (completeness.styrkor && completeness.styrkor.length) {
+      lines.push(`**Styrkor:**`);
+      completeness.styrkor.forEach(s => lines.push(`- ✓ ${s}`));
+    }
+    if (completeness.saknas && completeness.saknas.length) {
+      lines.push(`\n**Saknas:**`);
+      completeness.saknas.forEach(s => lines.push(`- ⚠️ ${s}`));
+    }
+  }
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const dateStr = new Date().toISOString().slice(0,10);
+  a.download = `prompt-team-${dateStr}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('⬇ Exporterad som Markdown');
+}
+
 function copyPrompt() {
   const text = document.getElementById('finalPromptText').textContent;
   navigator.clipboard.writeText(text).then(() => {
@@ -1116,50 +2043,141 @@ function copyPrompt() {
 }
 
 // ── GITHUB ──
-let _githubCode = '';  // code fetched from GitHub
+let _githubCode = '';
+let _githubManifest = '';   // file manifest from last fetch — injected into review payload
+let _selectedFolders = []; // [] = all
+
+function updateGithubSection() {
+  const p = getActiveProject();
+  const projRow = document.getElementById('githubProjRow');
+  const manualRow = document.getElementById('githubManualRow');
+  if (!projRow || !manualRow) return;
+  if (p && p.repo) {
+    projRow.style.display = 'block';
+    manualRow.style.display = 'none';
+    document.getElementById('githubProjLabel').textContent = p.repo;
+    // Load branches
+    loadGithubBranches(p.repo, p.branch || 'main');
+    // Load folder picker
+    loadFolderPicker(p.repo, p.branch || 'main');
+  } else {
+    projRow.style.display = 'none';
+    manualRow.style.display = 'block';
+  }
+}
+
+async function loadGithubBranches(repo, currentBranch) {
+  try {
+    const res = await fetch(`/api/github/branches?repo=${encodeURIComponent(repo)}`);
+    const data = await res.json();
+    const sel = document.getElementById('githubBranchSelect');
+    if (!sel) return;
+    sel.innerHTML = (data.branches || ['main']).map(b =>
+      `<option value="${b}" ${b === currentBranch ? 'selected' : ''}>${b}</option>`
+    ).join('');
+  } catch(e) {}
+}
+
+async function onBranchChange() {
+  const p = getActiveProject();
+  if (!p || !p.repo) return;
+  const branch = document.getElementById('githubBranchSelect').value;
+  await loadFolderPicker(p.repo, branch);
+}
+
+async function loadFolderPicker(repo, branch) {
+  const wrap = document.getElementById('folderPickerWrap');
+  const list = document.getElementById('folderPickerList');
+  if (!wrap || !list) return;
+  try {
+    const res = await fetch(`/api/github/tree?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`);
+    const data = await res.json();
+    const dirs = data.dirs || [];
+    if (dirs.length === 0) { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'block';
+    _selectedFolders = [];
+    list.innerHTML = dirs.map(d => `
+      <button class="folder-chip" data-dir="${escHtml(d)}" onclick="toggleFolder(this)" title="${escHtml(d)}">
+        📁 ${escHtml(d)}
+      </button>
+    `).join('') + `<button class="folder-chip active" id="folderAll" onclick="selectAllFolders(this)">🗂 Allt</button>`;
+  } catch(e) { wrap.style.display = 'none'; }
+}
+
+function toggleFolder(btn) {
+  const dir = btn.dataset.dir;
+  document.getElementById('folderAll').classList.remove('active');
+  const idx = _selectedFolders.indexOf(dir);
+  if (idx === -1) {
+    _selectedFolders.push(dir);
+    btn.classList.add('active');
+  } else {
+    _selectedFolders.splice(idx, 1);
+    btn.classList.remove('active');
+  }
+  if (_selectedFolders.length === 0) selectAllFolders(document.getElementById('folderAll'));
+}
+
+function selectAllFolders(btn) {
+  _selectedFolders = [];
+  document.querySelectorAll('.folder-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
 
 async function fetchGithub() {
-  const repo = document.getElementById('githubRepoInput').value.trim();
-  const branch = document.getElementById('githubBranchInput').value.trim() || 'main';
-  if (!repo) {
-    setGithubStatus('Ange repo i formatet owner/repo', 'err');
-    return;
+  const p = getActiveProject();
+  let repo, branch;
+  if (p && p.repo) {
+    repo = p.repo;
+    branch = document.getElementById('githubBranchSelect')?.value || p.branch || 'main';
+  } else {
+    repo = document.getElementById('githubRepoInput').value.trim();
+    branch = document.getElementById('githubBranchInput').value.trim() || 'main';
   }
-  const btn = document.getElementById('fetchBtn');
-  btn.disabled = true;
-  btn.textContent = 'Hämtar...';
+  if (!repo) { setGithubStatus('Ange repo i formatet owner/repo', 'err'); return; }
+
+  const fetchBtnId = (p && p.repo) ? 'fetchBtn' : 'fetchBtnManual';
+  const btn = document.getElementById(fetchBtnId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Hämtar...'; }
   setGithubStatus('Ansluter till GitHub...', '');
 
   try {
+    const body = {repo, branch};
+    if (_selectedFolders.length > 0) body.paths = [..._selectedFolders];
     const res = await fetch('/api/github/fetch', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({repo, branch})
+      body: JSON.stringify(body)
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
-    // Build combined code string
-    _githubCode = data.files.map(f =>
-      `// ═══ ${f.path} ═══\n${f.content}`
-    ).join('\n\n');
-
-    // Put in textarea for visibility + editing
+    _githubCode = Array.isArray(data.files)
+      ? data.files.map(f => `// ═══ ${f.path} ═══\n${f.content}`).join('\n\n')
+      : '';
+    _githubManifest = data.file_manifest || '';
     document.getElementById('codeInput').value = _githubCode;
 
-    const truncMsg = data.truncated ? ' (trunkerat — för stort repo)' : '';
+    const folderNote = _selectedFolders.length > 0 ? ` · 📁 ${_selectedFolders.join(', ')}` : '';
+    const skippedNote = data.skipped_files?.length
+      ? ` · ⚠️ ${data.skipped_files.length} filer ej inkluderade`
+      : '';
     setGithubStatus(
-      `✓ ${data.file_count} filer hämtade · ${Math.round(data.total_chars/1000)}k tecken · ${data.repo}@${data.branch}${truncMsg}`,
-      'ok'
+      `✓ ${data.file_count}/${data.total_matched || data.file_count} filer · ${Math.round(data.total_chars/1000)}k tecken · ${data.repo}@${data.branch}${folderNote}${skippedNote}`,
+      data.skipped_files?.length ? '' : 'ok'
     );
     document.getElementById('codeSourceLabel').innerHTML =
-      `<span class="github-badge">⬡ GitHub: ${escHtml(data.repo)}</span>`;
+      `<span class="github-badge">⬡ GitHub: ${data.repo}@${data.branch}</span>`;
+
+    // Show truncation warning if files were dropped
+    if (data.skipped_files?.length) {
+      showToast(`⚠️ ${data.skipped_files.length} filer fick inte plats — granskningen täcker ${data.file_count} av ${data.total_matched} filer`, 5000);
+    }
   } catch(e) {
-    _githubCode = '';
-    setGithubStatus('Fel: ' + e.message, 'err');
+    setGithubStatus(`❌ ${e.message}`, 'err');
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Hämta';
+    const btn = document.getElementById(fetchBtnId);
+    if (btn) { btn.disabled = false; btn.textContent = 'Hämta'; }
   }
 }
 
@@ -1213,13 +2231,15 @@ async function loadSession(id) {
     if (!res.ok) throw new Error('not found');
     const s = await res.json();
     _activeSessionId = id;
-    // Restore input
-    currentMode = s.mode || 'pre';
-    document.getElementById('btn-pre').classList.toggle('active', currentMode === 'pre');
-    document.getElementById('btn-post').classList.toggle('active', currentMode === 'post');
-    document.getElementById('pre-input').style.display = currentMode === 'pre' ? 'flex' : 'none';
-    document.getElementById('post-input').style.display = currentMode === 'post' ? 'flex' : 'none';
-    if (currentMode === 'pre') {
+    // Old screenshots must never silently ride along into a restored session's next run
+    _screenshots = [];
+    renderShotThumbs();
+    // Restore input — setMode handles legacy mode migration + show/hide
+    setMode(s.mode || 'ny_funktion');
+    // Restore re-run context so a questions-type session re-runs with the right input
+    _lastInputText = s.input_text || '';
+    _lastContext = s.context || '';
+    if (currentMode === 'ny_funktion') {
       document.getElementById('ideaInput').value = s.input_text || '';
       document.getElementById('preContextInput').value = s.context || '';
     } else {
@@ -1269,6 +2289,10 @@ function getActiveProject() {
 }
 function setActiveProject(id) {
   localStorage.setItem(ACTIVE_PROJECT_KEY, id || '');
+  // Screenshots and fetched code belong to the previous project — clear on switch
+  _screenshots = [];
+  renderShotThumbs();
+  _githubManifest = '';
 }
 
 async function ensureMainProject() {
@@ -1286,11 +2310,23 @@ async function ensureMainProject() {
   } catch(e) {}
 
   if (existing) {
-    // Update repo if settings changed — but never remove the project
+    let dirty = false;
     if (selfRepo && (existing.repo !== selfRepo || existing.branch !== selfBranch)) {
       existing.repo = selfRepo;
       existing.branch = selfBranch;
-      // Ensure it stays first
+      dirty = true;
+    }
+    if (!existing.profile || !existing.profile.purpose) {
+      existing.profile = {
+        purpose: 'AI-granskningsteam som analyserar kod och idéer parallellt med specialiserade agenter och genererar färdiga prompts via Promptsmeden.',
+        stack: ['Python', 'FastAPI', 'Vanilla JS', 'Anthropic API', 'Supabase', 'GitHub API'],
+        architecture: 'Single-file backend (app.py) med FastAPI. Single-file frontend (index.html) utan ramverk. Lokalt sessions.json för lagring med Supabase som molnbackup. Agenter körs parallellt via ThreadPoolExecutor.',
+        conventions: 'Svenska UI-texter, engelska kodidentifierare. snake_case i Python, camelCase i JS. Inga frontend-ramverk.',
+        constraints: 'Måste köra lokalt utan internetberoende (utom Anthropic API). Inga npm-beroenden. Vanilla JS only.'
+      };
+      dirty = true;
+    }
+    if (dirty) {
       const rest = projects.filter(p => p.id !== 'main');
       setProjects([existing, ...rest]);
       renderProjects();
@@ -1305,7 +2341,14 @@ async function ensureMainProject() {
     repo: selfRepo,
     branch: selfBranch,
     is_main: true,
-    created: new Date().toISOString()
+    created: new Date().toISOString(),
+    profile: {
+      purpose: 'AI-granskningsteam som analyserar kod och idéer parallellt med specialiserade agenter och genererar färdiga prompts via Promptsmeden.',
+      stack: ['Python', 'FastAPI', 'Vanilla JS', 'Anthropic API', 'Supabase', 'GitHub API'],
+      architecture: 'Single-file backend (app.py) med FastAPI. Single-file frontend (index.html) utan ramverk. Lokalt sessions.json för lagring med Supabase som molnbackup. Agenter körs parallellt via ThreadPoolExecutor.',
+      conventions: 'Svenska UI-texter, engelska kodidentifierare. snake_case i Python, camelCase i JS. Inga frontend-ramverk.',
+      constraints: 'Måste köra lokalt utan internetberoende (utom Anthropic API). Inga npm-beroenden. Vanilla JS only.'
+    }
   };
   // Always prepend so it stays at top
   const rest = projects.filter(p => p.id !== 'main');
@@ -1328,15 +2371,23 @@ function renderProjects() {
     const badge = isMain
       ? '<span style="font-size:9px;font-weight:700;background:rgba(99,102,241,.2);color:var(--accent2);border:1px solid rgba(99,102,241,.4);border-radius:3px;padding:1px 5px;letter-spacing:.05em;flex-shrink:0;">MAIN</span>'
       : '';
+    const hasProfile = p.profile && (p.profile.purpose || (p.profile.stack && p.profile.stack.length));
+    const profileDot = hasProfile
+      ? '<span style="color:var(--green);font-size:8px;" title="Profil konfigurerad">●</span>'
+      : '<span style="color:var(--text3);font-size:8px;" title="Ingen profil — klicka ✏️ för att lägga till">○</span>';
     const deleteBtn = isMain
-      ? '' // no delete button for main project
+      ? ''
       : `<span class="project-del" onclick="event.stopPropagation();deleteProject('${p.id}')" title="Ta bort">✕</span>`;
     return `
       <div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject('${p.id}')">
         <div class="project-dot"></div>
         <div class="project-name" title="${escHtml(p.repo || '')}">${icon}${escHtml(p.name)}</div>
+        ${profileDot}
         ${badge}
-        ${deleteBtn}
+        <div class="project-actions">
+          <span class="project-edit" onclick="event.stopPropagation();openEditProject('${p.id}')" title="Redigera profil">✏️</span>
+          ${deleteBtn}
+        </div>
       </div>
     `;
   }).join('');
@@ -1355,6 +2406,8 @@ async function selectProject(id) {
   document.getElementById('codeInput').value = '';
   document.getElementById('ideaInput').value = '';
   _activeSessionId = null;
+  _githubManifest = '';
+  _selectedFolders = [];
 
   updateActiveProjBadge();
   // Reload history for this project
@@ -1362,7 +2415,7 @@ async function selectProject(id) {
 
   if (p.repo) {
     showToast(`📂 ${p.name} — hämtar senaste kod...`);
-    setMode('post');
+    setMode('granska_kod'); // also calls updateGithubSection()
     const codeArea = document.getElementById('codeInput');
     const fetched = await fetchActiveProjectCode();
     if (fetched) {
@@ -1372,6 +2425,7 @@ async function selectProject(id) {
       showToast(`⚠️ ${p.name} valt — kunde inte hämta kod just nu`);
     }
   } else {
+    updateGithubSection();
     showToast(`📂 ${p.name} valt`);
   }
 }
@@ -1389,18 +2443,126 @@ function updateActiveProjBadge() {
   } else {
     badge.style.display = 'none';
   }
+  // Show repo-missing banner only when Main is active and has no repo
+  const mainBanner = document.getElementById('mainNoRepoBanner');
+  if (mainBanner) {
+    const isMain = p && p.id === 'main';
+    mainBanner.style.display = (isMain && !p.repo) ? 'block' : 'none';
+  }
 }
 
+// ── STACK TAGS ──
+let _stackTags = [];
+
+const STACK_SUGGESTIONS = [
+  'React','Next.js','Vue','Svelte','Angular','TypeScript','JavaScript',
+  'Python','FastAPI','Django','Node.js','Express','Supabase','PostgreSQL',
+  'MySQL','MongoDB','Tailwind CSS','shadcn/ui','Prisma','tRPC','GraphQL',
+  'REST','Docker','Vercel','Railway','AWS'
+];
+
+function renderStackTags() {
+  const wrap = document.getElementById('projStackTags');
+  if (!wrap) return;
+  wrap.innerHTML = _stackTags.map(t => `
+    <span class="profile-tag">${escHtml(t)}
+      <span class="remove" onclick="removeStackTag('${escHtml(t)}')">✕</span>
+    </span>`).join('');
+}
+
+function addStackTag() {
+  const input = document.getElementById('projStackInput');
+  const val = input.value.trim();
+  if (val && !_stackTags.includes(val)) {
+    _stackTags.push(val);
+    renderStackTags();
+  }
+  input.value = '';
+  input.focus();
+}
+
+function removeStackTag(tag) {
+  _stackTags = _stackTags.filter(t => t !== tag);
+  renderStackTags();
+}
+
+function renderStackSuggestions() {
+  const wrap = document.getElementById('stackSuggestions');
+  if (!wrap) return;
+  wrap.innerHTML = STACK_SUGGESTIONS
+    .filter(s => !_stackTags.includes(s))
+    .map(s => `<button class="profile-chip" onclick="quickAddStack('${s}')">${s}</button>`)
+    .join('');
+}
+
+function quickAddStack(tag) {
+  if (!_stackTags.includes(tag)) {
+    _stackTags.push(tag);
+    renderStackTags();
+    renderStackSuggestions();
+  }
+}
+
+// ── TAB SWITCHING ──
+function switchProjTab(tab) {
+  document.querySelectorAll('.modal-tab').forEach((t,i) => {
+    t.classList.toggle('active', (i === 0 && tab === 'connection') || (i === 1 && tab === 'profile'));
+  });
+  document.getElementById('tab-connection').classList.toggle('active', tab === 'connection');
+  document.getElementById('tab-profile').classList.toggle('active', tab === 'profile');
+  const nextBtn = document.getElementById('projNextBtn');
+  if (nextBtn) nextBtn.style.display = tab === 'connection' ? 'inline-flex' : 'none';
+}
+
+// ── OPEN / CLOSE ──
+let _editingProjectId = null;
+
 function openAddProject() {
+  _editingProjectId = null;
+  _stackTags = [];
+  document.getElementById('projModalTitle').textContent = '🗂 Lägg till projekt';
   document.getElementById('projNameInput').value = '';
   document.getElementById('projRepoInput').value = '';
   document.getElementById('projBranchInput').value = 'main';
+  document.getElementById('projPurposeInput').value = '';
+  document.getElementById('projArchInput').value = '';
+  document.getElementById('projConvInput').value = '';
+  document.getElementById('projConstraintsInput').value = '';
   const s = document.getElementById('projFetchStatus');
   if (s) { s.style.display = 'none'; s.textContent = ''; }
   const btn = document.getElementById('saveProjBtn');
   if (btn) { btn.disabled = false; btn.textContent = 'Anslut projekt'; }
+  switchProjTab('connection');
+  renderStackTags();
+  renderStackSuggestions();
   document.getElementById('projectModal').classList.add('open');
   setTimeout(() => document.getElementById('projNameInput').focus(), 50);
+}
+
+function openEditProject(id) {
+  const p = getProjects().find(proj => proj.id === id);
+  if (!p) return;
+  _editingProjectId = id;
+  const profile = p.profile || {};
+  _stackTags = Array.isArray(profile.stack) ? [...profile.stack] : (profile.stack ? profile.stack.split(',').map(s=>s.trim()) : []);
+  document.getElementById('projModalTitle').textContent = `✏️ Redigera: ${p.name}`;
+  document.getElementById('projNameInput').value = p.name || '';
+  document.getElementById('projRepoInput').value = p.repo || '';
+  document.getElementById('projBranchInput').value = p.branch || 'main';
+  document.getElementById('projPurposeInput').value = profile.purpose || '';
+  document.getElementById('projArchInput').value = profile.architecture || '';
+  document.getElementById('projConvInput').value = profile.conventions || '';
+  document.getElementById('projConstraintsInput').value = profile.constraints || '';
+  const s = document.getElementById('projFetchStatus');
+  if (s) { s.style.display = 'none'; }
+  const btn = document.getElementById('saveProjBtn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Spara ändringar'; }
+  const branchBtn = document.getElementById('branchPickerBtn');
+  if (branchBtn) branchBtn.disabled = false;
+  switchProjTab('profile');
+  renderStackTags();
+  renderStackSuggestions();
+  document.getElementById('projectModal').classList.add('open');
 }
 async function loadRepoList() {
   const btn = document.getElementById('repoPickerBtn');
@@ -1495,16 +2657,48 @@ function closeProjectModal() {
   document.getElementById('projectModal').classList.remove('open');
   const pl = document.getElementById('repoPickerList'); if (pl) pl.style.display='none';
   const bl = document.getElementById('branchPickerList'); if (bl) bl.style.display='none';
+  _editingProjectId = null;
 }
+
+function _readProfile() {
+  return {
+    purpose: document.getElementById('projPurposeInput').value.trim(),
+    stack: [..._stackTags],
+    architecture: document.getElementById('projArchInput').value.trim(),
+    conventions: document.getElementById('projConvInput').value.trim(),
+    constraints: document.getElementById('projConstraintsInput').value.trim(),
+  };
+}
+
 async function saveProject() {
   const name = document.getElementById('projNameInput').value.trim();
   const repo = document.getElementById('projRepoInput').value.trim();
   const branch = document.getElementById('projBranchInput').value.trim() || 'main';
+  const profile = _readProfile();
   const statusEl = document.getElementById('projFetchStatus');
   const btn = document.getElementById('saveProjBtn');
 
-  if (!name) { document.getElementById('projNameInput').focus(); return; }
+  if (!name) { switchProjTab('connection'); document.getElementById('projNameInput').focus(); return; }
+
+  // Editing existing project — skip GitHub validation and re-fetch, just update
+  if (_editingProjectId) {
+    const projects = getProjects();
+    const idx = projects.findIndex(p => p.id === _editingProjectId);
+    if (idx !== -1) {
+      projects[idx] = { ...projects[idx], name, ...(repo ? { repo, branch } : {}), profile };
+      setProjects(projects);
+      closeProjectModal();
+      renderProjects();
+      updateActiveProjBadge();
+      updateGithubSection();
+      showToast(`✅ ${name} uppdaterad`);
+    }
+    return;
+  }
+
+  // New project — repo is required
   if (!repo || !repo.includes('/')) {
+    switchProjTab('connection');
     statusEl.style.display = 'block';
     statusEl.style.background = 'rgba(239,68,68,.1)';
     statusEl.style.color = 'var(--red)';
@@ -1513,7 +2707,7 @@ async function saveProject() {
     return;
   }
 
-  // Test fetch to verify access
+  // New project — test GitHub access first
   btn.disabled = true;
   btn.textContent = '⏳ Testar GitHub-åtkomst...';
   statusEl.style.display = 'block';
@@ -1525,7 +2719,7 @@ async function saveProject() {
     const res = await fetch('/api/github/fetch', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ repo, branch, path: '' })
+      body: JSON.stringify({ repo, branch })
     });
     const data = await res.json();
     if (data.error || !data.files) {
@@ -1537,28 +2731,26 @@ async function saveProject() {
       return;
     }
 
-    // Success — save project with cached code info
     const projects = getProjects();
     const id = 'proj_' + Date.now();
-    projects.unshift({ id, name, repo, branch, created: new Date().toISOString(), file_count: data.file_count });
+    projects.unshift({ id, name, repo, branch, profile, created: new Date().toISOString(), file_count: data.file_count });
     setProjects(projects);
     setActiveProject(id);
 
-    // Pre-fill code area
+    _githubManifest = data.file_manifest || '';
     const joined = Array.isArray(data.files)
-      ? data.files.map(f => `// ── ${f.path} ──\n${f.content}`).join('\n\n')
-      : (data.files || '');
+      ? data.files.map(f => `// ── ${f.path} ──\n${f.content}`).join('\n\n') : '';
     document.getElementById('codeInput').value = joined;
     closeProjectModal();
     renderProjects();
-    setMode('post');
+    setMode('granska_kod');
     updateActiveProjBadge();
     showToast(`✅ ${name} ansluten — ${data.file_count} filer laddade`);
   } catch(e) {
     statusEl.style.background = 'rgba(239,68,68,.1)';
     statusEl.style.color = 'var(--red)';
-    statusEl.textContent = `❌ Nä    statusEl.textContent = `❌ Fel: ${e.message}`;
-    if (saveProjBtn) saveProjBtn.disabled = false;
+    statusEl.textContent = `❌ Fel: ${e.message}`;
+    if (btn) { btn.disabled = false; btn.textContent = 'Anslut projekt'; }
   }
 }
 
@@ -1566,10 +2758,12 @@ async function fetchActiveProjectCode() {
   const p = getActiveProject();
   if (!p || !p.repo) return null;
   try {
+    const body = {repo: p.repo, branch: p.branch || 'main'};
+    if (_selectedFolders.length > 0) body.paths = [..._selectedFolders];
     const res = await fetch('/api/github/fetch', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({repo: p.repo, branch: p.branch || 'main'})
+      body: JSON.stringify(body)
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -1577,7 +2771,12 @@ async function fetchActiveProjectCode() {
     const code = Array.isArray(data.files)
       ? data.files.map(f => `// ── ${f.path} ──\n${f.content}`).join('\n\n')
       : '';
-    return { code, stats: `${data.file_count} filer · ${Math.round(data.total_chars/1000)}k tecken` };
+    _githubManifest = data.file_manifest || '';
+    const skippedNote = data.skipped_files?.length ? ` · ⚠️ ${data.skipped_files.length} ej inkluderade` : '';
+    return {
+      code,
+      stats: `${data.file_count}/${data.total_matched || data.file_count} filer · ${Math.round(data.total_chars/1000)}k tecken${skippedNote}`
+    };
   } catch(e) {
     return null;
   }
@@ -1613,12 +2812,32 @@ function escHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+function resetToEmpty() {
+  document.getElementById('resultsView').style.display = 'none';
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'flex';
+  _activeSessionId = null;
+}
+
+function showError(msg) {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'flex';
+  showToast('❌ ' + msg, 5000);
+}
+
 function showToast(msg, duration = 3000) {
   let toast = document.getElementById('toastEl');
   if (!toast) {
     toast = document.createElement('div');
     toast.id = 'toastEl';
-    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface2);color:var(--text);padding:10px 20px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.4);border:1px solid var(--border);transition:opacity .3s;pointer-events:none;';
+    toast.style.cssText = [
+      'position:fixed', 'bottom:24px', 'left:50%', 'transform:translateX(-50%)',
+      'background:#1a1d27', 'color:#f0f0f0', 'border:1px solid #2a2d3a',
+      'border-radius:8px', 'padding:10px 18px', 'font-size:13px',
+      'font-weight:600', 'z-index:9999', 'pointer-events:none',
+      'transition:opacity .2s', 'max-width:420px', 'text-align:center',
+      'box-shadow:0 4px 12px rgba(0,0,0,.4)'
+    ].join(';');
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
@@ -1631,14 +2850,46 @@ window.addEventListener('DOMContentLoaded', () => {
   ensureMainProject().then(() => {
     renderProjects();
     updateActiveProjBadge();
+    loadHistory();          // load AFTER project is set so filter is correct
+    updateGithubSection();  // setup github row based on active project
   });
-  loadHistory();
   setTimeout(() => runHealthCheck(), 800);
 });
 
 document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runReview(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    // Respect the disabled run button — otherwise concurrent reviews race
+    if (!document.getElementById('runBtn').disabled) runReview();
+  }
 });
+
+// Paste screenshots from clipboard (code/bug modes)
+document.addEventListener('paste', (e) => {
+  if (currentMode === 'ny_funktion') return;
+  const items = (e.clipboardData || {}).items || [];
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      const file = it.getAsFile();
+      if (file) { _addScreenshot(file); showToast('📸 Skärmdump tillagd'); }
+    }
+  }
+});
+
+// ── LIVE RELOAD (dev) ──
+(async () => {
+  let lastMtime = null;
+  const poll = async () => {
+    try {
+      const r = await fetch('/api/version');
+      const { mtime } = await r.json();
+      if (lastMtime === null) { lastMtime = mtime; return; }
+      if (mtime !== lastMtime) { location.reload(); }
+    } catch {}
+  };
+  await poll();
+  setInterval(poll, 1000);
+})();
 </script>
 </body>
 </html>
