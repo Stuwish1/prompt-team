@@ -1575,10 +1575,14 @@ def _parse_agent_json(raw: str) -> dict:
         try:
             obj = json.loads(candidate)
         except json.JSONDecodeError:
-            # Try ast for single-quote dicts
+            # Try ast for single-quote dicts. literal_eval compiles the candidate, so
+            # LLM output with invalid escapes (e.g. \` from markdown) emits a SyntaxWarning
+            # at <unknown> — harmless here, just silence the noise.
             try:
-                import ast as _ast
-                obj = _ast.literal_eval(candidate)
+                import ast as _ast, warnings as _w
+                with _w.catch_warnings():
+                    _w.simplefilter("ignore", SyntaxWarning)
+                    obj = _ast.literal_eval(candidate)
             except Exception:
                 continue
         if not isinstance(obj, dict):
