@@ -917,6 +917,7 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
             <button class="view-btn" id="vt-teknisk" onclick="setSpecView('teknisk')">👩‍💻 Teknisk läge</button>
           </div>
           <button class="btn btn-ghost" onclick="exportSession()" style="padding:4px 10px;font-size:11px;white-space:nowrap;">⬇ Exportera</button>
+          <button class="btn btn-ghost" onclick="exportAgentAudit()" style="padding:4px 10px;font-size:11px;white-space:nowrap;" title="Fullständig export av varje agents arbete + råsvar — för att dubbelkolla att alla gör rätt">🔬 Agentgranskning</button>
         </div>
         <div id="bestallareBox"></div>
         <div class="final-prompt-box" id="finalPromptBox"></div>
@@ -2540,6 +2541,124 @@ function exportSession() {
   a.click();
   URL.revokeObjectURL(url);
   showToast('⬇ Exporterad som Markdown');
+}
+
+// ── AGENTGRANSKNING — fullständig diagnostisk export av VARJE agents arbete ──
+// Tänkt att ges till en granskare (eller AI) för att dubbelkolla att alla agenter gör rätt:
+// modell, status, ALLA findings/suggestions, råsvar, kostnad — inget putsas bort.
+function exportAgentAudit() {
+  const results = _lastResults || [];
+  if (!results.length) { showToast('Inget att exportera — kör en granskning först.'); return; }
+  const krav = _lastKrav || {};
+  const smith = _lastSmith || {};
+  const cost = _lastCost || {};
+  const L = [];
+  const ts = new Date().toLocaleString('sv-SE');
+  const proj = (typeof getActiveProject === 'function' && getActiveProject()) || {};
+
+  L.push(`# Prompt Team — Agentgranskning (fullständig)`);
+  L.push(`*Exporterad: ${ts} · Läge: ${currentMode} · Djup: ${_reviewDepth}*`);
+  L.push(`*Projekt: ${proj.name || '—'} · Byggsätt: ${(typeof byggsattSummary==='function'?byggsattSummary(proj):'').replace('🛠️ ','')}*`);
+  L.push(`\n> Syfte: kontrollera att varje agent gör sitt jobb. Råsvaret visar exakt vad modellen returnerade.\n`);
+
+  // Indata (så granskaren ser vad agenterna hade att jobba med)
+  L.push(`## 📥 Indata till teamet\n`);
+  L.push('```');
+  L.push((_lastInputText || '(tomt)').slice(0, 4000));
+  L.push('```');
+  if (_lastContext) { L.push(`\n**Kontext:** ${_lastContext.slice(0, 1000)}`); }
+  if ((_screenshots || []).length) L.push(`\n**Skärmdumpar bifogade:** ${_screenshots.length}`);
+  L.push('');
+
+  // Kostnad/token per agent — snabb överblick
+  L.push(`## 💰 Kostnad & modell per agent\n`);
+  L.push(`| Agent | Modell | Status | Severity | Tokens (in/ut) | Kostnad |`);
+  L.push(`|---|---|---|---|---|---|`);
+  results.forEach(r => {
+    L.push(`| ${r.emoji || ''} ${r.name} | \`${r.model || '?'}\` | ${r.status} | ${r.severity || '—'} | ${(r.tokens_in||0)}/${(r.tokens_out||0)} | ${r.cost_usd != null ? '$'+Number(r.cost_usd).toFixed(5) : '—'} |`);
+  });
+  if (cost.total_usd != null) L.push(`\n**Totalt:** ~$${Number(cost.total_usd).toFixed(4)} · ${(cost.tokens_in||0).toLocaleString()} in / ${(cost.tokens_out||0).toLocaleString()} ut tokens`);
+  L.push('');
+
+  // Kravanalytikern — fullständigt
+  L.push(`## 📋 Kravanalytikern\n`);
+  if (krav.tolkad_ide) L.push(`**Tolkad idé:** ${krav.tolkad_ide}\n`);
+  (krav.krav || []).forEach(k => L.push(`- ${k}`));
+  if ((krav.oklarheter||[]).length) { L.push(`\n**Oklarheter:**`); krav.oklarheter.forEach(o => L.push(`- ⚠️ ${o}`)); }
+  if ((krav.utanfor_scope||[]).length) { L.push(`\n**Utanför scope:**`); krav.utanfor_scope.forEach(u => L.push(`- ${u}`)); }
+  L.push('');
+
+  // VARJE specialist — fullständigt, inget putsas bort
+  L.push(`## 🔬 Varje agents fullständiga arbete\n`);
+  const order = { 'UNDERKÄND': 0, 'FEL': 1, 'GODKÄND': 2 };
+  const sorted = [...results].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+  sorted.forEach(r => {
+    const mark = r.status === 'GODKÄND' ? '✅' : r.status === 'UNDERKÄND' ? '❌' : '⚠️';
+    L.push(`### ${mark} ${r.emoji || ''} ${r.name} — ${r.status}${r.severity ? ` [${r.severity}]` : ''}`);
+    L.push(`*Modell: \`${r.model || '?'}\`${r.skipped ? ' · HOPPADES ÖVER: ' + r.skipped : ''}${r.error ? ' · FEL: ' + r.error : ''}*\n`);
+    if ((r.findings || []).length) {
+      L.push(`**Findings (${r.findings.length}):**`);
+      r.findings.forEach(f => L.push(`- ${f}`));
+    } else {
+      L.push(`**Findings:** inga`);
+    }
+    if ((r.suggestions || []).length) {
+      L.push(`\n**Förslag (${r.suggestions.length}):**`);
+      r.suggestions.forEach(s => L.push(`→ ${s}`));
+    }
+    if (r.raw) {
+      L.push(`\n<details><summary>Råsvar från modellen</summary>\n`);
+      L.push('```json');
+      L.push(String(r.raw).slice(0, 4000));
+      L.push('```\n</details>');
+    }
+    L.push('');
+  });
+
+  // Syntes-agenterna
+  L.push(`## ✍️ Promptsmeden (syntes)\n`);
+  L.push(`*Typ: ${smith.type || '—'}*\n`);
+  L.push('```markdown');
+  L.push((smith.content || '(inget)').slice(0, 8000));
+  L.push('```\n');
+
+  const best = _lastBestallare || {};
+  if (best.sammanfattning || (best.punkter||[]).length) {
+    L.push(`## 🧑‍💼 Beställarsammanfattaren\n`);
+    if (best.sammanfattning) L.push(best.sammanfattning + '\n');
+    (best.punkter||[]).forEach(p => L.push(`- **${p.vad||''}** ${p.insats?`_(${p.insats})_`:''}${p.varfor?` — ${p.varfor}`:''}`));
+    (best.beslut||[]).forEach(d => L.push(`- 🤔 ${d}`));
+    L.push('');
+  }
+
+  const comp = _lastCompleteness || {};
+  if (comp.status && comp.status !== 'OKÄND') {
+    L.push(`## ✅ Kompletthetsgranskaren\n`);
+    L.push(`**${comp.status}** (${comp.completeness_score || '?'}/10)`);
+    (comp.styrkor||[]).forEach(s => L.push(`- ✓ ${s}`));
+    (comp.saknas||[]).forEach(s => L.push(`- ⚠️ ${s}`));
+    L.push('');
+  }
+
+  const backlog = _lastBacklog || [];
+  if (backlog.length) {
+    L.push(`## 🗂️ Backloghållaren — prioriterad backlog\n`);
+    backlog.forEach(it => {
+      L.push(`- **[${it.priority}] ${it.title}** _(${it.effort||'M'}, ${it.status})_`);
+      if ((it.source_agents||[]).length) L.push(`  - källor: ${it.source_agents.join(', ')}`);
+      if (it.suggestion) L.push(`  - åtgärd: ${it.suggestion}`);
+    });
+    L.push('');
+  }
+
+  const blob = new Blob([L.join('\n')], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `agentgranskning-${new Date().toISOString().slice(0,10)}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('🔬 Agentgranskning exporterad — ge filen till mig för dubbelkoll');
 }
 
 function copyPrompt() {
