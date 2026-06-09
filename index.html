@@ -571,23 +571,34 @@ textarea::placeholder { color: var(--text3); }
 
 <!-- PROJECT MODAL -->
 <div class="modal-bg project-modal" id="projectModal">
-  <div class="modal" style="min-width:340px">
-    <h3 id="projectModalTitle">➕ Nytt projekt</h3>
+  <div class="modal" style="min-width:360px">
+    <h3>🗂 Lägg till projekt</h3>
+    <p style="font-size:12px;color:var(--text3);margin:-4px 0 16px;">Verktyget läser koden från GitHub för att göra rätt bedömning — det skriver aldrig tillbaka.</p>
     <div class="form-group">
       <label>Projektnamn</label>
       <input type="text" id="projNameInput" placeholder="t.ex. Min App">
     </div>
     <div class="form-group">
-      <label>GitHub repo <span style="font-weight:400;color:var(--text3)">(owner/repo)</span></label>
-      <input type="text" id="projRepoInput" placeholder="Stuwish1/my-app">
+      <label>GitHub-repo <span style="color:var(--red);font-size:11px;">obligatoriskt</span></label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" id="projRepoInput" placeholder="owner/repo  (t.ex. Stuwish1/my-app)" style="font-family:monospace;font-size:12px;flex:1;" oninput="const b=document.getElementById('branchPickerBtn');if(b)b.disabled=!this.value.includes('/')">
+        <button class="btn btn-ghost" style="padding:6px 10px;font-size:11px;white-space:nowrap;" onclick="loadRepoList()" id="repoPickerBtn">📋 Välj</button>
+      </div>
+      <div id="repoPickerList" style="display:none;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-top:4px;background:var(--bg1);"></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">🔒 Läsbehörighet endast — appen pushar aldrig kod</div>
     </div>
     <div class="form-group">
       <label>Branch</label>
-      <input type="text" id="projBranchInput" placeholder="main" value="main">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" id="projBranchInput" placeholder="main" value="main" style="max-width:140px;font-family:monospace;font-size:12px;">
+        <button class="btn btn-ghost" style="padding:6px 10px;font-size:11px;white-space:nowrap;" onclick="loadBranchList()" id="branchPickerBtn" disabled>📋 Välj</button>
+      </div>
+      <div id="branchPickerList" style="display:none;max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-top:4px;background:var(--bg1);"></div>
     </div>
+    <div id="projFetchStatus" style="display:none;font-size:12px;padding:8px 10px;border-radius:6px;margin-top:4px;"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeProjectModal()">Avbryt</button>
-      <button class="btn btn-primary" onclick="saveProject()">Spara</button>
+      <button class="btn btn-primary" id="saveProjBtn" onclick="saveProject()">Anslut projekt</button>
     </div>
   </div>
 </div>
@@ -779,6 +790,7 @@ async function runReview() {
   const context = currentMode === 'pre'
     ? document.getElementById('preContextInput').value.trim()
     : document.getElementById('postContextInput').value.trim();
+  const reviewProjectId = getActiveProject() ? getActiveProject().id : '';
 
   if (!inputText) {
     if (activeProj && activeProj.repo && currentMode === 'post') {
@@ -820,7 +832,7 @@ async function runReview() {
     const res = await fetch('/api/review', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: currentMode, input_text: inputText, context })
+      body: JSON.stringify({ mode: currentMode, input_text: inputText, context, project_id: reviewProjectId })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -842,6 +854,9 @@ let _questions = {};  // stores question text per id
 let _lastInputText = '';
 let _lastContext = '';
 let _clarificationRound = 0;
+let _lastResults = [];
+let _lastSmith = null;
+let _lastStats = {};
 const MAX_CLARIFICATION_ROUNDS = 3;
 
 function renderResults(data) {
@@ -850,6 +865,11 @@ function renderResults(data) {
   const results = data.results || [];
   const stats = data.stats || {approved:0, rejected:0, errors:0, total:0};
   const smith = data.smith || {type: 'prompt', content: data.final_prompt || ''};
+
+  // Store for "Spara till Main" button
+  _lastResults = results;
+  _lastSmith = smith;
+  _lastStats = stats;
 
   // Stats bar
   document.getElementById('statsBar').innerHTML = `
@@ -1011,12 +1031,18 @@ function cleanSmithContent(raw) {
 
 function renderFinalPrompt(content) {
   content = cleanSmithContent(content);
+  const activeProj = getActiveProject();
+  const isMain = activeProj && activeProj.id === 'main';
+  const saveToMainBtn = !isMain
+    ? `<button class="btn btn-ghost" id="saveToMainBtn" onclick="saveToMain()" style="margin-left:auto;border-color:var(--accent);color:var(--accent2);">📌 Spara förbättringsförslag till Main</button>`
+    : '';
   document.getElementById('finalPromptBox').innerHTML = `
     <div class="final-header">
       <div>
         <div class="final-title">✍️ Färdig prompt från Promptsmeden</div>
         <div class="final-sub">Klar att skicka till Lovable, Claude, Cursor, v0 eller annan byggare</div>
       </div>
+      ${saveToMainBtn}
     </div>
     <div class="final-prompt-text" id="finalPromptText">${escHtml(content)}</div>
     <div class="copy-actions">
@@ -1028,6 +1054,49 @@ function renderFinalPrompt(content) {
       <button class="target-btn">v0</button>
     </div>
   `;
+}
+
+async function saveToMain() {
+  const btn = document.getElementById('saveToMainBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sparar...'; }
+
+  const activeProj = getActiveProject();
+  const projName = activeProj ? activeProj.name : 'Okänt projekt';
+
+  // Build content: smith output + agent findings summary
+  const smithContent = _lastSmith ? (_lastSmith.content || JSON.stringify(_lastSmith)) : '';
+  const agentSummary = (_lastResults || []).map(r =>
+    `${r.emoji} ${r.name} [${r.status}]: ${(r.findings || []).join(' | ')}${r.suggestions && r.suggestions.length ? ' → ' + r.suggestions.join(' | ') : ''}`
+  ).join('\n');
+  const fullContent = `## Promptsmedens output\n\n${smithContent}\n\n## Agenternas fynd\n\n${agentSummary}`;
+
+  const payload = {
+    name: `💡 Förbättringsförslag från ${projName}`,
+    mode: currentMode,
+    input_text: _lastInputText || '',
+    context: fullContent,
+    results: _lastResults || [],
+    smith: _lastSmith || {},
+    stats: _lastStats || {},
+    project_id: 'main',
+  };
+
+  try {
+    const res = await fetch('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (btn) { btn.textContent = '✅ Sparat till Main!'; btn.style.color = 'var(--green)'; btn.style.borderColor = 'var(--green)'; }
+    showToast(`✅ Förbättringsförslag sparat till Main`);
+    // Refresh history if main is the active project
+    const ap = getActiveProject();
+    if (ap && ap.id === 'main') loadHistory();
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '📌 Spara förbättringsförslag till Main'; }
+    showToast('❌ Kunde inte spara: ' + e.message);
+  }
 }
 
 function copyPrompt() {
@@ -1106,7 +1175,10 @@ async function loadHistory() {
   const list = document.getElementById('historyList');
   list.innerHTML = '<div class="history-loading">Laddar...</div>';
   try {
-    const res = await fetch('/api/sessions');
+    const activeProj = getActiveProject();
+    const pid = activeProj ? activeProj.id : '';
+    const url = pid ? `/api/sessions?project_id=${encodeURIComponent(pid)}` : '/api/sessions';
+    const res = await fetch(url);
     if (!res.ok) throw new Error('no sessions');
     const sessions = await res.json();
     if (!sessions || sessions.length === 0) {
@@ -1124,7 +1196,7 @@ async function loadHistory() {
       </div>
     `).join('');
   } catch(e) {
-    list.innerHTML = '<div class="no-supabase-msg">Supabase ej konfigurerat.<br><a onclick="openSettings()">Öppna inställningar →</a></div>';
+    list.innerHTML = '<div class="history-empty">Inga sessioner hittades.</div>';
   }
 }
 
@@ -1198,6 +1270,48 @@ function setActiveProject(id) {
   localStorage.setItem(ACTIVE_PROJECT_KEY, id || '');
 }
 
+async function ensureMainProject() {
+  // Always ensure a locked "main" project exists in localStorage, with fixed id "main"
+  const projects = getProjects();
+  const existing = projects.find(p => p.id === 'main');
+
+  // Fetch self_repo/self_branch from settings to populate/update repo field
+  let selfRepo = '';
+  let selfBranch = 'main';
+  try {
+    const s = await fetch('/api/settings').then(r => r.json());
+    selfRepo = s.self_repo || '';
+    selfBranch = s.self_branch || 'main';
+  } catch(e) {}
+
+  if (existing) {
+    // Update repo if settings changed — but never remove the project
+    if (selfRepo && (existing.repo !== selfRepo || existing.branch !== selfBranch)) {
+      existing.repo = selfRepo;
+      existing.branch = selfBranch;
+      // Ensure it stays first
+      const rest = projects.filter(p => p.id !== 'main');
+      setProjects([existing, ...rest]);
+      renderProjects();
+    }
+    return;
+  }
+
+  // Create the locked main project for the first time
+  const mainProject = {
+    id: 'main',
+    name: 'Prompt Team',
+    repo: selfRepo,
+    branch: selfBranch,
+    is_main: true,
+    created: new Date().toISOString()
+  };
+  // Always prepend so it stays at top
+  const rest = projects.filter(p => p.id !== 'main');
+  setProjects([mainProject, ...rest]);
+  renderProjects();
+}
+
 function renderProjects() {
   const list = document.getElementById('projectList');
   const projects = getProjects();
@@ -1206,23 +1320,58 @@ function renderProjects() {
     list.innerHTML = '<div style="padding:4px 14px 8px;font-size:11px;color:var(--text3);">Inga projekt ännu</div>';
     return;
   }
-  list.innerHTML = projects.map(p => `
-    <div class="project-item ${active && active.id === p.id ? 'active' : ''}" onclick="selectProject('${p.id}')">
-      <div class="project-dot"></div>
-      <div class="project-name" title="${escHtml(p.repo || '')}">${escHtml(p.name)}</div>
-      <span class="project-sync" onclick="event.stopPropagation();deleteProject('${p.id}')" title="Ta bort">✕</span>
-    </div>
-  `).join('');
+  list.innerHTML = projects.map(p => {
+    const isMain = p.id === 'main';
+    const isActive = active && active.id === p.id;
+    const icon = isMain ? '🏠 ' : '';
+    const badge = isMain
+      ? '<span style="font-size:9px;font-weight:700;background:rgba(99,102,241,.2);color:var(--accent2);border:1px solid rgba(99,102,241,.4);border-radius:3px;padding:1px 5px;letter-spacing:.05em;flex-shrink:0;">MAIN</span>'
+      : '';
+    const deleteBtn = isMain
+      ? '' // no delete button for main project
+      : `<span class="project-del" onclick="event.stopPropagation();deleteProject('${p.id}')" title="Ta bort">✕</span>`;
+    return `
+      <div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject('${p.id}')">
+        <div class="project-dot"></div>
+        <div class="project-name" title="${escHtml(p.repo || '')}">${icon}${escHtml(p.name)}</div>
+        ${badge}
+        ${deleteBtn}
+      </div>
+    `;
+  }).join('');
 }
 
 async function selectProject(id) {
   setActiveProject(id);
   renderProjects();
   const p = getActiveProject();
-  if (p) {
+  if (!p) return;
+
+  // Clear results view to avoid confusion between projects
+  document.getElementById('emptyState').style.display = 'flex';
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('resultsView').style.display = 'none';
+  document.getElementById('codeInput').value = '';
+  document.getElementById('ideaInput').value = '';
+  _activeSessionId = null;
+
+  updateActiveProjBadge();
+  // Reload history for this project
+  loadHistory();
+
+  if (p.repo) {
+    showToast(`📂 ${p.name} — hämtar senaste kod...`);
+    setMode('post');
+    const codeArea = document.getElementById('codeInput');
+    const fetched = await fetchActiveProjectCode();
+    if (fetched) {
+      codeArea.value = fetched.code;
+      showToast(`✅ ${p.name} — ${fetched.stats}`);
+    } else {
+      showToast(`⚠️ ${p.name} valt — kunde inte hämta kod just nu`);
+    }
+  } else {
     showToast(`📂 ${p.name} valt`);
-    if (p.repo) setMode('post');
-    updateActiveProjBadge();
   }
 }
 
@@ -1242,32 +1391,178 @@ function updateActiveProjBadge() {
 }
 
 function openAddProject() {
-  document.getElementById('projectModalTitle').textContent = '➕ Nytt projekt';
   document.getElementById('projNameInput').value = '';
   document.getElementById('projRepoInput').value = '';
   document.getElementById('projBranchInput').value = 'main';
+  const s = document.getElementById('projFetchStatus');
+  if (s) { s.style.display = 'none'; s.textContent = ''; }
+  const btn = document.getElementById('saveProjBtn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Anslut projekt'; }
   document.getElementById('projectModal').classList.add('open');
   setTimeout(() => document.getElementById('projNameInput').focus(), 50);
 }
+async function loadRepoList() {
+  const btn = document.getElementById('repoPickerBtn');
+  const list = document.getElementById('repoPickerList');
+  btn.textContent = '⏳';
+  btn.disabled = true;
+  list.style.display = 'block';
+  list.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--text3);">Hämtar dina repos...</div>';
+  try {
+    const res = await fetch('/api/github/repos');
+    const data = await res.json();
+    if (!data.repos || data.repos.length === 0) {
+      list.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--red);">Inga repos hittades — kontrollera GitHub-token i inställningar</div>';
+    } else {
+      list.innerHTML = data.repos.map(r => `
+        <div onclick="pickRepo('${r.full_name}','${r.default_branch}')"
+             style="padding:8px 12px;cursor:pointer;font-size:12px;font-family:monospace;
+                    border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;
+                    transition:background .1s;"
+             onmouseover="this.style.background='var(--bg3)'"
+             onmouseout="this.style.background=''">
+          <span style="color:var(--text3);font-size:10px;">${r.private ? '🔒' : '🌐'}</span>
+          <span style="flex:1;">${r.full_name}</span>
+          <span style="color:var(--text3);font-size:10px;">${r.default_branch}</span>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    list.innerHTML = `<div style="padding:10px 12px;font-size:12px;color:var(--red);">Fel: ${e.message}</div>`;
+  }
+  btn.textContent = '📋 Välj';
+  btn.disabled = false;
+}
+
+function pickRepo(fullName, branch) {
+  document.getElementById('projRepoInput').value = fullName;
+  document.getElementById('projBranchInput').value = branch || 'main';
+  const nameInput = document.getElementById('projNameInput');
+  if (!nameInput.value.trim()) {
+    nameInput.value = fullName.split('/')[1].replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  }
+  document.getElementById('repoPickerList').style.display = 'none';
+  // Enable branch picker now that a repo is selected
+  const branchBtn = document.getElementById('branchPickerBtn');
+  if (branchBtn) branchBtn.disabled = false;
+}
+
+async function loadBranchList() {
+  const repo = document.getElementById('projRepoInput').value.trim();
+  if (!repo || !repo.includes('/')) {
+    showToast('Välj ett repo först');
+    return;
+  }
+  const btn = document.getElementById('branchPickerBtn');
+  const list = document.getElementById('branchPickerList');
+  btn.textContent = '⏳';
+  btn.disabled = true;
+  list.style.display = 'block';
+  list.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--text3);">Hämtar branches...</div>';
+  try {
+    const res = await fetch(`/api/github/branches?repo=${encodeURIComponent(repo)}`);
+    const data = await res.json();
+    if (!data.branches || data.branches.length === 0) {
+      list.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--red);">Inga branches hittades</div>';
+    } else {
+      const current = document.getElementById('projBranchInput').value.trim();
+      list.innerHTML = data.branches.map(b => `
+        <div onclick="pickBranch('${b}')"
+             style="padding:8px 12px;cursor:pointer;font-size:12px;font-family:monospace;
+                    border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;
+                    background:${b===current?'var(--bg3)':''}; transition:background .1s;"
+             onmouseover="this.style.background='var(--bg3)'"
+             onmouseout="this.style.background='${b===current?'var(--bg3)':''}'">
+          ${b === current ? '<span style="color:var(--accent);font-size:10px;">●</span>' : '<span style="font-size:10px;color:transparent;">●</span>'}
+          ${b}
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    list.innerHTML = `<div style="padding:10px 12px;font-size:12px;color:var(--red);">Fel: ${e.message}</div>`;
+  }
+  btn.textContent = '📋 Välj';
+  btn.disabled = false;
+}
+
+function pickBranch(branch) {
+  document.getElementById('projBranchInput').value = branch;
+  document.getElementById('branchPickerList').style.display = 'none';
+}
+
 function closeProjectModal() {
   document.getElementById('projectModal').classList.remove('open');
+  const pl = document.getElementById('repoPickerList'); if (pl) pl.style.display='none';
+  const bl = document.getElementById('branchPickerList'); if (bl) bl.style.display='none';
 }
-function saveProject() {
+async function saveProject() {
   const name = document.getElementById('projNameInput').value.trim();
   const repo = document.getElementById('projRepoInput').value.trim();
   const branch = document.getElementById('projBranchInput').value.trim() || 'main';
+  const statusEl = document.getElementById('projFetchStatus');
+  const btn = document.getElementById('saveProjBtn');
+
   if (!name) { document.getElementById('projNameInput').focus(); return; }
-  const projects = getProjects();
-  const id = 'proj_' + Date.now();
-  projects.unshift({ id, name, repo, branch, created: new Date().toISOString() });
-  setProjects(projects);
-  setActiveProject(id);
-  closeProjectModal();
-  renderProjects();
-  if (repo) setMode('post');
-  showToast(`✅ ${name} tillagt`);
+  if (!repo || !repo.includes('/')) {
+    statusEl.style.display = 'block';
+    statusEl.style.background = 'rgba(239,68,68,.1)';
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = '❌ Ange repo i formatet owner/repo';
+    document.getElementById('projRepoInput').focus();
+    return;
+  }
+
+  // Test fetch to verify access
+  btn.disabled = true;
+  btn.textContent = '⏳ Testar GitHub-åtkomst...';
+  statusEl.style.display = 'block';
+  statusEl.style.background = 'var(--bg3)';
+  statusEl.style.color = 'var(--text3)';
+  statusEl.textContent = `Hämtar filer från ${repo}...`;
+
+  try {
+    const res = await fetch('/api/github/fetch', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ repo, branch, path: '' })
+    });
+    const data = await res.json();
+    if (data.error || !data.files) {
+      statusEl.style.background = 'rgba(239,68,68,.1)';
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = `❌ ${data.error || 'Kunde inte hämta kod — kontrollera repo och token'}`;
+      btn.disabled = false;
+      btn.textContent = 'Anslut projekt';
+      return;
+    }
+
+    // Success — save project with cached code info
+    const projects = getProjects();
+    const id = 'proj_' + Date.now();
+    projects.unshift({ id, name, repo, branch, created: new Date().toISOString(), file_count: data.file_count });
+    setProjects(projects);
+    setActiveProject(id);
+
+    // Pre-fill code area
+    const joined = Array.isArray(data.files)
+      ? data.files.map(f => `// ── ${f.path} ──\n${f.content}`).join('\n\n')
+      : (data.files || '');
+    document.getElementById('codeInput').value = joined;
+    closeProjectModal();
+    renderProjects();
+    setMode('post');
+    updateActiveProjBadge();
+    showToast(`✅ ${name} ansluten — ${data.file_count} filer laddade`);
+  } catch(e) {
+    statusEl.style.background = 'rgba(239,68,68,.1)';
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `❌ Nätverksfel: ${e.message}`;
+    btn.disabled = false;
+    btn.textContent = 'Anslut projekt';
+  }
 }
 function deleteProject(id) {
+  if (id === 'main') return; // main project is permanently locked
   const projects = getProjects().filter(p => p.id !== id);
   setProjects(projects);
   if ((localStorage.getItem(ACTIVE_PROJECT_KEY) || '') === id) {
@@ -1303,11 +1598,22 @@ async function fetchActiveProjectCode() {
     if (!res.ok) return null;
     const data = await res.json();
     if (data.error) return null;
-    return { code: data.files, stats: `${data.file_count} filer · ${(data.total_chars/1000).toFixed(0)}k tecken` };
+    // data.files is [{path, content}] — join into readable string
+    const joined = Array.isArray(data.files)
+      ? data.files.map(f => `// ── ${f.path} ──\n${f.content}`).join('\n\n')
+      : data.files;
+    return { code: joined, stats: `${data.file_count} filer · ${(data.total_chars/1000).toFixed(0)}k tecken` };
   } catch { return null; }
 }
 
-window.addEventListener('DOMContentLoaded', () => { loadHistory(); renderProjects(); updateActiveProjBadge(); setTimeout(() => runHealthCheck(), 800); });
+window.addEventListener('DOMContentLoaded', () => {
+  ensureMainProject().then(() => {
+    renderProjects();
+    updateActiveProjBadge();
+  });
+  loadHistory();
+  setTimeout(() => runHealthCheck(), 800);
+});
 
 function showError(msg) {
   const es = document.getElementById('emptyState');

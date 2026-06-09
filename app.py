@@ -125,12 +125,14 @@ def auto_name(input_text: str) -> str:
     return f"{name} · {date_str}"
 
 def save_session(session_id: str, name: str, mode: str, input_text: str,
-                 context: str, results: list, smith: dict, stats: dict) -> bool:
+                 context: str, results: list, smith: dict, stats: dict,
+                 project_id: str = "") -> bool:
     now = datetime.now().isoformat()
     payload = {
         "id": session_id, "name": name, "mode": mode,
         "created_at": now, "input_text": input_text,
         "context": context, "results": results, "smith": smith, "stats": stats,
+        "project_id": project_id,
     }
     # Always save locally first (instant, reliable)
     try:
@@ -155,25 +157,18 @@ def save_session(session_id: str, name: str, mode: str, input_text: str,
             logger.warning("Supabase save failed (local backup exists): %s", e)
     return True
 
-def list_sessions() -> list:
-    # Try Supabase first if available
-    if _sb_available():
-        try:
-            headers = _sb_headers()
-            r = httpx.get(
-                _sb_url("prompt_sessions") + "?select=id,name,mode,created_at&order=created_at.desc&limit=50",
-                headers=headers, timeout=10.0
-            )
-            if r.status_code == 200:
-                return r.json()
-        except Exception as e:
-            logger.warning("Supabase list failed, using local: %s", e)
-    # Fall back to local
+def list_sessions(project_id: str = "") -> list:
+    # Fall back to local (Supabase DNS unreliable)
     try:
         data = _local_load()
         sessions = [
-            {"id": v["id"], "name": v["name"], "mode": v["mode"], "created_at": v.get("created_at", "")}
+            {
+                "id": v["id"], "name": v["name"], "mode": v["mode"],
+                "created_at": v.get("created_at", ""),
+                "project_id": v.get("project_id", ""),
+            }
             for v in data.values()
+            if (not project_id) or v.get("project_id", "") == project_id
         ]
         sessions.sort(key=lambda x: x["created_at"], reverse=True)
         return sessions[:50]
@@ -617,6 +612,16 @@ _RETRY_SUFFIX = (
     '{"status":"GODKÄND"|"UNDERKÄND","findings":["..."],"severity":"LOW"|"MEDIUM"|"HIGH","suggestions":["..."]}'
 )
 
+# ──────────────────────────────────────────────
+# SYSTEM REFERENCE — injected into every agent
+# ──────────────────────────────────────────────
+_SYSTEM_REFERENCE = (
+    "\n\n[SYSTEMREFERENS] Detta system är byggt enligt Prompt Teams arkitektur: "
+    "FastAPI-backend, vanilla JS-frontend (inga ramverk), lokalt sessions.json för lagring, "
+    "GitHub read-only för kodläsning. Beakta dessa constraints i din granskning."
+)
+
+
 def run_agent(agent: dict, user_input: str, model: str, client) -> dict:
     """Run a single agent synchronously. Retries once with explicit JSON reminder on parse failure."""
     agent_model = agent.get("model", model)
@@ -625,7 +630,7 @@ def run_agent(agent: dict, user_input: str, model: str, client) -> dict:
         resp = client.messages.create(
             model=agent_model,
             max_tokens=450,
-            system=agent["system"] + system_extra,
+            system=agent["system"] + _SYSTEM_REFERENCE + system_extra,
             messages=[{"role": "user", "content": user_input}],
         )
         return resp.content[0].text if resp.content else ""
@@ -772,6 +777,7 @@ async def review(payload: dict):
     mode = payload.get("mode", "pre")
     input_text = payload.get("input_text", "").strip()
     context = payload.get("context", "").strip()
+    project_id = payload.get("project_id", "")
 
     if not input_text:
         return JSONResponse({"error": "Ingen text angiven."}, status_code=400)
@@ -838,10 +844,10 @@ async def review(payload: dict):
     session_name = auto_name(input_text)
     stats_dict = {"total": len(results), "approved": approved, "rejected": rejected, "errors": errors}
 
-    # Auto-save to Supabase (non-blocking best-effort)
+    # Auto-save (non-blocking best-effort)
     loop.run_in_executor(executor, save_session,
         session_id, session_name, mode, input_text, context,
-        results, smith_result, stats_dict
+        results, smith_result, stats_dict, project_id
     )
 
     return {
@@ -869,6 +875,60 @@ MAX_FILES = 60
 MAX_TOTAL_CHARS = 60_000
 MAX_FILE_CHARS = 8_000
 
+
+
+@app.get("/api/github/repos")
+async def github_list_repos():
+    """List all repos for the authenticated GitHub user."""
+    s = load_settings()
+    token = s.get("github_token", "").strip()
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        loop = asyncio.get_running_loop()
+        resp = await asyncio.wait_for(
+            loop.run_in_executor(executor, lambda: httpx.get(
+                "https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner",
+                headers=headers, timeout=10.0
+            )),
+            timeout=15.0
+        )
+        if resp.status_code == 200:
+            repos = [
+                {"full_name": r["full_name"], "name": r["name"],
+                 "private": r["private"], "default_branch": r.get("default_branch", "main")}
+                for r in resp.json()
+            ]
+            return {"repos": repos}
+        return {"repos": [], "error": f"HTTP {resp.status_code}"}
+    except Exception as e:
+        return {"repos": [], "error": str(e)[:100]}
+
+
+@app.get("/api/github/branches")
+async def github_list_branches(repo: str):
+    """List branches for a given repo."""
+    s = load_settings()
+    token = s.get("github_token", "").strip()
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        loop = asyncio.get_running_loop()
+        resp = await asyncio.wait_for(
+            loop.run_in_executor(executor, lambda: httpx.get(
+                f"https://api.github.com/repos/{repo}/branches?per_page=50",
+                headers=headers, timeout=10.0
+            )),
+            timeout=15.0
+        )
+        if resp.status_code == 200:
+            branches = [b["name"] for b in resp.json()]
+            return {"branches": branches}
+        return {"branches": [], "error": f"HTTP {resp.status_code}"}
+    except Exception as e:
+        return {"branches": [], "error": str(e)[:100]}
 
 @app.post("/api/github/fetch")
 async def github_fetch(payload: dict):
@@ -1077,22 +1137,35 @@ async def health_check():
     return {"ok": all_ok, "services": results}
 
 @app.get("/api/sessions")
-async def api_list_sessions():
-    return list_sessions()
+async def api_list_sessions(project_id: str = ""):
+    return list_sessions(project_id)
+
+@app.post("/api/sessions")
+async def api_create_session(payload: dict):
+    """Save a session directly (used for feedback loop → main project)."""
+    import uuid as _uuid
+    session_id = payload.get("id") or str(_uuid.uuid4())
+    ok = save_session(
+        session_id,
+        payload.get("name", "Session"),
+        payload.get("mode", "post"),
+        payload.get("input_text", ""),
+        payload.get("context", ""),
+        payload.get("results", []),
+        payload.get("smith", {}),
+        payload.get("stats", {}),
+        payload.get("project_id", ""),
+    )
+    return {"ok": ok, "id": session_id}
 
 @app.get("/api/sessions/{session_id}")
 async def api_get_session(session_id: str):
     s = get_session(session_id)
     if not s:
-        return JSONResponse({"error": "Session hittades inte."}, status_code=404)
+        return JSONResponse({"error": "Hittades inte"}, status_code=404)
     return s
 
 @app.delete("/api/sessions/{session_id}")
 async def api_delete_session(session_id: str):
     ok = delete_session(session_id)
     return {"ok": ok}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8001, reload=True)
