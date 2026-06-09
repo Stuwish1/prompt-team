@@ -634,10 +634,17 @@ def _sb_headers() -> dict | None:
         "Prefer": "return=representation",
     }
 
+def _sb_base() -> str:
+    """Normalised Supabase base URL. Tolerates users pasting either the bare
+    project URL (https://xxx.supabase.co) OR the full REST endpoint (…/rest/v1),
+    so we never end up with a doubled /rest/v1 path."""
+    base = load_settings().get("supabase_url", "").strip().rstrip("/")
+    if base.lower().endswith("/rest/v1"):
+        base = base[: -len("/rest/v1")]
+    return base
+
 def _sb_url(path: str) -> str:
-    s = load_settings()
-    base = s.get("supabase_url", "").strip().rstrip("/")
-    return f"{base}/rest/v1/{path}"
+    return f"{_sb_base()}/rest/v1/{path}"
 
 
 # Latest migration version defined in supabase_setup.sql. Bump when you append a
@@ -3138,7 +3145,7 @@ async def health_check():
 
     # ── 3. Supabase ──
     import socket
-    sb_url = s.get("supabase_url", "").strip().rstrip("/")
+    sb_url = _sb_base()  # normalised — strips a trailing /rest/v1 if pasted
     sb_key = s.get("supabase_key", "").strip()
     if not sb_url or not sb_key:
         results["supabase"] = {"ok": False, "msg": "URL eller nyckel saknas"}
