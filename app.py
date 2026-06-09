@@ -71,17 +71,50 @@ LOCAL_SESSIONS_FILE = BASE_DIR / "sessions.json"
 _sessions_lock = threading.Lock()
 
 def _local_load() -> dict:
-    """Load all sessions from local JSON file."""
+    """Load all sessions from local JSON file. Returns {} on missing or corrupt file."""
     if LOCAL_SESSIONS_FILE.exists():
         try:
             return json.loads(LOCAL_SESSIONS_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("sessions.json is corrupt or unreadable (%s) — returning empty dict; "
+                         "file will NOT be overwritten until next explicit save.", e)
     return {}
 
 def _local_save(data: dict):
+    """Atomic-safe write: holds lock across load→modify→write to prevent lost-update races."""
     with _sessions_lock:
         LOCAL_SESSIONS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def _local_update(session_id: str, payload: dict) -> None:
+    """Thread-safe read-modify-write for a single session entry."""
+    with _sessions_lock:
+        if LOCAL_SESSIONS_FILE.exists():
+            try:
+                data = json.loads(LOCAL_SESSIONS_FILE.read_text(encoding="utf-8"))
+            except Exception as e:
+                logger.error("sessions.json corrupt during update (%s) — aborting save to avoid data loss.", e)
+                return
+        else:
+            data = {}
+        data[session_id] = payload
+        LOCAL_SESSIONS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def _local_delete(session_id: str) -> bool:
+    """Thread-safe read-modify-write for deletion. Returns True if key existed."""
+    with _sessions_lock:
+        if LOCAL_SESSIONS_FILE.exists():
+            try:
+                data = json.loads(LOCAL_SESSIONS_FILE.read_text(encoding="utf-8"))
+            except Exception as e:
+                logger.error("sessions.json corrupt during delete (%s) — aborting.", e)
+                return False
+        else:
+            data = {}
+        existed = session_id in data
+        if existed:
+            data.pop(session_id)
+            LOCAL_SESSIONS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return existed
 
 def _sb_headers() -> dict | None:
     s = load_settings()
@@ -111,7 +144,12 @@ def _sb_available() -> bool:
     try:
         from urllib.parse import urlparse
         host = urlparse(url).hostname or ""
-        socket.getaddrinfo(host, 443, timeout=3)
+        old_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(3)
+        try:
+            socket.getaddrinfo(host, 443)
+        finally:
+            socket.setdefaulttimeout(old_timeout)
         return True
     except Exception:
         return False
@@ -134,11 +172,9 @@ def save_session(session_id: str, name: str, mode: str, input_text: str,
         "context": context, "results": results, "smith": smith, "stats": stats,
         "project_id": project_id,
     }
-    # Always save locally first (instant, reliable)
+    # Always save locally first (instant, reliable, race-safe)
     try:
-        data = _local_load()
-        data[session_id] = payload
-        _local_save(data)
+        _local_update(session_id, payload)
     except Exception as e:
         logger.warning("Local session save failed: %s", e)
 
@@ -196,11 +232,10 @@ def get_session(session_id: str) -> dict | None:
         return None
 
 def delete_session(session_id: str) -> bool:
-    # Delete locally
+    # Delete locally (race-safe)
+    local_ok = False
     try:
-        data = _local_load()
-        data.pop(session_id, None)
-        _local_save(data)
+        local_ok = _local_delete(session_id)
     except Exception as e:
         logger.warning("Local delete failed: %s", e)
     # Try Supabase too
@@ -210,7 +245,7 @@ def delete_session(session_id: str) -> bool:
             httpx.delete(_sb_url(f"prompt_sessions?id=eq.{session_id}"), headers=headers, timeout=10.0)
         except Exception:
             pass
-    return True
+    return local_ok
 
 
 # ──────────────────────────────────────────────
@@ -752,6 +787,10 @@ async def post_settings(payload: dict):
         s["supabase_key"] = payload["supabase_key"]
     if "github_token" in payload and payload["github_token"] and not payload["github_token"].startswith("***"):
         s["github_token"] = payload["github_token"]
+    if "self_repo" in payload:
+        s["self_repo"] = payload["self_repo"]
+    if "self_branch" in payload:
+        s["self_branch"] = payload["self_branch"]
     save_settings(s)
     key = s.get("api_key", "")
     if key:
@@ -936,7 +975,7 @@ async def github_fetch(payload: dict):
     payload: { repo: "owner/repo", branch: "main", path: "" }
     Returns: { files: [{path, content, size}], total_chars, truncated }
     """
-    repo = payload.get("repo", "").strip().lstrip("https://github.com/").lstrip("/")
+    repo = payload.get("repo", "").strip().removeprefix("https://github.com/").lstrip("/")
     branch = payload.get("branch", "main").strip() or "main"
     path_filter = payload.get("path", "").strip().lstrip("/")
 

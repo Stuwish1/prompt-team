@@ -988,13 +988,14 @@ async function runWithAnswers() {
   document.getElementById('loadingTitle').textContent = `Kör om med dina svar...`;
 
   _lastInputText = inputText;
-  _lastContext = context;
+  _lastContext = ctx;
   _clarificationRound = 0;
+  const rerunProjectId = getActiveProject() ? getActiveProject().id : '';
   try {
     const res = await fetch('/api/review', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({mode: currentMode, input_text: inputText, context: ctx})
+      body: JSON.stringify({mode: currentMode, input_text: inputText, context: ctx, project_id: rerunProjectId})
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -1556,54 +1557,74 @@ async function saveProject() {
   } catch(e) {
     statusEl.style.background = 'rgba(239,68,68,.1)';
     statusEl.style.color = 'var(--red)';
-    statusEl.textContent = `❌ Nätverksfel: ${e.message}`;
-    btn.disabled = false;
-    btn.textContent = 'Anslut projekt';
+    statusEl.textContent = `❌ Nä    statusEl.textContent = `❌ Fel: ${e.message}`;
+    if (saveProjBtn) saveProjBtn.disabled = false;
   }
-}
-function deleteProject(id) {
-  if (id === 'main') return; // main project is permanently locked
-  const projects = getProjects().filter(p => p.id !== id);
-  setProjects(projects);
-  if ((localStorage.getItem(ACTIVE_PROJECT_KEY) || '') === id) {
-    setActiveProject(projects[0]?.id || null);
-  }
-  renderProjects();
 }
 
-function showToast(msg) {
-  let t = document.getElementById('toast');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'toast';
-    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--border);color:var(--text1);padding:8px 18px;border-radius:8px;font-size:13px;z-index:9999;transition:opacity .3s;pointer-events:none;';
-    document.body.appendChild(t);
-  }
-  t.textContent = msg;
-  t.style.opacity = '1';
-  clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2200);
-}
-
-// ── AUTO-FETCH active project repo before review ──
 async function fetchActiveProjectCode() {
   const p = getActiveProject();
   if (!p || !p.repo) return null;
   try {
     const res = await fetch('/api/github/fetch', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo: p.repo, branch: p.branch || 'main', path: '' })
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({repo: p.repo, branch: p.branch || 'main'})
     });
     if (!res.ok) return null;
     const data = await res.json();
     if (data.error) return null;
-    // data.files is [{path, content}] — join into readable string
-    const joined = Array.isArray(data.files)
+    const code = Array.isArray(data.files)
       ? data.files.map(f => `// ── ${f.path} ──\n${f.content}`).join('\n\n')
-      : data.files;
-    return { code: joined, stats: `${data.file_count} filer · ${(data.total_chars/1000).toFixed(0)}k tecken` };
-  } catch { return null; }
+      : '';
+    return { code, stats: `${data.file_count} filer · ${Math.round(data.total_chars/1000)}k tecken` };
+  } catch(e) {
+    return null;
+  }
+}
+
+function deleteProject(id) {
+  if (id === 'main') return; // main project is permanently locked
+  if (!confirm('Ta bort projektet? Sessionshistoriken bevaras.')) return;
+  const projects = getProjects().filter(p => p.id !== id);
+  setProjects(projects);
+  const active = getActiveProject();
+  if (active && active.id === id) {
+    // Switch to main
+    setActiveProject('main');
+    document.getElementById('codeInput').value = '';
+    document.getElementById('ideaInput').value = '';
+    document.getElementById('resultsView').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'flex';
+    loadHistory();
+  }
+  renderProjects();
+  updateActiveProjBadge();
+  showToast('Projektet borttaget');
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function showToast(msg, duration = 3000) {
+  let toast = document.getElementById('toastEl');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toastEl';
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface2);color:var(--text);padding:10px 20px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.4);border:1px solid var(--border);transition:opacity .3s;pointer-events:none;';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { toast.style.opacity = '0'; }, duration);
 }
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -1615,39 +1636,7 @@ window.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => runHealthCheck(), 800);
 });
 
-function showError(msg) {
-  const es = document.getElementById('emptyState');
-  es.innerHTML = `
-    <div class="empty-icon">❌</div>
-    <div class="empty-title">Granskning misslyckades</div>
-    <div class="empty-sub">${escHtml(msg)}<br><br>
-      <button class="btn btn-ghost" style="margin-top:8px" onclick="resetToEmpty()">Försök igen</button>
-    </div>`;
-  es.style.display = 'flex';
-}
-
-function resetToEmpty() {
-  document.getElementById('emptyState').innerHTML = `
-    <div class="empty-icon">🤖</div>
-    <div class="empty-title">Teamet väntar på din idé</div>
-    <div class="empty-sub">Beskriv vad du vill bygga eller klistra in kod — teamet granskar allt parallellt och Promptsmeden levererar en färdig prompt.</div>`;
-}
-
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-// Close modal on background click
-document.getElementById('settingsModal').addEventListener('click', function(e) {
-  if (e.target === this) closeSettings();
-});
-
-// Keyboard shortcut: Ctrl+Enter to run
-document.addEventListener('keydown', e => {
+document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runReview(); }
 });
 </script>
