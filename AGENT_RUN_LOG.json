@@ -151,5 +151,12 @@
     "added": [],
     "queue_size": 13,
     "note": "Kön full (12 kö + 1 behover_dig). bcd17ff6 status korrigerad: BYGGS → BEHÖVER_DIG. Inga nya tasks. PROJECT_STATUS.md uppdaterad."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T22:14",
+    "added": [],
+    "queue_size": 12,
+    "note": "Kön full (12 aktiva: 1 byggs + 1 behover_dig + 10 kö) — inga nya tasks. Noterat: 44b75ed5 (sessions.json DB-03) nu KLAR per fil — uppdaterat PROJECT_STATUS.md. API nere."
   }
 ]

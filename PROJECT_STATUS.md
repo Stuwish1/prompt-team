@@ -1,10 +1,10 @@
 # Project Status
-**Senast uppdaterad:** 2026-06-11T07:18 (projektledaren-auto)
+**Senast uppdaterad:** 2026-06-11T07:36 (projektledaren-auto)
 
 ## Senast godkänt
 - KID-SPRINT1: Barnvänliga felmeddelanden + verktygsnamn + git-rubrik i chat — klar
 
-## Klart totalt (godkänt av granskaren) — 65 st
+## Klart totalt (godkänt av granskaren) — 66 st
 - ✅ P1: Saknade las — race conditions
 - ✅ P1: Input-validering + path traversal
 - ✅ P1-A: Återställ stale byggs-items vid serveromstart

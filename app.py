@@ -1263,20 +1263,71 @@ def get_session(session_id: str) -> dict | None:
             logger.warning("Supabase get failed: %s", e)
     return None
 
-def delete_session(session_id: str) -> bool:
-    # Delete locally (race-safe)
-    local_ok = False
+def _delete_local_files(session_id: str) -> bool:
+    """Remove the session entry from the local sessions.json store.
+    Returns True if the entry existed and was removed."""
     try:
-        local_ok = _local_delete(session_id)
+        return _local_delete(session_id)
     except Exception as e:
-        logger.warning("Local delete failed: %s", e)
-    # Try Supabase too
-    if _sb_available():
-        try:
-            headers = _sb_headers()
-            httpx.delete(_sb_url(f"prompt_sessions?id=eq.{session_id}"), headers=headers, timeout=10.0)
-        except Exception:
-            pass
+        logger.warning("Local delete failed for session %s: %s", session_id, e)
+        return False
+
+
+def _delete_supabase_session(session_id: str) -> None:
+    """Delete the session row (and any related rows) from Supabase if configured."""
+    if not _sb_available():
+        return
+    try:
+        headers = _sb_headers()
+        httpx.delete(
+            _sb_url(f"prompt_sessions?id=eq.{session_id}"),
+            headers=headers,
+            timeout=10.0,
+        )
+    except Exception as e:
+        logger.warning("Supabase delete failed for session %s: %s", session_id, e)
+
+
+def _delete_github_session(session_id: str, settings: dict) -> None:
+    """Remove session artefacts from GitHub if self_repo is configured.
+    Currently a no-op placeholder; GitHub deletion is not yet implemented."""
+    pass
+
+
+def _cleanup_temp_files(session_id: str) -> None:
+    """Remove temporary build artefacts tied to this session.
+    Currently a no-op placeholder; temp-file cleanup is not yet implemented."""
+    pass
+
+
+def delete_session(session_id: str) -> bool:
+    """Delete a session from all backing stores.
+
+    Calls each sub-step independently so that a failure in one store does not
+    prevent cleanup in the others. Returns True if the local entry existed.
+    """
+    errors: list[str] = []
+
+    local_ok = _delete_local_files(session_id)
+
+    try:
+        _delete_supabase_session(session_id)
+    except Exception as e:
+        errors.append(f"supabase: {e}")
+
+    try:
+        _delete_github_session(session_id, load_settings())
+    except Exception as e:
+        errors.append(f"github: {e}")
+
+    try:
+        _cleanup_temp_files(session_id)
+    except Exception as e:
+        errors.append(f"cleanup: {e}")
+
+    if errors:
+        logger.warning("delete_session(%s) partial errors: %s", session_id, errors)
+
     return local_ok
 
 
@@ -5178,53 +5229,4 @@ async def builder_stream(item_id: str, request: Request):
 
         finally:
             _active_builders.pop(item_id, None)
-            _cancel_flags.pop(item_id, None)
-
-    task = asyncio.current_task()
-    if task:
-        _active_builders[item_id] = task
-
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
-@app.delete("/api/builder/stream/{item_id}")
-async def cancel_builder(item_id: str):
-    """Cancel a running builder — reset item to kö."""
-    # R8: signal via event to avoid corrupting mid-write state
-    flag = asyncio.Event()
-    flag.set()
-    _cancel_flags[item_id] = flag
-
-    task = _active_builders.pop(item_id, None)
-    if task:
-        task.cancel()
-
-    with _queue_lock:
-        items = _queue_load()
-        it = next((i for i in items if i.get("id") == item_id), None)
-        if it and it["status"] == "byggs":
-            it["status"] = "kö"
-            _queue_log(it, "avbruten", "manuellt")
-            _queue_write(items)
-
-    _builder_histories.pop(item_id, None)
-    return {"ok": True}
-
-
-@app.post("/api/builder/followup/{item_id}")
-async def builder_followup(item_id: str, payload: dict):
-    """Append a follow-up message to a running build (mid-build only).
-    Post-reject retries use /send instead — that is the only case where spec is rewritten."""
-    message = payload.get("message", "").strip()
-    if not message:
-        return JSONResponse({"error": "Tomt meddelande."}, status_code=400)
-
-    with _queue_lock:
-        items = _queue_load()
-        it = next((i for i in items if i.get("id") == item_id and not i.get("deleted_at")), None)
-    if not it:
-        return JSONRespons
+            _cancel_flags.p
