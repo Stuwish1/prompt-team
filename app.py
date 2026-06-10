@@ -89,7 +89,7 @@ _DEFAULT_AGENT_MODELS = {
     # Final user-facing spec — Sonnet as quality anchor + vendor hedge
     "prompt_smith":    "anthropic/claude-sonnet-4.6",
     # Simple evaluation / translation
-    "completeness":    "google/gemini-2.5-flash-lite",
+    "completeness":    "google/gemini-2.5-flash",  # lite gav OKÄND: thinking åt 800-budgeten → trasig JSON
     "bestallarsammanfattaren": "google/gemini-2.5-flash",
 }
 
@@ -1626,7 +1626,7 @@ COMPLETENESS_AGENT = {
     "name": "Kompletthetsgranskaren",
     "emoji": "✅",
     "phase": "completeness",
-    "model": "google/gemini-2.5-flash-lite",
+    "model": "google/gemini-2.5-flash",
     "system": (
         "Du är en erfaren teknisk specifikationsgranskare. Kontrollera om en given specifikation/prompt "
         "är tillräckligt komplett för att en utvecklare ska kunna implementera den utan att behöva gissa.\n\n"
@@ -1795,6 +1795,44 @@ def _stringify_finding(x) -> str:
                 return x[k]
         return " — ".join(str(v) for v in x.values() if v)
     return str(x)
+
+
+def _repair_truncated_json(text: str) -> dict | None:
+    """Räddar JSON som höggs mitt i en sträng (flaky provider-stopp — Riskvärderaren
+    levererade 94 tecken mitt i första finding, två försök i rad). Klipper tillbaka
+    till sista kompletta värdet och stänger öppna strängar/arrayer/objekt."""
+    text = text.strip()
+    if not text.startswith("{"):
+        return None
+    # Klipp vid sista kompletta värde (avslutande citat, klammer eller hakparentes)
+    for cut in range(len(text), max(len(text) - 2000, 1), -1):
+        candidate = text[:cut].rstrip().rstrip(",")
+        # Stäng öppen sträng om vi står mitt i en
+        in_str = False
+        esc = False
+        opens = []
+        for ch in candidate:
+            if esc:
+                esc = False
+                continue
+            if ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = not in_str
+            elif not in_str and ch in "{[":
+                opens.append(ch)
+            elif not in_str and ch in "}]":
+                if opens:
+                    opens.pop()
+        repaired = candidate + ('"' if in_str else "")
+        repaired += "".join("}" if o == "{" else "]" for o in reversed(opens))
+        try:
+            obj = json.loads(repaired)
+            if isinstance(obj, dict) and obj:
+                return obj
+        except Exception:
+            continue
+    return None
 
 
 def _parse_agent_json(raw: str) -> dict:
@@ -2063,6 +2101,16 @@ def run_agent(agent: dict, user_input: str, model: str, client,
             logger.warning("[%s] JSON parse failed, retrying with format hint", agent["id"])
             raw = _call(_RETRY_SUFFIX)
             parsed = _parse_agent_json(raw)
+        # Sista utväg: rädda trunkerad JSON (provider-stopp mitt i en sträng)
+        if parsed.get("_error") == "no_json":
+            repaired = _repair_truncated_json(raw)
+            if repaired:
+                logger.warning("[%s] räddade trunkerad JSON (%d tecken)", agent["id"], len(raw))
+                repaired.setdefault("findings", [])
+                repaired.setdefault("suggestions", [])
+                repaired.setdefault("severity", "MEDIUM")
+                repaired["findings"].append("[OBS: agentens svar trunkerades — fynden ovan kan vara ofullständiga]")
+                parsed = repaired
 
         cost = sum(u["cost_usd"] or 0 for u in usage)
         return {
@@ -2191,7 +2239,7 @@ def run_completeness_agent(spec_content: str, model: str, client, usage_out: lis
             comp_system += directives + "\nKontrollera även att specen följer reglerna ovan — bryter den mot dem är den OFULLSTÄNDIG."
         raw = _call_model(
             comp_model, comp_system,
-            f"Granska denna specifikation:\n\n{spec_content[:12000]}", 800, client,
+            f"Granska denna specifikation:\n\n{spec_content[:16000]}", 1500, client,
             usage_out=usage_out
         )
         text = raw.strip()
@@ -2207,6 +2255,12 @@ def run_completeness_agent(spec_content: str, model: str, client, usage_out: lis
                 return obj
             except Exception:
                 pass
+        rep = _repair_truncated_json(text)  # sista utväg: trunkerad JSON
+        if rep:
+            rep.setdefault("status", "OKÄND")
+            rep.setdefault("saknas", [])
+            rep.setdefault("styrkor", [])
+            return rep
         return FALLBACK
     except Exception as e:
         logger.error("[kompletthetsgranskaren] failed: %s", e)
@@ -2351,8 +2405,14 @@ def run_bestallare_agent(spec_content: str, agent_results: list, model: str, cli
     )
     try:
         b_model = get_agent_model("bestallarsammanfattaren", BESTALLARE_AGENT["model"])
-        raw = _call_model(b_model, BESTALLARE_AGENT["system"], payload, 1500, client, usage_out=usage_out)
-        first = _extract_first_json(raw.strip())
+        # 3000: vid 13 underkända agenter slog svaret i gamla 1500-taket (thinking delar
+        # budgeten) → huggen JSON → tom sammanfattning till beställaren
+        raw = _call_model(b_model, BESTALLARE_AGENT["system"], payload, 3000, client, usage_out=usage_out)
+        first = _extract_first_json(raw.strip()) or ""
+        if not first:
+            rep = _repair_truncated_json(raw.strip())
+            if rep:
+                first = json.dumps(rep, ensure_ascii=False)
         if first:
             obj = json.loads(first)
             obj.setdefault("sammanfattning", "")
@@ -2594,6 +2654,18 @@ async def review(payload: dict):
     # Screenshots passed only to agents that declare needs_visual_input.
     enriched_input = full_input
     combined_context = project_context + krav_system_context
+    # IDÉ-LÄGE: det finns ingen kod att underkänna — domänagenternas jobb är att
+    # DEFINIERA vad specen måste täcka. Utan detta godkände Databas/Frontend/UI tomt
+    # på en idé som krävde både datamodell och UI, och specen fick noll domäninput.
+    if mode == "ny_funktion":
+        combined_context += (
+            "\n\nLÄGE: IDÉ (ingen kod finns än). Din uppgift är INTE att leta fel i kod, "
+            "utan att definiera vad SPECEN måste täcka inom DIN domän: krav, designbeslut, "
+            "risker och fallgropar som byggaren annars missar. "
+            "Berör idén din domän (även indirekt): sätt status UNDERKÄND och lista dina "
+            "domänkrav som findings + konkreta förslag i suggestions. "
+            "GODKÄND betyder 'min domän berörs inte alls av denna idé' — inget annat."
+        )
 
     _progress_set(run_id, phase="specialister")
 
