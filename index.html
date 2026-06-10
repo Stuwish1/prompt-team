@@ -2545,6 +2545,7 @@ function agentCardHtml(r) {
         <div class="card-name"><span class="card-emoji">${escHtml(r.emoji)}</span>${escHtml(r.name)}</div>
         <span class="badge ${badgeCls}">${r.status}</span>
       </div>
+      ${r.motivering ? `<div class="card-motivering" style="font-size:11.5px;color:var(--text3);font-style:italic;margin:4px 0 6px;">${escHtml(r.motivering)}</div>` : ''}
       ${findings.length > 0
         ? `<div class="card-findings">${findings.map(f => `<div class="finding-item">${escHtml(f)}</div>`).join('')}</div>`
         : `<div class="no-findings">Inga anmärkningar</div>`
@@ -2835,6 +2836,7 @@ function exportSession() {
       lines.push(`### ❌ Underkända`);
       rejected.forEach(r => {
         lines.push(`\n#### ${r.emoji} ${r.name} [${r.severity || 'MEDIUM'}]`);
+        if (r.motivering) lines.push(`*${r.motivering}*\n`);
         (r.findings || []).forEach(f => lines.push(`- ${f}`));
         if (r.suggestions && r.suggestions.length) {
           lines.push(`\n*Förslag:*`);
@@ -2855,7 +2857,7 @@ function exportSession() {
 
     if (approved.length) {
       lines.push(`### ✅ Godkända`);
-      lines.push(approved.map(r => `${r.emoji} ${r.name}`).join(' · '));
+      approved.forEach(r => lines.push(`- ${r.emoji} ${r.name}${r.motivering ? ` — _${r.motivering}_` : ''}`));
       lines.push('');
     }
 
@@ -2887,6 +2889,14 @@ function exportSession() {
   if (specContent) {
     lines.push(`## ✍️ Specifikation (Promptsmeden — teknisk)\n`);
     lines.push(specContent);
+    lines.push('');
+  } else if (smith.type === 'questions') {
+    lines.push(`## ✍️ Promptsmeden — motfrågor (ingen spec ännu)\n`);
+    if (smith.intro) lines.push(`${smith.intro}\n`);
+    (smith.questions || []).forEach((q, i) => {
+      lines.push(`${i + 1}. **${q.text || ''}**`);
+      (q.options || []).forEach(o => lines.push(`   - ${o}`));
+    });
     lines.push('');
   }
 
@@ -2931,9 +2941,12 @@ function exportSession() {
 // modell, status, ALLA findings/suggestions, råsvar, kostnad — inget putsas bort.
 function exportAgentAudit() {
   const results = _lastResults || [];
-  if (!results.length) { showToast('Inget att exportera — kör en granskning först.'); return; }
+  const smithCheck = _lastSmith || {};
+  // Gated körningar (för vag input) har inga specialistresultat men VÄL krav + motfrågor —
+  // de ska gå att granska, annars syns aldrig att gaten gjorde sitt jobb.
+  if (!results.length && !smithCheck.type) { showToast('Inget att exportera — kör en granskning först.'); return; }
   const krav = _lastKrav || {};
-  const smith = _lastSmith || {};
+  const smith = smithCheck;
   const cost = _lastCost || {};
   const L = [];
   const ts = new Date().toLocaleString('sv-SE');
@@ -2971,6 +2984,7 @@ function exportAgentAudit() {
 
   // Kravanalytikern — fullständigt
   L.push(`## 📋 Kravanalytikern\n`);
+  if (krav.underlag) L.push(`**Underlagsbedömning:** ${krav.underlag}${krav.underlag === 'FÖR_VAGT' ? ' → specialistrundan hoppades över (vag-input-gate)' : ''}\n`);
   if (krav.tolkad_ide) L.push(`**Tolkad idé:** ${krav.tolkad_ide}\n`);
   (krav.krav || []).forEach(k => L.push(`- ${k}`));
   if ((krav.oklarheter||[]).length) { L.push(`\n**Oklarheter:**`); krav.oklarheter.forEach(o => L.push(`- ⚠️ ${o}`)); }
@@ -2985,6 +2999,7 @@ function exportAgentAudit() {
     const mark = r.status === 'GODKÄND' ? '✅' : r.status === 'UNDERKÄND' ? '❌' : '⚠️';
     L.push(`### ${mark} ${r.emoji || ''} ${r.name} — ${r.status}${r.severity ? ` [${r.severity}]` : ''}`);
     L.push(`*Modell: \`${r.model || '?'}\`${r.skipped ? ' · HOPPADES ÖVER: ' + r.skipped : ''}${r.error ? ' · FEL: ' + r.error : ''}*\n`);
+    L.push(`**Motivering:** ${r.motivering || '⚠️ SAKNAS — agenten motiverade inte sin status'}\n`);
     if ((r.findings || []).length) {
       L.push(`**Findings (${r.findings.length}):**`);
       r.findings.forEach(f => L.push(`- ${f}`));
@@ -3009,11 +3024,21 @@ function exportAgentAudit() {
   // Syntes-agenterna
   L.push(`## ✍️ Promptsmeden (syntes)\n`);
   L.push(`*Typ: ${smith.type || '—'}*\n`);
-  const smithContent = smith.content || '(inget)';
-  L.push('```markdown');
-  L.push(smithContent.slice(0, 24000));
-  if (smithContent.length > 24000) L.push(`\n[…export-klipp: ${(smithContent.length - 24000).toLocaleString()} tecken utelämnade ur exporten]`);
-  L.push('```\n');
+  if (smith.type === 'questions') {
+    // questions-payloaden har intro/questions, inte content — tidigare export visade "(inget)"
+    if (smith.intro) L.push(`${smith.intro}\n`);
+    (smith.questions || []).forEach((q, i) => {
+      L.push(`${i + 1}. **${q.text || ''}**`);
+      (q.options || []).forEach(o => L.push(`   - ${o}`));
+    });
+    L.push('');
+  } else {
+    const smithContent = smith.content || '(inget)';
+    L.push('```markdown');
+    L.push(smithContent.slice(0, 24000));
+    if (smithContent.length > 24000) L.push(`\n[…export-klipp: ${(smithContent.length - 24000).toLocaleString()} tecken utelämnade ur exporten]`);
+    L.push('```\n');
+  }
 
   const best = _lastBestallare || {};
   if (best.sammanfattning || (best.punkter||[]).length) {

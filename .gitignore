@@ -15,3 +15,4 @@ model_list_cache.json
 .env
 start_background.vbs
 stop_app.bat
+intrim_result*.json
