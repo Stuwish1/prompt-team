@@ -70,5 +70,37 @@ insert into schema_migrations (version, name)
   on conflict (version) do nothing;
 
 
+-- ── Migration 3 — backlog_items + build_queue_items (Supabase-backup) ───────
+CREATE TABLE IF NOT EXISTS backlog_items (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL DEFAULT '',
+    data JSONB NOT NULL,
+    deleted_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE backlog_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all via service role" ON backlog_items;
+CREATE POLICY "Allow all via service role"
+  ON backlog_items FOR ALL USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS build_queue_items (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL DEFAULT '',
+    data JSONB NOT NULL,
+    deleted_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE build_queue_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all via service role" ON build_queue_items;
+CREATE POLICY "Allow all via service role"
+  ON build_queue_items FOR ALL USING (true) WITH CHECK (true);
+
+INSERT INTO schema_migrations (version, name)
+  VALUES (3, 'backlog_items + build_queue_items (Supabase-backup)')
+  ON CONFLICT (version) DO NOTHING;
+
+
 -- ── Verifiera (valfritt) ─────────────────────────────────────────────────────
 -- select version, name, applied_at from schema_migrations order by version;

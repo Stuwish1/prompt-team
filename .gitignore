@@ -16,4 +16,6 @@ model_list_cache.json
 .env
 start_background.vbs
 stop_app.bat
-intrim_result*.json
+interim_result*.json
+e2e_test_results*.json
+

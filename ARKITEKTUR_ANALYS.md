@@ -468,104 +468,151 @@ Systemet kan inte ta emot händelser från GitHub. Det måste alltid triggas man
 ### 9r. `start.bat` → `uvicorn reload=True` kör i produktionsläge (KRITISK)
 `app.py`'s `__main__`-block startar servern med `uvicorn.run(..., reload=True)`. Reload-läget vaktar på alla `.py`-filer och startar om servern automatiskt vid ändringar — inklusive om en agent av misstag skriver till en Python-fil under en pågående granskning. Varje omstart tappar `_RUN_RESULTS` och `_progress` in-memory, vilket innebär att alla aktiva körningar dör tyst.
 
-**Åtgärd:** Ändra till `reload=False` i `__main__`. Använd `reload=True` bara vid lokal utveckling via en separat `dev.bat`.
+**Åtgärd:** Ändra till `reload=False` i `__main__`. Använd 
+---
+
+## 14. Nya fynd — iteration 8
+
+### 14a. `get_backlog()` läser utan lås — race condition mot parallella granskningar (KRITISK)
+`GET /api/backlog` anropar `_backlog_load()` utan `_backlog_lock`. Alla skrivoperationer (`backlog_add_items`, `update_backlog_item`, `promote_backlog_item`) hålls under `_backlog_lock`. En granskningskörning som skriver nya backlog-items via `run_backlog_agent` kan överlappa med en läsning → delvis skriven JSON läses in → API returnerar korrupt eller ofullständig data. Vid hög last (flera parallella granskningar) inträffar detta rutinmässigt.
+
+**Åtgärd:** Lägg till `with _backlog_lock:` runt `_backlog_load()`-anropet i `get_backlog()`:
+```python
+async def get_backlog(project_id: str = ""):
+    with _backlog_lock:
+        items = _backlog_load()
+    ...
+```
 
 ---
 
-### 9s. Port-diskrepans — `launch.json` 8021 vs app 8001
-`.claude/launch.json` konfigurerar felsökning på port 8021. `app.py` och `start.bat` öppnar port 8001. `start_background.vbs` anropar `python app.py` och landar också på 8001. Alla browser-requests är låsta till `localhost:8001` via CORS. Resultatet är att debug-sessioner via `.claude/launch.json` alltid misslyckas med CORS-fel utan förklaring.
+### 14b. `PATCH /api/build-queue/{id}` saknar storleksvalidering på `spec_markdown` — DoS-risk
+`patch_build_queue()` gör `item["spec_markdown"] = payload["spec_markdown"]` utan längdbegränsning. En angripare (eller buggy klient) kan skicka en spec_markdown på t.ex. 50 MB. Hela `build_queue.json` skrivs om — filen exploderar i storlek. Nästa läsning under `_queue_lock` slöar ner hela servern. Varje byggreview-anrop laddar filen i sin helhet.
 
-**Åtgärd:** Synkronisera alla portreferenser till en enda konstant, t.ex. en miljövariabel `APP_PORT=8001`. Uppdatera `launch.json` att matcha.
-
----
-
-### 9t. `start_background.vbs` hardkodar installationssökväg
-Filen innehåller en hårdkodad absolut sökväg (`C:\innob-agent\prompt-team`). Om systemet klonas till ett annat ställe eller kör på en annan maskin misslyckas VBS-scriptet tyst — inget felmeddelande, ingen logg. Eftersom scriptet startas vid login gör det hela systemet odistribuierbart som det är nu.
-
-**Åtgärd:** Läs sökvägen relativt VBS-filens egen `WScript.ScriptFullName` istället för att hardkoda den. Alternativt: lägg sökvägen i `settings.json` och läs den därifrån.
-
----
-
-### 9u. `push_to_github.py` hardkodar git-identitet
-Filen kör `git config user.email "stiven@2snickare.se"` och `git config user.name "Stiven Ishoo"` globalt på varje anrop. Alla systemgenererade commits på alla maskiner som kör detta script får Stivens identitet som author — oavsett vem som faktiskt kör systemet. Skapar falska attributioner i git-historiken.
-
-**Åtgärd:** Hämta `user_name` och `user_email` från `settings.json` (lägg till fälten där). Om de saknas — använd maskinens befintliga git-konfiguration via `git config --global`.
+**Åtgärd:** Begränsa till max 100 000 tecken:
+```python
+if "spec_markdown" in payload:
+    val = str(payload["spec_markdown"])
+    if len(val) > 100_000:
+        return JSONResponse({"error": "spec_markdown överstiger 100 000 tecken."}, status_code=400)
+    item["spec_markdown"] = val
+```
 
 ---
 
-### 9v. Historikpanel — tyst 50-sessionsgräns
-`/api/sessions` returnerar `sessions[:50]` utan paginering. Historikpanelen visar dessa 50 men ger ingen indikation om att fler sessioner finns. Äldre sessioner är osynliga och kan inte raderas eller återöppnas via UI. Vid ett bolag med frekvent användning är sessioner äldre än 1–2 veckor permanent otillgängliga utan direkt filaccess.
+### 14c. `queue_create_item()` accepterar `project_id=""` — items blöder in i alla projektvyer
+Items skapas med `project_id` direkt från payload utan validering. En tom sträng passerar igenom. `get_build_queue(project_id="")` returnerar alla items oavsett projekt — items utan korrekt `project_id` visas i alla projektvyer.
 
-**Åtgärd:** Visa ett "Visar 50 av N totalt"-meddelande under listan. Lägg till en "Ladda fler"-knapp som anropar `/api/sessions?offset=50`. (Kräver att P1-d genomförs: paginering i backend.)
-
----
-
-### 9w. Ingen sökning i historikpanelen
-Det finns inget sökfält eller filter i historikpanelen. Med 10+ körningar per dag är det omöjligt att hitta rätt session utan att bläddra igenom 50 kort. Det finns ingen möjlighet att filtrera på projekt, datum eller status.
-
-**Åtgärd:** Lägg till ett sökfält i historikpanelens header som filtrerar listan client-side på session-titel, project_name och datum. Backend-sökning kan läggas till som `/api/sessions?q=sökterm` i ett senare steg.
+**Åtgärd:** I `POST /api/build-queue` — kräv icke-tom `project_id`:
+```python
+project_id = (payload.get("project_id") or "").strip()
+if not project_id:
+    return JSONResponse({"error": "project_id krävs."}, status_code=400)
+```
 
 ---
 
-### 9x. Supabase backupar inte backlog eller build_queue (KRITISK)
-`supabase_setup.sql` definierar bara tabellen `prompt_sessions`. `backlog.json` och `build_queue.json` har ingen molnbackup alls. Om maskinen dör, hårddisken krånglar eller filen korrupteras är hela backlogen och alla aktiva byggjobb borta permanent. Det finns inget sätt att återskapa dem — varken från Supabase eller från git (båda är i `.gitignore`).
+### 14d. `_sig_tokens()` dedup är ytlig — 6-teckensprefixar missar parafraseringar
+Backlog-dedup bygger på 6-teckensprefixar av ord i titel + finding. Två issues med identisk innebörd men olika ordval (`"saknas validering"` vs `"ingen kontroll"`) skapar dubbletter. Omvänt kan orelaterade issues dela prefixord och falskt flaggas som samma. `_is_same_issue()` med 0.5-tröskel är för aggressiv vid korta token-set.
 
-**Åtgärd:** Lägg till `backlog_items` och `build_queue_items` tabeller i Supabase-schemat. Synkronisera på varje write (asynkront, best-effort) precis som `prompt_sessions`. Schemat finns i `supabase_setup.sql` och behöver utökas.
-
----
-
-### 9y. `openVerifyFix()` läser från tom `codeInput` i Att Bygga-vyn
-`openVerifyFix()` pre-fyller `verifyCodeInput` med `document.getElementById('codeInput')?.value`. I "Att Bygga"-fliken finns inte `codeInput` ifylld — den är tom. Användaren öppnar verifikations-modalen, ser en tom kodruta, och måste klistra in koden manuellt utan någon förklaring om varför rutan är tom. Det ser ut som en bugg.
-
-**Åtgärd:** När `openVerifyFix()` anropas från Att Bygga-vyn: hämta koden från byggkö-itemets `job.repo_url` via `fetchFileFromGitHub()` automatiskt. Visa en spinner och en tydlig text "Hämtar kod från GitHub…" medan det sker.
-
----
-
-### 9z. `/api/version` är dead code
-Endpointen `/api/version` returnerar `index.html`'s `mtime` och är kommenterad som "used by browser for live-reload polling" i koden. Ingen JavaScript i `index.html` anropar denna endpoint. Ingen polling-loop existerar. Endpointen anropas aldrig.
-
-**Åtgärd (lågprio):** Ta bort endpointen, eller implementera live-reload om det faktiskt behövs (t.ex. för dev-läge). Lämnas det kvar skapar det förvirring om vad systemet gör.
+**Åtgärd (kortsiktig):** Höj tröskeln och kräv minimiöverlapp:
+```python
+def _is_same_issue(a_tokens: set, b_tokens: set) -> bool:
+    if not a_tokens or not b_tokens or len(a_tokens) < 2 or len(b_tokens) < 2:
+        return False
+    inter = len(a_tokens & b_tokens)
+    return inter >= 3 and inter / min(len(a_tokens), len(b_tokens)) >= 0.65
+```
+**Åtgärd (långsiktig):** Ersätt prefix-dedup med cosine-likhet via `/embeddings`-endpoint (> 0.85).
 
 ---
 
-## 10. PR #2 — `feat/agent-audit-export` mergeades 2026-06-10 (iteration 5)
-
-origin/main landade en stor PR som drastiskt förenklade systemet. Lokal branch är 8 commits FÖRE origin/main men saknar detta merge — grenarna har divergerat. Nedan dokumenteras vad som faktiskt är borttaget och vilka konsekvenser det ger.
-
-### Vad togs bort i PR #2
-
-**Backend (app.py: 4 025 → 3 450 rader, -575)**
-
-| Borttagen funktion | Konsekvens |
-|---|---|
-| Grön-gate (behover_dig blockerar kön) | Underkända byggen blockerar inte längre hela projektet |
-| Fas-lås (fas N kräver fas N-1 klar) | Delmoment kan byggas i fel ordning |
-| Fas-uppdelning (`_to_spec_phased`, `_run_fas_splitter`) | L-ärenden köas som en spec, delas inte i faser |
-| Spec-omskrivning (`_rewrite_spec_after_fail`) | Kvarstående problem läggs i en bilaga, ej inarbetade i specen |
-| `builder_instruktion` i job-kontraktet | Byggaren får ingen explicit instruktion om vad som förväntas |
-| `kontrolleraBuild()` frontend + `/api/build-queue/{id}/review` | "Kontrollera"-knappen borttagen — granskning efter bygge sker aldrig automatiskt |
-| 7 specialistagenter: `backend`, `devops`, `ai_ml`, `dokumentation`, `licens`, `i18n`, `observability` | Täckning i dessa domäner försvann helt |
-| `planeraren`-agenten och `/api/backlog/plan` | Ingen AI-satt byggordning på backloggen |
-| `/api/backlog/add` (urvalssteget) | Alla fynd läggs direkt i backlog utan manuellt urval |
-| `defer_backlog`-flaggan | Backlog committas alltid omedelbart efter granskning |
-| `friskförklara`-motivering (override_reason) | Underkända byggen kan markeras klara utan förklaring |
-| Vag-input-gate (`FÖR_VAGT` / `underlag`-bedömning) | För vaga idéer stoppas inte längre — alla körningar går hela vägen |
-| `_repair_truncated_json()` | Trunkerade LLM-svar räddar sig inte längre — JSON-parse misslyckas hårt |
-| `motivering`-fält i agenternas JSON-svar | Agenternas statusmotivering syns varken i UI eller export |
-
-**Frontend (index.html: ~197k → ~182k)**
-- Mörkt tema återställt (det ljusa temat togs bort)
-- "Avancerat"-sektioner borttagna — källrad, kontextfält, kodkälla alltid synliga
-- Urvalssteg (`fyndSelectWrap`) borttaget — beställaren väljer inte längre vilka fynd som ska byggas
-- `planBacklog()`, `_TYP_BADGE`, `ordning_nr`-badge borttagna
-- `sourceStatusLine` borttagen
-- Export av Promptsmedens motfrågor (questions-typen) borttagen
-- Settings-formuläret radat ur `<form>`-wrappern igen (Chrome-varningen återkommer)
+*Dokumentet uppdateras automatiskt vid varje iteration. Skicka enskilda P1/P2/P3-block till din byggare som fristående specifikationer.*
 
 ---
 
-### 10a. `intrim_result*.json` togs BORT ur .gitignore i PR #2 (REGRESSION)
-Vår finding 9q noterade att `intrim_result.json` saknades i `.gitignore` — och PR #2 rättade inte bara detta men FÖRVÄRRADE det: den raderade den glob-post som FAKTISKT FANNS (`intrim_result*.json`) ur `.gitignore`. Nu är hela `intrim_result*`-mönstret utan skydd. Nästa `git add .` riskerar att committa råa API-testsvar med fullt payload-innehåll.
+## 15. Nya fynd — iteration 9
+
+### 15a. `GET /api/build-queue` och `advance_build_queue()` läser utan lås
+`get_build_queue()` (rad ~437) och `advance_build_queue()` (rad ~591) anropar `_queue_load()` utan `_queue_lock`. Mönstret är identiskt med den redan funna `get_backlog()`-rasen (14a). Under en `/send`- eller `/patch`-operation kan en parallell GET läsa delvis skriven data. `advance_build_queue` används av "Bygg nästa"-knappen — om den läser stale data kan den returnera ett item som precis fått status `byggs` i ett annat anrop och WIP-kontrollen kringgås i UI (backend-sendet skyddar fortfarande under lock).
+
+**Åtgärd:** Samma fix som 14a — wrappa med `with _queue_lock:`:
+```python
+async def get_build_queue(project_id: str = ""):
+    with _queue_lock:
+        items = _queue_load()
+    ...
+
+async def advance_build_queue(project_id: str = ""):
+    with _queue_lock:
+        items = _queue_load()
+    ...
+```
+
+---
+
+### 15b. `build_queue_review()` har TOCTOU — initial läsning utan lås, `review_started_at` sätts för sent
+`build_queue_review()` läser `item` vid funktionsstarten utan `_queue_lock` (rad ~2871). Sedan kör 25 agenter i 3–10 minuter. Först därefter sätts `review_started_at` under lock. Det innebär att P1-K-skyddet (kontroll av `review_started_at`) aldrig kan fånga ett andra anrop som kom in medan agenterna körde — det andra anropet läser också `review_started_at=None` (ännu ej satt) och startar en andra fullgranskning parallellt. Resultaten skriver över varandra i `last_verdict`.
+
+**Åtgärd:** Sätt `review_started_at` OMEDELBART under lock i början av funktionen, innan agenterna startar:
+```python
+# Läs och lås direkt — sätt review_started_at innan agenter startar
+with _queue_lock:
+    items = _queue_load()
+    item = next((i for i in items if i.get("id") == item_id and not i.get("deleted_at")), None)
+    if not item:
+        return JSONResponse({"error": "Item hittades inte."}, status_code=404)
+    if item.get("review_started_at"):
+        return JSONResponse({"error": "En granskning pågår redan."}, status_code=409)
+    item["review_started_at"] = datetime.now().isoformat(timespec="seconds")
+    _queue_write(items)
+# Nu kan agenter köra — review_started_at är satt och blockerar parallella anrop
+```
+
+---
+
+### 15c. `backlog_to_spec()` och `backlog_verify_fix()` läser utan lås
+`POST /api/backlog/{id}/to-spec` (rad 2675) och `POST /api/backlog/{id}/verify` (rad ~2791) anropar `_backlog_load()` utan `_backlog_lock` för det initiala item-uppslaget. Om en granskningskörning lägger till items i backloggen precis när `to-spec` läser kan stale data returneras — item kan saknas trots att det finns, eller ha ett utdatat `finding`/`suggestion`-fält när det används som seed för Promptsmeden.
+
+**Åtgärd:** Wrappa initiala läsningar med lock (samma fix som 14a):
+```python
+# I backlog_to_spec:
+with _backlog_lock:
+    items = _backlog_load()
+item = next((i for i in items if i.get("id") == item_id), None)
+
+# I backlog_verify_fix:
+with _backlog_lock:
+    items = _backlog_load()
+item = next((i for i in items if i.get("id") == item_id), None)
+```
+
+---
+
+### 15d. `_progress_set()` kör GC på varje anrop — O(n) vid hög last
+`_progress_set()` kör en O(n) GC-loop (tar bort entries äldre än 15 min) på varje anrop. Med 25 agenter per granskning och 3 simultana granskningar = 75 GC-loopar under `_progress_lock` per körning. Alla dessa håller `_progress_lock` i turen sin, vilket blockerar `GET /api/progress/{id}` (SSE-polling från frontend). Vid hög last kan progress-uppdateringar fördröjas vilket gör att UI:t verkar hängt.
+
+**Åtgärd:** Flytta GC till ett separat bakgrundsjobb som körs var 5:e minut:
+```python
+async def _progress_gc_loop():
+    while True:
+        await asyncio.sleep(300)
+        cutoff = datetime.now().timestamp() - 900
+        with _progress_lock:
+            stale = [k for k, v in _progress.items() if v.get("updated", 0) < cutoff]
+            for k in stale:
+                _progress.pop(k, None)
+
+@app.on_event("startup")
+async def startup():
+    ...
+    asyncio.ensure_future(_progress_gc_loop())
+```
+
+---
+
+*Dokumentet uppdateras automatiskt vid varje iteration. Skicka enskilda P1/P2/P3-block till din byggare som fristående specifikationer.*
+im_result*.json`) ur `.gitignore`. Nu är hela `intrim_result*`-mönstret utan skydd. Nästa `git add .` riskerar att committa råa API-testsvar med fullt payload-innehåll.
 
 **Åtgärd:** Lägg tillbaka `intrim_result*.json` i `.gitignore` omedelbart.
 

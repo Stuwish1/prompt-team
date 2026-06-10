@@ -2486,3 +2486,799 @@ function sendBuilderMessage() {
 - Panelen stängs med ✕-knappen
 - Sidan laddar utan JS-fel (kontrollera browser console)
 
+
+---
+
+## Iteration 9 — Fynd från djupgranskning av executor, filsystem och settings (2026-06-10)
+
+*Källmaterial: app.py working tree (4387 rader, syntax OK, alla C1–C5/I1 fixes återapplicerade)*
+
+---
+
+### KRITISKT: app.py och index.html trunkeras upprepat
+
+app.py har trunkerades **tre gånger** i working tree under dessa sessioner. index.html är
+**fortfarande avhuggen** (slutar rad 4076 på `updateActiveProjBadge(`).
+
+Rotorsak oklar — troligen en race mellan editors som håller filen öppen och skrivoperationer.
+Varje gång en session återupptas måste filintegriteten verifieras med:
+```bash
+python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"
+tail -3 index.html   # ska sluta med </html>
+```
+
+**Lägg till som precommit-hook** (se TASK-10 nedan).
+
+---
+
+### AW — Path traversal i BUILD_RESULTS_DIR
+
+`/api/build-queue/{item_id}/result` (rad ~695 i app.py) bygger filnamn direkt från URL-parametern:
+
+```python
+ref = f"{item_id}_{attempt}.json"
+(BUILD_RESULTS_DIR / ref).write_text(...)
+```
+
+`item_id` valideras mot queue (måste finnas som ett levande item) — men om en angripare
+kan lägga in ett item med `id` innehållande `../` kan path traversal uppstå.
+Queue-items skapas med `uuid4()` idag, men det är ett invariant utan enforcement.
+
+Test visar att `BUILD_RESULTS_DIR / "../../../etc/passwd_1.json"` resolvar utanför mappen.
+
+**Fix:** Sanitera `ref` och verifiera att resolvet stannar inom `BUILD_RESULTS_DIR`:
+```python
+ref = f"{item_id}_{attempt}.json"
+target = (BUILD_RESULTS_DIR / ref).resolve()
+if not str(target).startswith(str(BUILD_RESULTS_DIR.resolve())):
+    return JSONResponse({"error": "Ogiltigt item_id"}, status_code=400)
+(BUILD_RESULTS_DIR / ref).write_text(...)
+```
+
+---
+
+### AX — `_time.sleep()` i executor-trådar blockerar thread pool
+
+`_or_chat()` (rad ~266) innehåller blockerande sleep vid transient-retry:
+
+```python
+_time.sleep(wait)   # 1.5s eller 3.0s
+```
+
+`_or_chat()` kallas via `run_in_executor(executor, run_agent, ...)` — dvs. inuti en
+av de 80 trådarna i ThreadPoolExecutor. Vid 429-stormar (t.ex. OpenRouter rate limit)
+kan alla 22+ parallella agenter trigga retry och blockera trådarna i 1.5–3s.
+
+Med djuplägets ~30 agenter och max_retries=2 kan upp till `30 × 3s = 90s` tråd-tid
+gå till sleep istället för arbete.
+
+**Fix:** Exponera retry-sleepen som ett asyncio-lager ovanpå executor:
+```python
+# I _or_chat: ta bort _time.sleep, returnera istället en retry-signal
+# I run_with_timeout (review-loopen): fånga signalen och gör asyncio.sleep
+```
+Alternativt: acceptera current behavior men dokumentera att 429-stormar degraderar
+throughput utan att krascha (korrekt beteende, suboptimalt).
+
+---
+
+### AY — `s["model"]` sätts utan validering i `post_settings`
+
+```python
+if "model" in payload:
+    s["model"] = payload["model"]   # ingen whitelist, ingen längdgräns
+```
+
+Modellsträngen används sedan som LLM-anrop mot OpenRouter. En klient kan sätta
+`model` till en 50 kB sträng som loggas i varje anrop och sparas till disk.
+
+**Fix (minimal):** Lägg till längdgräns:
+```python
+if "model" in payload and isinstance(payload["model"], str) and len(payload["model"]) < 200:
+    s["model"] = payload["model"]
+```
+
+---
+
+### AZ — index.html fortfarande avhuggen (E1 — P0)
+
+Filen slutar fortfarande vid rad 4076 (`updateActiveProjBadge(`).
+Komplett återställning från git HEAD kräver att allt efter rad 4076 läggs till:
+
+```javascript
+    updateActiveProjBadge();
+    loadHistory();
+    updateGithubSection();
+    refreshByggaBadge();
+  });
+  setTimeout(() => runHealthCheck(), 800);
+});
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    if (!document.getElementById('runBtn').disabled) runReview();
+  }
+});
+document.addEventListener('paste', (e) => {
+  if (currentMode === 'ny_funktion') return;
+  const items = (e.clipboardData || {}).items || [];
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      const file = it.getAsFile();
+      if (file) { _addScreenshot(file); showToast('📸 Skärmdump tillagd'); }
+    }
+  }
+});
+(async () => {
+  let lastMtime = null;
+  const poll = async () => {
+    try {
+      const r = await fetch('/api/version');
+      const { mtime } = await r.json();
+      if (lastMtime === null) { lastMtime = mtime; return; }
+      if (mtime !== lastMtime) { location.reload(); }
+    } catch {}
+  };
+  await poll();
+  setInterval(poll, 1000);
+})();
+</script>
+</body>
+</html>
+```
+
+Se TASK-00 nedan — detta är det ENDA som blockerar appen från att starta.
+
+---
+
+### Uppdaterad fullständig prioriteringslista
+
+| Prio | ID | Titel | Fil | Status |
+|---|---|---|---|---|
+| 🔴 P0 | AZ/E1 | `index.html` avhuggen — sidan är vit | index.html | ❌ ÖPPEN |
+| 🔴 P0 | G1 | Rebase/merge mot origin/main | Git | ❌ ÖPPEN |
+| 🟠 P1 | AR | `.gitignore` komplettering | .gitignore | ❌ ÖPPEN |
+| 🟠 P1 | AW | Path traversal i BUILD_RESULTS_DIR | app.py | ❌ ÖPPEN |
+| 🟠 P1 | AO | GC-loop för `_progress`/`_RUN_RESULTS` | app.py | ❌ ÖPPEN |
+| 🟡 P2 | AP | Byte-gräns för bilder | app.py | ❌ ÖPPEN |
+| 🟡 P2 | AY | `model`-fält saknar längdvalidering | app.py | ❌ ÖPPEN |
+| 🟡 P2 | AS | `run_id` path-param längdvalidering | app.py | ❌ ÖPPEN |
+| 🟡 P2 | AM | `project_context` sparas i queue-item | app.py | ❌ ÖPPEN |
+| 🟡 P2 | AL | `auto_advance`/`builder_review_depth` i UI | index.html | ❌ ÖPPEN |
+| 🟡 P2 | F1 | `AGENT_DISPLAY_NAMES` saknar 9 agenter | index.html | ❌ ÖPPEN |
+| 🔵 P3 | AX | `_time.sleep()` i executor-trådar | app.py | ⚠️ NOTERA |
+| 🔵 P3 | F4 | `_SEVERITY_GUIDE` saknar `motivering` | app.py | ❌ ÖPPEN |
+| 🔵 P3 | Chatbox | SSE-endpoint + `#builderPanel` | app.py+html | ❌ ÖPPEN |
+
+---
+
+## BYGGPLAN v2 — Uppdaterade fristående tasks
+
+*Varje task är komplett och kan skickas direkt till en byggagent.*
+*Ordningen är prioritetsordning — börja alltid med TASK-00.*
+
+---
+
+### TASK-00 · Återställ `index.html` (BLOCKERANDE — gör detta FÖRST)
+
+**Fil:** `index.html`
+
+**Problem:** Filen är avhuggen vid rad 4076. JS-parsern kastar `SyntaxError` → sidan är blank.
+
+**Vad du ska göra:**
+
+1. Kontrollera sista raden: `tail -3 index.html`
+2. Om sista raden INTE är `</html>` — öppna filen och lägg till följande i slutet:
+
+```javascript
+    updateActiveProjBadge();
+    loadHistory();
+    updateGithubSection();
+    refreshByggaBadge();
+  });
+  setTimeout(() => runHealthCheck(), 800);
+});
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    if (!document.getElementById('runBtn').disabled) runReview();
+  }
+});
+
+document.addEventListener('paste', (e) => {
+  if (currentMode === 'ny_funktion') return;
+  const items = (e.clipboardData || {}).items || [];
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      const file = it.getAsFile();
+      if (file) { _addScreenshot(file); showToast('📸 Skärmdump tillagd'); }
+    }
+  }
+});
+
+(async () => {
+  let lastMtime = null;
+  const poll = async () => {
+    try {
+      const r = await fetch('/api/version');
+      const { mtime } = await r.json();
+      if (lastMtime === null) { lastMtime = mtime; return; }
+      if (mtime !== lastMtime) { location.reload(); }
+    } catch {}
+  };
+  await poll();
+  setInterval(poll, 1000);
+})();
+</script>
+</body>
+</html>
+```
+
+**Acceptanskriterium:**
+- `tail -3 index.html` visar `</script>`, `</body>`, `</html>`
+- Sidan laddar i webbläsaren utan blank skärm
+- Browser console visar inga `SyntaxError`
+
+---
+
+### TASK-10 · Precommit-hook för filintegritet
+
+**Fil:** `.git/hooks/pre-commit` (nytt skript)
+
+**Bakgrund:** `app.py` och `index.html` har trunkerades upprepat. En precommit-hook
+fångar trasiga filer innan de committats.
+
+**Vad du ska göra:**
+
+Skapa filen `.git/hooks/pre-commit` med innehållet:
+```bash
+#!/bin/bash
+set -e
+
+# Verifiera app.py — Python-syntax
+python3 -c "import ast; ast.parse(open('app.py').read())" 2>/dev/null || {
+  echo "❌ app.py: syntaxfel — filen kan vara avhuggen"
+  exit 1
+}
+
+# Verifiera index.html — måste sluta med </html>
+LAST=$(tail -1 index.html | tr -d '[:space:]')
+if [ "$LAST" != "</html>" ]; then
+  echo "❌ index.html: sista raden är inte </html> — filen kan vara avhuggen"
+  echo "   Sista raden: $(tail -1 index.html)"
+  exit 1
+fi
+
+echo "✅ Filintegritet OK"
+```
+
+Gör den körbar: `chmod +x .git/hooks/pre-commit`
+
+**Acceptanskriterium:**
+- `git commit` med trasig `app.py` (avhuggen) avbryts med felmeddelande
+- `git commit` med korrekt kod passerar hooken
+
+---
+
+### TASK-11 · Path traversal i BUILD_RESULTS_DIR
+
+**Fil:** `app.py`
+
+**Problem:** `item_id` från URL-path används direkt i filnamn utan sanitering.
+
+**Vad du ska göra:**
+
+Hitta raden (sök: `ref = f"{item_id}_{attempt}.json"`).
+Lägg till path-traversal-skydd direkt efter:
+
+```python
+        ref = f"{item_id}_{attempt}.json"
+        # Path traversal guard — item_id från URL ska aldrig lämna BUILD_RESULTS_DIR
+        target = (BUILD_RESULTS_DIR / ref).resolve()
+        if not str(target).startswith(str(BUILD_RESULTS_DIR.resolve()) + "/"):
+            return JSONResponse({"error": "Ogiltigt item_id"}, status_code=400)
+        BUILD_RESULTS_DIR.mkdir(exist_ok=True)
+        (BUILD_RESULTS_DIR / ref).write_text(...)
+```
+
+**Acceptanskriterium:**
+- `python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"` → `OK`
+- En test med `item_id = "../evil"` returnerar HTTP 400
+
+---
+
+### TASK-12 · `model`-fält längdvalidering i `post_settings`
+
+**Fil:** `app.py`
+
+**Problem:** `s["model"] = payload["model"]` utan validering.
+
+**Vad du ska göra:**
+
+Hitta (sök: `if "model" in payload:`).
+Ersätt:
+```python
+    if "model" in payload:
+        s["model"] = payload["model"]
+```
+Med:
+```python
+    if "model" in payload and isinstance(payload["model"], str) and 0 < len(payload["model"]) < 200:
+        s["model"] = payload["model"]
+```
+
+**Acceptanskriterium:**
+- `python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"` → `OK`
+- En 300-teckens `model`-sträng sparas inte till settings
+
+
+---
+
+## Iteration 10 — Ny lokal commit, index.html fixad, 28 agenter saknas (2026-06-10)
+
+*Källmaterial: commit bfa1f45 (per-projekt agentinställningar + agent_arkitektur)*
+
+---
+
+### Statusuppdatering sedan Iteration 9
+
+| Åtgärd | Resultat |
+|---|---|
+| `index.html` avhuggen (E1/AZ) | ✅ FIXAD — återställd från commit `bfa1f45` |
+| `.gitignore` saknade `stop_app.bat`, `intrim_result*.json` (BB) | ✅ FIXAD direkt |
+| `app.py` C1–C5/I1 fixes | ✅ Alla bekräftade (syntax OK, 4386 rader) |
+
+**Ny lokal commit:** `bfa1f45` *feat: per-projekt agentinställningar, secrets-blockering och nya agenter*
+— Divergensen mot `origin/main` kvarstår (rebase behövs).
+
+---
+
+### BC — `request_disabled` i `/api/review` valideras inte mot kända agent-IDn
+
+```python
+# app.py rad ~2962
+request_disabled = payload.get("disabled_agents") or []
+disabled_agents = list(set(stored_disabled) | set(request_disabled))
+```
+
+`request_disabled` accepterar godtyckliga strängar utan whitelist-check.
+`agents_for_mode()` filtrerar sedan bort okända IDn (de matchar aldrig), så det
+ger inga fel — men en klient kan skicka en lista med 10 000 poster, vilket gör att
+`set(request_disabled)` konsumerar onödigt minne och processortid per review-anrop.
+
+Dessutom: `_ALWAYS_RUN_AGENT_IDS`-skyddet i `agents_for_mode()` håller, men det
+dokumenteras inte i review-endpointens svar — frontend vet inte om agenter tyst
+hölls aktiva trots att de skickades i `disabled_agents`.
+
+**Fix (minimal):**
+```python
+all_valid_ids = {a["id"] for a in SPECIALIST_AGENTS}
+request_disabled = [a for a in (payload.get("disabled_agents") or [])
+                    if isinstance(a, str) and a in all_valid_ids][:50]
+```
+
+---
+
+### BD — AGENT_DISPLAY_NAMES har bara 8 av 33 agenter
+
+`AGENT_DISPLAY_NAMES` i `index.html` listar bara 8 agenter. Alla 33 specialistagenter
+bör finnas — annars visas agenternas rå ID-sträng i inställnings-modalen.
+
+**Komplett lista att lägga till** (kontrollera att inga redan finns innan du skriver):
+
+```javascript
+const AGENT_DISPLAY_NAMES = {
+  // ── Befintliga (behåll) ──
+  kravanalytikern:     '📋 Kravanalytikern',
+  architecture:        '🏗️ Arkitekten',
+  ux:                  '🎨 UX-agenten',
+  database:            '🗄️ Databasagenten',
+  risk:                '⚠️ Riskvärderaren',
+  integration:         '🔗 Integrationsanalytikern',
+  prompt_smith:        '✍️ Promptsmeden',
+  completeness:        '✅ Kompletthetsgranskaren',
+  // ── Saknade — lägg till ──
+  hotmodelleraren:     '🎯 Hotmodelleraren',
+  dataskyddsjuristen:  '⚖️ Dataskyddsjuristen',
+  ui_design:           '🎨 UI/Design-granskaren',
+  frontend:            '🧱 Frontend-agenten',
+  responsive:          '📐 Responsivitet & Mobil',
+  accessibility:       '♿ Tillgänglighet',
+  visual_qa:           '📸 Visuell QA-granskaren',
+  datamigration:       '🔀 Datamigrationsarkitekten',
+  api:                 '📜 API-agenten',
+  error_handling:      '🧯 Felhantering',
+  edge_case:           '🪤 Edge-case-jägaren',
+  code_quality:        '📋 Kodkvalitet',
+  security:            '🔒 Säkerheten',
+  hemlighetsvakten:    '🔑 Hemlighetsvakten',
+  performance:         '⚡ Prestanda',
+  scalability:         '📈 Skalbarhet',
+  data_privacy:        '🛡️ Dataskydd',
+  testing:             '🧪 Test-agenten',
+  rotorsak:            '🔬 Rotorsaksanalytikern',
+  backend:             '⚙️ Backend-agenten',
+  devops:              '🚀 DevOps/CI-CD-agenten',
+  ai_ml:               '🤖 AI/ML-granskaren',
+  dokumentation:       '📖 Dokumentationsagenten',
+  licens:              '📦 Licens & Supply chain',
+  i18n:                '🌍 i18n-agenten',
+  observability:       '📡 Observability-agenten',
+  concurrency:         '🧵 Trådsäkerhetsagenten',
+  krypto:              '🔐 Kryptoagenten',
+  agent_arkitektur:    '🦾 Agentarkitekturagenten',
+};
+```
+
+---
+
+### Uppdaterad fullständig prioriteringslista (Iteration 10)
+
+| Prio | ID | Titel | Fil | Status |
+|---|---|---|---|---|
+| ✅ | E1/AZ | `index.html` avhuggen | index.html | **FIXAD** |
+| ✅ | BB/AR | `.gitignore` komplettering | .gitignore | **FIXAD** |
+| 🔴 P0 | G1 | Rebase/merge mot `origin/main` | Git | ❌ ÖPPEN |
+| 🟠 P1 | BD | `AGENT_DISPLAY_NAMES` saknar 28 agenter | index.html | ❌ ÖPPEN |
+| 🟠 P1 | AW | Path traversal i `BUILD_RESULTS_DIR` | app.py | ❌ ÖPPEN |
+| 🟠 P1 | AO | GC-loop för `_progress`/`_RUN_RESULTS` | app.py | ❌ ÖPPEN |
+| 🟡 P2 | BC | `request_disabled` saknar validering | app.py | ❌ ÖPPEN |
+| 🟡 P2 | AP | Byte-gräns för bilder | app.py | ❌ ÖPPEN |
+| 🟡 P2 | AY | `model`-fält saknar längdvalidering | app.py | ❌ ÖPPEN |
+| 🟡 P2 | AS | `run_id` path-param längdvalidering | app.py | ❌ ÖPPEN |
+| 🟡 P2 | AM | `project_context` sparas i queue-item | app.py | ❌ ÖPPEN |
+| 🟡 P2 | AL | `auto_advance`/`builder_review_depth` i UI | index.html | ❌ ÖPPEN |
+| 🔵 P3 | AX | `_time.sleep()` i executor-trådar | app.py | ⚠️ NOTERA |
+| 🔵 P3 | F4 | `_SEVERITY_GUIDE` saknar `motivering` | app.py | ❌ ÖPPEN |
+| 🔵 P3 | Chatbox | SSE-endpoint + `#builderPanel` | app.py+html | ❌ ÖPPEN |
+
+---
+
+## BYGGPLAN v3 — Alla fristående tasks i prioritetsordning
+
+*Skicka varje TASK som en separat instruktion till byggagenten.*
+*Börja alltid med lägst nummer — de är ordnade efter beroenden.*
+
+---
+
+### TASK-00 · Rebase mot origin/main *(git — gör detta manuellt)*
+
+**Problem:** Lokal branch har 9 commits som inte är på `origin/main`.
+`origin/main` har merge-commit `3654bd7` (MAX_INPUT 450k, bättre timeouts, exclude_paths) som saknas lokalt.
+
+**Manuell åtgärd:**
+```bash
+git fetch origin
+git rebase origin/main
+# Lös ev. konflikter — se till att reload=False och C1-C5 fixes behålls
+python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"
+tail -3 index.html  # ska sluta med </html>
+```
+
+---
+
+### TASK-01 · `AGENT_DISPLAY_NAMES` — ersätt med komplett lista
+
+**Fil:** `index.html`
+
+**Bakgrund:** Bara 8 av 33 agenter har visningsnamn. Inställnings-modalen visar rå ID för resten.
+
+**Vad du ska göra:**
+
+Hitta `const AGENT_DISPLAY_NAMES = {` i `index.html`.
+Ersätt hela objektet (fram till och med `};`) med:
+
+```javascript
+const AGENT_DISPLAY_NAMES = {
+  kravanalytikern:     '📋 Kravanalytikern',
+  architecture:        '🏗️ Arkitekten',
+  ux:                  '🎨 UX-agenten',
+  database:            '🗄️ Databasagenten',
+  risk:                '⚠️ Riskvärderaren',
+  integration:         '🔗 Integrationsanalytikern',
+  prompt_smith:        '✍️ Promptsmeden',
+  completeness:        '✅ Kompletthetsgranskaren',
+  hotmodelleraren:     '🎯 Hotmodelleraren',
+  dataskyddsjuristen:  '⚖️ Dataskyddsjuristen',
+  ui_design:           '🎨 UI/Design-granskaren',
+  frontend:            '🧱 Frontend-agenten',
+  responsive:          '📐 Responsivitet & Mobil',
+  accessibility:       '♿ Tillgänglighet',
+  visual_qa:           '📸 Visuell QA-granskaren',
+  datamigration:       '🔀 Datamigrationsarkitekten',
+  api:                 '📜 API-agenten',
+  error_handling:      '🧯 Felhantering',
+  edge_case:           '🪤 Edge-case-jägaren',
+  code_quality:        '📋 Kodkvalitet',
+  security:            '🔒 Säkerheten',
+  hemlighetsvakten:    '🔑 Hemlighetsvakten',
+  performance:         '⚡ Prestanda',
+  scalability:         '📈 Skalbarhet',
+  data_privacy:        '🛡️ Dataskydd',
+  testing:             '🧪 Test-agenten',
+  rotorsak:            '🔬 Rotorsaksanalytikern',
+  backend:             '⚙️ Backend-agenten',
+  devops:              '🚀 DevOps/CI-CD-agenten',
+  ai_ml:               '🤖 AI/ML-granskaren',
+  dokumentation:       '📖 Dokumentationsagenten',
+  licens:              '📦 Licens & Supply chain',
+  i18n:                '🌍 i18n-agenten',
+  observability:       '📡 Observability-agenten',
+  concurrency:         '🧵 Trådsäkerhetsagenten',
+  krypto:              '🔐 Kryptoagenten',
+  agent_arkitektur:    '🦾 Agentarkitekturagenten',
+};
+```
+
+**Acceptanskriterium:**
+- `Object.keys(AGENT_DISPLAY_NAMES).length` i browser console = 37
+- Inställnings-modalen visar namn+emoji för alla agenter (inga rå IDn)
+- Sidan laddar utan JS-fel
+
+---
+
+### TASK-02 · Periodisk GC-loop för `_progress` och `_RUN_RESULTS`
+
+**Fil:** `app.py`
+
+**Problem:** GC körs bara vid aktiva skrivningar — kraschade körningar läcker minne.
+
+**Vad du ska göra:**
+
+Lägg till funktionen OVANFÖR `startup()` (sök: `@app.on_event("startup")`):
+```python
+async def _memory_gc_loop():
+    """Rensa in-memory stores var 5:e minut — förhindrar minnesläcka vid kraschade körningar."""
+    while True:
+        await asyncio.sleep(300)
+        now = datetime.now().timestamp()
+        with _progress_lock:
+            stale = [k for k, v in _progress.items() if v.get("updated", 0) < now - 900]
+            for k in stale:
+                _progress.pop(k, None)
+        with _run_results_lock:
+            stale2 = [k for k, v in _RUN_RESULTS.items() if now - v["ts"] > 1800]
+            for k in stale2:
+                del _RUN_RESULTS[k]
+```
+
+Lägg till i `startup()` sist:
+```python
+    asyncio.get_event_loop().create_task(_memory_gc_loop())
+```
+
+**Acceptanskriterium:**
+- `_memory_gc_loop` finns i filen
+- `create_task(_memory_gc_loop())` anropas i `startup()`
+- `python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"` → OK
+
+---
+
+### TASK-03 · Path traversal-skydd i BUILD_RESULTS_DIR
+
+**Fil:** `app.py`
+
+**Problem:** `item_id` från URL-path kan innehålla `../` och skriva utanför `BUILD_RESULTS_DIR`.
+
+**Vad du ska göra:**
+
+Hitta `ref = f"{item_id}_{attempt}.json"` (i `build_queue_result`).
+Lägg till direkt efter:
+```python
+        ref = f"{item_id}_{attempt}.json"
+        target = (BUILD_RESULTS_DIR / ref).resolve()
+        if not str(target).startswith(str(BUILD_RESULTS_DIR.resolve()) + "/"):
+            return JSONResponse({"error": "Ogiltigt item_id"}, status_code=400)
+```
+
+**Acceptanskriterium:**
+- `python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"` → OK
+- En begäran med `item_id = "../evil"` returnerar HTTP 400
+
+---
+
+### TASK-04 · Validera `request_disabled` i `/api/review`
+
+**Fil:** `app.py`
+
+**Problem:** `disabled_agents` i review-payload accepteras utan whitelist — kan vara godtyckligt stor lista.
+
+**Vad du ska göra:**
+
+Hitta `request_disabled = payload.get("disabled_agents") or []` (förekommer 2 gånger).
+Ersätt BÅDA instanserna med:
+```python
+        _all_agent_ids = {a["id"] for a in SPECIALIST_AGENTS}
+        request_disabled = [a for a in (payload.get("disabled_agents") or [])
+                            if isinstance(a, str) and a in _all_agent_ids][:50]
+```
+
+**Acceptanskriterium:**
+- Båda instanserna uppdaterade
+- `python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"` → OK
+
+---
+
+### TASK-05 · Byte-gräns för bilder i `/api/review`
+
+**Fil:** `app.py`
+
+**Problem:** 6 bilder utan storleksgräns → kan ge 60 MB+ API-anrop.
+
+**Vad du ska göra:**
+
+Hitta `images = [i for i in images if isinstance(i, str) and i.startswith("data:image")][:6]`
+Ersätt med:
+```python
+        MAX_IMAGE_BYTES = 8_000_000
+        images = [i for i in images
+                  if isinstance(i, str) and i.startswith("data:image")
+                  and len(i) <= MAX_IMAGE_BYTES][:6]
+        if sum(len(i) for i in images) > 20_000_000:
+            images = []
+```
+
+**Acceptanskriterium:**
+- `MAX_IMAGE_BYTES` finns i filen
+- `python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"` → OK
+
+---
+
+### TASK-06 · `model`-fält och `run_id` path-param validering
+
+**Fil:** `app.py`
+
+**Bakgrund:** Två små valideringsluckor som fixas i ett svep.
+
+**Vad du ska göra:**
+
+**Del 1** — Hitta `if "model" in payload:` i `post_settings`.
+Ersätt:
+```python
+    if "model" in payload:
+        s["model"] = payload["model"]
+```
+Med:
+```python
+    if "model" in payload and isinstance(payload["model"], str) and 0 < len(payload["model"]) < 200:
+        s["model"] = payload["model"]
+```
+
+**Del 2** — Hitta `async def get_review_result(run_id: str):` och `async def get_progress(run_id: str):`.
+Lägg till som FÖRSTA sats i varje funktion:
+```python
+    if not run_id or len(run_id) > 64:
+        return JSONResponse({"ready": False}, status_code=404)
+```
+(För `get_progress`: returnera `{"phase": "okänd", "agents": {}}` istället.)
+
+**Acceptanskriterium:**
+- `python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"` → OK
+
+---
+
+### TASK-07 · `project_context` sparas i queue-item
+
+**Fil:** `app.py`
+
+**Problem:** Kontext byggs om vid varje `/send` — ändrade inställningar ger inkonsistent omförsök.
+
+**Vad du ska göra:**
+
+Hitta i `send_build_queue_item()` raden `item["status"] = "byggs"` inuti `with _queue_lock:`.
+Lägg till direkt efter:
+```python
+        item["project_context_snapshot"] = build_project_context(profile)
+```
+
+Hitta sedan i `job`-dict: `"project_context": build_project_context(profile),`
+Ersätt med:
+```python
+        "project_context": item.get("project_context_snapshot") or build_project_context(profile),
+```
+
+**Acceptanskriterium:**
+- `project_context_snapshot` sparas i `build_queue.json` efter ett `/send`
+- `python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"` → OK
+
+---
+
+### TASK-08 · `_SEVERITY_GUIDE` får `motivering`-fält
+
+**Fil:** `app.py`
+
+**Problem:** Agenter returnerar sällan `motivering` eftersom det inte ingår i schemat.
+
+**Vad du ska göra:**
+
+Hitta `_SEVERITY_GUIDE` (sök: `_SEVERITY_GUIDE = `).
+Lägg till `"motivering"` i schemat och gör det obligatoriskt:
+```python
+# Ändra schemat så det inkluderar motivering:
+'{"status":"GODKÄND"|"UNDERKÄND","findings":[...],"severity":"...","suggestions":[...],"motivering":"en mening på svenska"}'
+```
+
+**Acceptanskriterium:**
+- `"motivering"` finns i `_SEVERITY_GUIDE`
+- `python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"` → OK
+
+---
+
+### TASK-09 · Precommit-hook för filintegritet
+
+**Fil:** `.git/hooks/pre-commit` (ny fil)
+
+**Problem:** `app.py` och `index.html` har trunkerades upprepat utan att fångas.
+
+**Vad du ska göra:**
+
+Skapa `.git/hooks/pre-commit`:
+```bash
+#!/bin/bash
+set -e
+python3 -c "import ast; ast.parse(open('app.py').read())" 2>/dev/null || {
+  echo "❌ app.py: syntaxfel — troligen avhuggen"; exit 1
+}
+LAST=$(tail -1 index.html | tr -d '[:space:]')
+if [ "$LAST" != "</html>" ]; then
+  echo "❌ index.html: slutar inte med </html> — troligen avhuggen"
+  echo "   Sista raden: $(tail -1 index.html)"; exit 1
+fi
+echo "✅ Filintegritet OK"
+```
+
+Kör sedan: `chmod +x .git/hooks/pre-commit`
+
+**Acceptanskriterium:**
+- `git commit` med trasig `app.py` avbryts
+- `git commit` med komplett kod passerar
+
+---
+
+### TASK-10 · Chatbox — SSE-endpoint (skelett)
+
+**Fil:** `app.py`
+
+**Bakgrund:** Chatboxen för byggagenten kräver en SSE-ström. Detta är ett skelett — agentlogiken kopplas in senare.
+
+**Vad du ska göra:**
+
+Lägg till efter de befintliga build-queue-endpointsen:
+```python
+from fastapi.responses import StreamingResponse as _StreamingResponse
+
+@app.get("/api/builder/stream/{item_id}")
+async def builder_stream(item_id: str):
+    """SSE-ström för byggagentens realtidsoutput.
+    Events: builder_log {message}, builder_done {status, summary}, heartbeat {}"""
+    if not item_id or len(item_id) > 64:
+        return JSONResponse({"error": "Ogiltigt item_id"}, status_code=400)
+
+    async def _stream():
+        while True:
+            yield 'event: heartbeat\ndata: {}\n\n'
+            await asyncio.sleep(15)
+
+    return _StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+```
+
+**Acceptanskriterium:**
+- `GET /api/builder/stream/test123` returnerar `text/event-stream`
+- `python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"` → OK
+
+---
+
+### TASK-11 · Chatbox — `#builderPanel` i index.html
+
+*(Kräver att TASK-10 är klar)*
+
+**Fil:** `index.html`
+
+Se TASK-09 i BYGGPLAN v2 ovan för fullständig HTML/CSS/JS-specifikation.
+Acceptanskriterium är detsamma.
+

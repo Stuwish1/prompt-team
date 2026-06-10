@@ -1,0 +1,80 @@
+{
+  "session_id": "b24fd2f2-25f9-4c5f-9ae3-d11546c64a80",
+  "session_name": "itterera över systemet. · 10 Jun",
+  "mode": "ny_funktion",
+  "results": [],
+  "smith": {
+    "type": "questions",
+    "intro": "Idén 'itterera över systemet' är för vag för att skriva en byggbar spec för Prompt Team. Svara på frågorna nedan så kan jag formulera en precis uppgift.",
+    "questions": [
+      {
+        "id": "q1",
+        "text": "Vilket område i Prompt Team handlar det om?",
+        "options": [
+          "Webbappen (UI/UX, flöden, komponenter)",
+          "Agent-pipeline (granskningslogik, agenter, feedback-syntes)",
+          "Infrastruktur/backend (API, databas, deployment)",
+          "Annat / vet ej"
+        ]
+      },
+      {
+        "id": "q2",
+        "text": "Vad innebär 'iterera' i det här sammanhanget?",
+        "options": [
+          "Identifiera och åtgärda befintliga buggar eller brister",
+          "Förbättra/utöka en specifik funktion som redan finns",
+          "Bygga något nytt inom systemet",
+          "Annat / vet ej"
+        ]
+      },
+      {
+        "id": "q3",
+        "text": "Vad är det förväntade resultatet av iterationen?",
+        "options": [
+          "Bättre användarupplevelse (snabbare, enklare, tydligare)",
+          "Högre kvalitet på genererade prompts",
+          "Stabilare/säkrare teknisk grund",
+          "Annat / vet ej"
+        ]
+      }
+    ]
+  },
+  "krav_result": {
+    "underlag": "FÖR_VAGT",
+    "tolkad_ide": "",
+    "krav": [],
+    "oklarheter": [
+      "Vad innebär \"itterera över systemet\" konkret? Menas en genomgång, en förbättring, eller något annat?",
+      "Vilket \"system\" avses exakt? Prompt Teams webbapp, underliggande infrastruktur, eller något annat område?",
+      "Vad är målet med denna \"itteration\"? Vilket resultat förväntas?"
+    ],
+    "utanfor_scope": []
+  },
+  "completeness_result": {},
+  "bestallare_result": {},
+  "backlog_result": {
+    "items": [],
+    "note": ""
+  },
+  "backlog_items": [],
+  "final_prompt": "",
+  "stats": {
+    "total": 0,
+    "approved": 0,
+    "rejected": 0,
+    "errors": 0,
+    "skipped": 0,
+    "gated": true
+  },
+  "cost_summary": {
+    "tokens_in": 2013,
+    "tokens_out": 461,
+    "total_usd": 0.0091,
+    "by_agent": []
+  },
+  "saved": {
+    "local": true,
+    "cloud": true
+  },
+  "gated": "FÖR_VAGT"
+}

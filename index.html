@@ -429,6 +429,10 @@ body:not(.view-bestall)  .right-panel  { display: none; }
 body:not(.view-historik) .history-panel { display: none; }
 body.view-historik       .history-panel { flex: 1; max-width: none; width: auto; }
 body:not(.view-bygga)    #attByggaView  { display: none; }
+body:not(.view-chatt)    #chattView     { display: none; }
+body.view-chatt .left-panel,
+body.view-chatt .right-panel,
+body.view-chatt .history-panel { display: none; }
 
 /* ── MAIN TABS ── */
 .main-tabs { display: flex; gap: 4px; }
@@ -499,6 +503,26 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
   transition: all var(--t) var(--ease);
 }
 .backlog-chip:hover { border-color: var(--border-accent); color: var(--text1); }
+
+/* ── CHATT VIEW ── */
+#chattView { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.chat-container { display: flex; flex-direction: column; height: 100%; padding: 0 24px 16px; max-width: 860px; margin: 0 auto; width: 100%; }
+.chat-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 0 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.chat-header h2 { margin: 0; font-size: 16px; font-weight: 700; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 10px; }
+.chat-msg { padding: 10px 14px; border-radius: 8px; max-width: 85%; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.chat-msg.user { background: var(--accent); color: #fff; align-self: flex-end; }
+.chat-msg.assistant { background: var(--bg2); border: 1px solid var(--border); align-self: flex-start; }
+.chat-msg.streaming { opacity: 0.82; }
+.chat-tool-call { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-family: var(--mono); font-size: 12px; align-self: flex-start; max-width: 85%; }
+.chat-tool-call summary { font-weight: 600; list-style: none; cursor: pointer; color: var(--text2); }
+.chat-tool-call pre { margin: 6px 0 0; overflow-x: auto; white-space: pre-wrap; font-size: 11px; color: var(--text2); max-height: 200px; overflow-y: auto; }
+.chat-diff-area { border-top: 1px solid var(--border); padding: 12px 0; flex-shrink: 0; }
+.chat-diff-area h3 { margin: 0 0 8px; font-size: 13px; font-weight: 700; }
+.chat-diff-area pre { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; overflow-x: auto; font-size: 11px; font-family: var(--mono); max-height: 260px; overflow-y: auto; margin: 0 0 10px; white-space: pre-wrap; }
+.chat-input-area { border-top: 1px solid var(--border); padding: 10px 0 0; display: flex; gap: 8px; flex-shrink: 0; }
+.chat-input-area textarea { flex: 1; resize: vertical; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 14px; background: var(--bg1); color: var(--text1); min-height: 60px; }
+.chat-input-area textarea:focus { outline: none; border-color: var(--accent); }
 
 /* ── HISTORY PANEL ── */
 .history-panel {
@@ -694,6 +718,7 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
       <button class="main-tab active" data-view="bestall" onclick="switchView('bestall')">Beställ</button>
       <button class="main-tab" data-view="bygga" onclick="switchView('bygga')">Att bygga <span class="tab-badge" id="byggaBadge" style="display:none;">0</span></button>
       <button class="main-tab" data-view="historik" onclick="switchView('historik')">Historik</button>
+      <button class="main-tab" data-view="chatt" onclick="switchView('chatt')">Chatt</button>
     </nav>
   </div>
   <div class="header-actions">
@@ -1008,6 +1033,26 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
         <span class="phase-stat" id="queueStat"></span>
       </div>
       <div id="queueBox"><div style="font-size:12px;color:var(--text3);padding:20px 0;">Kön är tom — lägg en spec i byggkön så hamnar den här.</div></div>
+    </div>
+  </div>
+
+  <!-- CHATT VIEW -->
+  <div id="chattView">
+    <div class="chat-container">
+      <div class="chat-header">
+        <h2>Byggassistent</h2>
+        <button id="chat-clear-btn" class="btn btn-ghost" style="padding:4px 10px;font-size:12px;">Rensa</button>
+      </div>
+      <div id="chat-messages" class="chat-messages"></div>
+      <div id="chat-diff-area" class="chat-diff-area" style="display:none">
+        <h3>Ändringar (git diff)</h3>
+        <pre id="chat-diff-content"></pre>
+        <button id="chat-approve-btn" class="btn btn-primary" style="font-size:13px;">✅ Godkänn och pusha</button>
+      </div>
+      <div class="chat-input-area">
+        <textarea id="chat-input" placeholder="Beskriv vad du vill bygga... (Ctrl+Enter skickar)" rows="3"></textarea>
+        <button id="chat-send-btn" class="btn btn-primary">Skicka</button>
+      </div>
     </div>
   </div>
 </main>
@@ -1960,6 +2005,175 @@ function switchView(name) {
   if (name === 'bygga') loadAttBygga();
   if (name === 'historik') loadHistory();
 }
+
+// ── CHATT ────────────────────────────────────────────────────────
+(function() {
+  const CHAT_ID = 'main-' + Date.now();
+  let chatStreaming = false;
+
+  function appendChatMsg(role, text, streaming) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg ' + role + (streaming ? ' streaming' : '');
+    div.textContent = text;
+    document.getElementById('chat-messages').appendChild(div);
+    div.scrollIntoView({ block: 'end' });
+    return div;
+  }
+
+  function appendToolCall(name) {
+    const details = document.createElement('details');
+    details.className = 'chat-tool-call';
+    details.dataset.toolName = name;
+    details.innerHTML = '<summary>🔧 ' + name + '</summary><pre>...</pre>';
+    document.getElementById('chat-messages').appendChild(details);
+    details.scrollIntoView({ block: 'end' });
+    return details;
+  }
+
+  function updateLastToolCall(name, result) {
+    const calls = document.querySelectorAll('.chat-tool-call');
+    for (let i = calls.length - 1; i >= 0; i--) {
+      if (calls[i].dataset.toolName === name) {
+        calls[i].querySelector('pre').textContent = result || '';
+        break;
+      }
+    }
+  }
+
+  async function fetchAndShowDiff() {
+    try {
+      const resp = await fetch('/api/chat/diff');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const diff = (data.diff || '').trim();
+      const stat = (data.stat || '').trim();
+      if (!diff && !stat) return;
+      const area = document.getElementById('chat-diff-area');
+      const content = document.getElementById('chat-diff-content');
+      content.textContent = stat ? stat + '\n\n' + diff : diff;
+      area.style.display = '';
+      area.scrollIntoView({ block: 'end' });
+    } catch (e) { /* ignore */ }
+  }
+
+  async function chatSend() {
+    if (chatStreaming) return;
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (!message) return;
+
+    input.value = '';
+    chatStreaming = true;
+    document.getElementById('chat-send-btn').disabled = true;
+    document.getElementById('chat-diff-area').style.display = 'none';
+
+    appendChatMsg('user', message, false);
+    const assistantBubble = appendChatMsg('assistant', '', true);
+    let assistantText = '';
+
+    try {
+      const resp = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: CHAT_ID, message })
+      });
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let event;
+          try { event = JSON.parse(line.slice(6)); } catch (e) { continue; }
+
+          if (event.type === 'text') {
+            assistantText += event.content;
+            assistantBubble.textContent = assistantText;
+            assistantBubble.scrollIntoView({ block: 'end' });
+          } else if (event.type === 'tool_start') {
+            appendToolCall(event.name);
+          } else if (event.type === 'tool_result') {
+            updateLastToolCall(event.name, event.content);
+          } else if (event.type === 'done') {
+            assistantBubble.classList.remove('streaming');
+            fetchAndShowDiff();
+          }
+        }
+      }
+    } catch (e) {
+      assistantBubble.textContent = 'Fel: ' + e.message;
+      assistantBubble.classList.remove('streaming');
+    }
+
+    chatStreaming = false;
+    document.getElementById('chat-send-btn').disabled = false;
+  }
+
+  async function chatApprove() {
+    if (chatStreaming) return;
+    document.getElementById('chat-approve-btn').disabled = true;
+    document.getElementById('chat-diff-area').style.display = 'none';
+    appendChatMsg('user', '✅ Godkänn och pusha till GitHub', false);
+    const bubble = appendChatMsg('assistant', '', true);
+    let text = '';
+
+    try {
+      const resp = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: CHAT_ID, message: '__commit_push__' })
+      });
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let event;
+          try { event = JSON.parse(line.slice(6)); } catch (e) { continue; }
+          if (event.type === 'text') {
+            text += event.content;
+            bubble.textContent = text;
+            bubble.scrollIntoView({ block: 'end' });
+          } else if (event.type === 'done') {
+            bubble.classList.remove('streaming');
+          }
+        }
+      }
+    } catch (e) {
+      bubble.textContent = 'Fel: ' + e.message;
+      bubble.classList.remove('streaming');
+    }
+
+    document.getElementById('chat-approve-btn').disabled = false;
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('chat-send-btn').addEventListener('click', chatSend);
+    document.getElementById('chat-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) chatSend();
+    });
+    document.getElementById('chat-clear-btn').addEventListener('click', async function() {
+      await fetch('/api/chat/' + CHAT_ID, { method: 'DELETE' }).catch(() => {});
+      document.getElementById('chat-messages').innerHTML = '';
+      document.getElementById('chat-diff-area').style.display = 'none';
+    });
+    document.getElementById('chat-approve-btn').addEventListener('click', chatApprove);
+  });
+})();
 
 function selectProjectFromHeader(id) {
   if (typeof selectProject === 'function') selectProject(id);
@@ -3297,21 +3511,34 @@ function setGithubStatus(msg, type) {
 // ── HISTORY ──
 let _activeSessionId = null;
 
-async function loadHistory() {
+let _historyOffset = 0;
+const _historyLimit = 50;
+
+async function loadHistory(append = false) {
   const list = document.getElementById('historyList');
-  list.innerHTML = '<div class="history-loading">Laddar...</div>';
+  if (!append) {
+    _historyOffset = 0;
+    list.innerHTML = '<div class="history-loading">Laddar...</div>';
+  }
   try {
     const activeProj = getActiveProject();
     const pid = activeProj ? activeProj.id : '';
-    const url = pid ? `/api/sessions?project_id=${encodeURIComponent(pid)}` : '/api/sessions';
+    const base = pid ? `/api/sessions?project_id=${encodeURIComponent(pid)}` : '/api/sessions';
+    const url = `${base}&offset=${_historyOffset}&limit=${_historyLimit}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error('no sessions');
-    const sessions = await res.json();
-    if (!sessions || sessions.length === 0) {
-      list.innerHTML = '<div class="history-empty">Inga sparade sessioner ännu.<br><br>Kör en granskning så sparas den automatiskt.</div>';
-      return;
+    const data = await res.json();
+    // Support both new {items, total} format and legacy plain array
+    const sessions = Array.isArray(data) ? data : (data.items || []);
+    const total = Array.isArray(data) ? sessions.length : (data.total || sessions.length);
+    if (!append) {
+      if (sessions.length === 0) {
+        list.innerHTML = '<div class="history-empty">Inga sparade sessioner ännu.<br><br>Kör en granskning så sparas den automatiskt.</div>';
+        return;
+      }
+      list.innerHTML = '';
     }
-    list.innerHTML = sessions.map(s => `
+    const fragment = sessions.map(s => `
       <div class="history-item ${s.id === _activeSessionId ? 'active' : ''}" onclick="loadSession('${escHtml(s.id)}')" id="hist-${escHtml(s.id)}">
         <div class="history-name">${escHtml(s.name)}</div>
         <div class="history-meta">
@@ -3321,6 +3548,26 @@ async function loadHistory() {
         <button class="history-del" onclick="deleteSession(event, '${escHtml(s.id)}')" title="Radera">✕</button>
       </div>
     `).join('');
+    // Remove old load-more footer before appending new items
+    const oldFooter = list.querySelector('.history-footer');
+    if (oldFooter) oldFooter.remove();
+    list.insertAdjacentHTML('beforeend', fragment);
+    _historyOffset += sessions.length;
+    const shown = _historyOffset;
+    if (shown < total) {
+      list.insertAdjacentHTML('beforeend', `
+        <div class="history-footer" style="padding:8px;text-align:center;font-size:12px;color:var(--text-muted)">
+          Visar ${shown} av ${total} totalt
+          <button class="btn-ghost btn" style="margin-left:8px;font-size:11px" onclick="loadHistory(true)">Ladda fler</button>
+        </div>
+      `);
+    } else if (total > _historyLimit) {
+      list.insertAdjacentHTML('beforeend', `
+        <div class="history-footer" style="padding:6px;text-align:center;font-size:11px;color:var(--text-muted)">
+          Visar ${shown} av ${total} totalt
+        </div>
+      `);
+    }
   } catch(e) {
     list.innerHTML = '<div class="history-empty">Inga sessioner hittades.</div>';
   }

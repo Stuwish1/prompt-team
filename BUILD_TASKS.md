@@ -341,6 +341,75 @@ git push --force-with-lease
 
 ---
 
+### P1-L · `get_backlog()` läser utan lås — race condition (KRITISK)
+
+**Filer:** `app.py`
+**Rader:** `get_backlog()` (~rad 2601–2603)
+
+**Problem:**
+`GET /api/backlog` anropar `_backlog_load()` utan `_backlog_lock`. Alla skrivoperationer (`backlog_add_items`, `update_backlog_item`) hålls under `_backlog_lock`. Under en aktiv granskningskörning kan `run_backlog_agent` skriva till `backlog.json` samtidigt som frontend läser → delvis skriven JSON läses in → API returnerar korrupt data. Vid hög last med parallella granskningar inträffar detta rutinmässigt.
+
+**Gör så här:**
+```python
+@app.get("/api/backlog")
+async def get_backlog(project_id: str = ""):
+    with _backlog_lock:
+        items = _backlog_load()
+    if project_id:
+        items = [i for i in items if i.get("project_id") == project_id]
+    ...
+```
+
+**Acceptanskriterier:**
+- `GET /api/backlog` håller `_backlog_lock` under läsningen
+- Parallella granskningar och läsningar krockar inte
+
+---
+
+### P1-M · `PATCH /api/build-queue/{id}` saknar storleksgräns på `spec_markdown`
+
+**Filer:** `app.py`
+**Rader:** `patch_build_queue()` (~rad 460–480)
+
+**Problem:**
+`item["spec_markdown"] = payload["spec_markdown"]` utan längdbegränsning. En spec_markdown på 50 MB skrivs in i `build_queue.json` och hela filen läses vid varje queue-operation under `_queue_lock` → server fryser.
+
+**Gör så här:**
+```python
+if "spec_markdown" in payload:
+    val = str(payload["spec_markdown"])
+    if len(val) > 100_000:
+        return JSONResponse({"error": "spec_markdown överstiger 100 000 tecken."}, status_code=400)
+    item["spec_markdown"] = val
+```
+
+**Acceptanskriterier:**
+- PATCH med spec_markdown > 100 000 tecken returnerar HTTP 400
+- Normal spec (< 10 000 tecken) passerar
+
+---
+
+### P1-N · `POST /api/build-queue` accepterar tom `project_id`
+
+**Filer:** `app.py`
+**Rader:** `POST /api/build-queue`-endpointen (~rad 444–454)
+
+**Problem:**
+`project_id` valideras inte. Items med `project_id=""` visas i alla projektvyer och kan inte filtreras bort utan manuell patching.
+
+**Gör så här:**
+```python
+project_id = (payload.get("project_id") or "").strip()
+if not project_id:
+    return JSONResponse({"error": "project_id krävs."}, status_code=400)
+```
+
+**Acceptanskriterier:**
+- POST utan `project_id` (eller tomt) returnerar HTTP 400
+- POST med giltig `project_id` fungerar som tidigare
+
+---
+
 ### P1-K · Dubbel-anrops-skydd på `/api/build-queue/{id}/review`
 
 **Filer:** `app.py`
@@ -364,6 +433,108 @@ if item.get("review_started_at"):
 - En granskning som slutförts normalt blockerar inte nästa anrop (review_started_at=None)
 
 ---
+
+---
+
+### P1-O · `GET /api/build-queue` och `advance_build_queue()` läser utan lås
+
+**Filer:** `app.py`
+**Rader:** `get_build_queue()` (~rad 437), `advance_build_queue()` (~rad 591)
+
+**Problem:**
+Båda anropar `_queue_load()` utan `_queue_lock`. Under en aktiv `/send`- eller `/patch`-operation kan en parallell GET läsa delvis skriven queue-fil. `advance_build_queue` driver "Bygg nästa"-knappen — stale läsning kan returnera ett item som precis satts till `byggs`.
+
+**Gör så här:**
+```python
+@app.get("/api/build-queue")
+async def get_build_queue(project_id: str = ""):
+    with _queue_lock:
+        items = _queue_load()
+    if project_id:
+        items = [i for i in items if i.get("project_id") == project_id]
+    items = [i for i in items if not i.get("deleted_at")]
+    items.sort(key=lambda i: i.get("position", 0))
+    return {"items": items}
+
+@app.post("/api/build-queue/advance")
+async def advance_build_queue(project_id: str = ""):
+    with _queue_lock:
+        items = _queue_load()
+    items = [i for i in items if i.get("project_id") == project_id and not i.get("deleted_at")]
+    if any(i.get("status") == "byggs" for i in items):
+        return {"next_item": None, "reason": "Ett bygge pågår redan."}
+    queued = sorted([i for i in items if i.get("status") == "kö"],
+                    key=lambda i: i.get("position", 0))
+    return {"next_item": queued[0] if queued else None}
+```
+
+**Acceptanskriterier:**
+- Båda endpoints håller `_queue_lock` under läsningen
+- Inga race conditions med parallella `/send`- eller `/patch`-anrop
+
+---
+
+### P1-P · `build_queue_review()` sätter `review_started_at` för sent — TOCTOU
+
+**Filer:** `app.py`
+**Rader:** `build_queue_review()` (~rad 2865–2900)
+
+**Problem:**
+`review_started_at` sätts EFTER att agentrundan startat (2871: item läses utan lock → ~2900: lock tas och `review_started_at` sätts). Ett andra anrop som kommer in under de 3–10 minuter agenterna kör ser `review_started_at=None` och startar en andra parallell granskning. Båda resultaten skriver över `last_verdict`.
+
+**Gör så här — sätt flaggan INNAN agenter startar:**
+```python
+@app.post("/api/build-queue/{item_id}/review")
+async def build_queue_review(item_id: str, payload: dict):
+    # Läs, validera och sätt review_started_at — allt under lock
+    with _queue_lock:
+        items = _queue_load()
+        item = next((i for i in items if i.get("id") == item_id and not i.get("deleted_at")), None)
+        if not item:
+            return JSONResponse({"error": "Item hittades inte."}, status_code=404)
+        if item.get("review_started_at"):
+            return JSONResponse(
+                {"error": "En granskning pågår redan för detta item."},
+                status_code=409
+            )
+        item["review_started_at"] = datetime.now().isoformat(timespec="seconds")
+        _queue_write(items)
+    # Hädanefter: parallella anrop blockeras av review_started_at-checken ovan
+    # ... resten av funktionen oförändrad, ta bort det gamla review_started_at-blocket längre ned ...
+```
+Ta bort det befintliga blocket som sätter `review_started_at` längre ned i funktionen.
+
+**Acceptanskriterier:**
+- Två nästan-simultana POST till `/review` → det andra returnerar HTTP 409
+- `review_started_at` sätts inom millisekunder efter anropet, inte efter 3–10 min agentkörning
+
+---
+
+### P1-Q · `backlog_to_spec()` och `backlog_verify_fix()` läser utan lås
+
+**Filer:** `app.py`
+**Rader:** `backlog_to_spec()` (~rad 2675), `backlog_verify_fix()` (~rad 2791)
+
+**Problem:**
+Båda anropar `_backlog_load()` utan `_backlog_lock` för det initiala item-uppslaget. Om `run_backlog_agent` skriver till `backlog.json` samtidigt kan stale `finding`/`suggestion` användas som seed för Promptsmeden — specen genereras på fel underlag.
+
+**Gör så här (samma mönster som P1-L):**
+```python
+# I backlog_to_spec():
+with _backlog_lock:
+    items = _backlog_load()
+item = next((i for i in items if i.get("id") == item_id), None)
+
+# I backlog_verify_fix():
+with _backlog_lock:
+    items = _backlog_load()
+item = next((i for i in items if i.get("id") == item_id), None)
+```
+
+**Acceptanskriterier:**
+- Initialt uppslag håller `_backlog_lock`
+- Ingen ändring i funktionernas övriga logik
+
 
 ## PRIORITET 2 — Bryt den manuella loopen
 
@@ -792,6 +963,84 @@ Lägg till i `byggs`-kortets knappar:
 
 ---
 
+### P3-S · Skärp backlog-dedup i `_is_same_issue()`
+
+**Filer:** `app.py`
+**Rader:** `_is_same_issue()` (~rad 311–316)
+
+**Problem:**
+Tröskel 0.5 utan minimumkrav på overlap-storlek ger falskt positiva matchningar vid korta token-set. `"status"` och `"status_route"` delar prefix `"statu"` och matchar falskt. Semantiskt identiska issues med olika ordval (`"saknas validering"` vs `"ingen kontroll"`) skapar dubbletter.
+
+**Gör så här (kortsiktig fix):**
+```python
+def _is_same_issue(a_tokens: set, b_tokens: set) -> bool:
+    if not a_tokens or not b_tokens or len(a_tokens) < 2 or len(b_tokens) < 2:
+        return False
+    inter = len(a_tokens & b_tokens)
+    return inter >= 3 and inter / min(len(a    return inter >= 3 and inter / min(len(a_tokens), len(b_tokens)) >= 0.65
+```
+
+**Acceptanskriterier:**
+- Orelaterade issues med ett gemensamt ord matchas inte som dubbletter
+- Uppenbara dubbletter (identisk titel, lätt omformulerad) matchas fortfarande
+- Backlog-agentens `"regression": true`-flagga används som primärt filter
+
+---
+
+---
+
+### P3-T · `_progress_set()` kör O(n) GC på varje anrop — flytta till bakgrundsjobb
+
+**Filer:** `app.py`
+**Rader:** `_progress_set()` (~rad 2251–2265), `startup()` (~rad 31)
+
+**Problem:**
+GC-loopen körs under `_progress_lock` vid varje agentuppdatering. Med 25 agenter × 3 simultana granskningar = 75 GC-loopen hålls lock hårt. `GET /api/progress/{id}` blockeras, vilket fördröjer SSE-polling och gör att UI verkar hängt.
+
+**Gör så här:**
+Ta bort GC-koden ur `_progress_set()`:
+```python
+def _progress_set(run_id: str, **kwargs):
+    if not run_id:
+        return
+    with _progress_lock:
+        entry = _progress.setdefault(run_id, {"phase": "start", "agents": {}, "updated": 0})
+        agents_update = kwargs.pop("agent", None)
+        entry.update(kwargs)
+        if agents_update:
+            entry["agents"][agents_update[0]] = agents_update[1]
+        entry["updated"] = datetime.now().timestamp()
+        # GC borttagen — sker nu i bakgrundsjobbet
+```
+
+Lägg till bakgrundsjobb och starta i `startup()`:
+```python
+async def _progress_gc_loop():
+    """Städar _progress var 5:e minut istället för vid varje agentanrop."""
+    while True:
+        await asyncio.sleep(300)
+        cutoff = datetime.now().timestamp() - 900
+        with _progress_lock:
+            stale = [k for k, v in _progress.items() if v.get("updated", 0) < cutoff]
+            for k in stale:
+                _progress.pop(k, None)
+        if stale:
+            logger.debug("_progress GC: rensade %d stale entries", len(stale))
+
+@app.on_event("startup")
+async def startup():
+    _migrate_sessions()
+    asyncio.ensure_future(_progress_gc_loop())
+    # ... övriga startup-rader ...
+```
+
+**Acceptanskriterier:**
+- `_progress_set()` håller lock kortast möjliga tid (inga loopar)
+- GC körs var 5:e minut och loggar antalet rensade entries
+- `GET /api/progress/{id}` svarar snabbt även under hög last
+
+
+
 ## PRIORITET 4 — Teknisk skuld och framtida features
 
 ---
@@ -801,7 +1050,7 @@ Lägg till i `byggs`-kortets knappar:
 **Filer:** `app.py`
 **Rader:** ~3119, ~3158
 
-Ersätt `lambda: __import__("httpx").get(...)` med `lambda: httpx.get(...)` på båda ställena. `httpx` är redan importerat på rad 16.
+Ersätt `lambda: __import__("httpx").get(...)` med `lambda: httpx.get(...)`. `httpx` är redan importerat på rad 16.
 
 ---
 
@@ -810,23 +1059,7 @@ Ersätt `lambda: __import__("httpx").get(...)` med `lambda: httpx.get(...)` på 
 **Filer:** `app.py`
 **Rader:** `load_settings()` (~rad 96)
 
-Lägg till `_settings_lock` runt cache-läsning och uppdatering:
-```python
-def load_settings() -> dict:
-    if SETTINGS_FILE.exists():
-        try:
-            mtime = SETTINGS_FILE.stat().st_mtime
-            with _settings_lock:
-                if _settings_cache["mtime"] == mtime and _settings_cache["data"] is not None:
-                    return dict(_settings_cache["data"])
-            data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-            with _settings_lock:
-                _settings_cache.update(mtime=mtime, data=data)
-            return dict(data)
-        except Exception:
-            pass
-    return {...}
-```
+Lägg till `_settings_lock` runt cache-läsning och uppdatering för att undvika race condition om settings ändras under en aktiv granskning.
 
 ---
 
@@ -835,7 +1068,7 @@ def load_settings() -> dict:
 **Filer:** `app.py`
 **Rader:** ~617–621
 
-Funktionen anropas aldrig. Ta bort den och dess vilseledande docstring.
+Funktionen anropas aldrig. Ta bort den och dess vilseledande "Atomic-safe"-docstring.
 
 ---
 
@@ -880,7 +1113,6 @@ async def github_webhook(request: Request):
     payload = json.loads(body)
     if payload.get("ref") != f"refs/heads/{load_settings().get('self_branch','main')}":
         return {"ok": True, "skipped": "inte rätt branch"}
-    # Trigga asynkron granskning
     asyncio.ensure_future(review({
         "mode": "granska_kod",
         "input_text": f"Auto-granskning efter push av {payload.get('pusher',{}).get('name','okänd')}",
@@ -889,6 +1121,8 @@ async def github_webhook(request: Request):
     return {"ok": True, "triggered": True}
 ```
 
----
+**Acceptanskriterier:**
+- POST till `/api/webhook/github` med korrekt signatur triggar en granska_kod-körning
+- Felaktig signatur returnerar HTTP 401
 
 *Dokumentet uppdateras automatiskt vid varje iteration. Skicka enskilda P1/P2/P3-block till din byggare som fristående specifikationer.*

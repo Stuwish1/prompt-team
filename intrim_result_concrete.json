@@ -1,0 +1,452 @@
+{
+  "session_id": "a9cd7eac-05d2-45f6-8227-66fda8994786",
+  "session_name": "Lägg till en knapp 'Kopiera spec' bredvid · 10 Jun",
+  "mode": "ny_funktion",
+  "results": [
+    {
+      "id": "hotmodelleraren",
+      "name": "Hotmodelleraren",
+      "emoji": "🎯",
+      "phase": "pre",
+      "status": "GODKÄND",
+      "motivering": "Idén handlar om grundläggande UI/UX-interaktion och involverar inga komplexa bakomliggande processer, känslig data som hanteras på serversidan eller privilegierade operationer. Ingen specifik säkerhetsrisk bedöms uppstå utöver standardmässig webbsäkerhet som antas finnas på plats.",
+      "findings": [],
+      "severity": "LOW",
+      "suggestions": [],
+      "raw": "{\n  \"status\": \"GODKÄND\",\n  \"motivering\": \"Idén handlar om grundläggande UI/UX-interaktion och involverar inga komplexa bakomliggande processer, känslig data som hanteras på serversidan eller privilegierade operationer. Ingen specifik säkerhetsrisk bedöms uppstå utöver standardmässig webbsäkerhet som antas finnas på plats.\",\n  \"findings\": [],\n  \"severity\": \"LOW\",\n  \"suggestions\": []\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 1016,
+      "tokens_out": 118,
+      "cost_usd": 0.0006
+    },
+    {
+      "id": "dataskyddsjuristen",
+      "name": "Dataskyddsjuristen",
+      "emoji": "⚖️",
+      "phase": "pre",
+      "status": "GODKÄND",
+      "motivering": "Idén handlar primärt om UI/UX-funktionalitet och interagerar direkt med användarens lokala system (urklipp) utan att involvera insamling, lagring eller behandling av nya personuppgifter. Den vidrör därför inte GDPR-domänen.",
+      "findings": [],
+      "severity": "LOW",
+      "suggestions": [],
+      "raw": "{\n  \"status\": \"GODKÄND\",\n  \"motivering\": \"Idén handlar primärt om UI/UX-funktionalitet och interagerar direkt med användarens lokala system (urklipp) utan att involvera insamling, lagring eller behandling av nya personuppgifter. Den vidrör därför inte GDPR-domänen.\",\n  \"findings\": [],\n  \"severity\": \"LOW\",\n  \"suggestions\": []\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 1013,
+      "tokens_out": 100,
+      "cost_usd": 0.000554
+    },
+    {
+      "id": "architecture",
+      "name": "Arkitekten",
+      "emoji": "🏗️",
+      "phase": "pre",
+      "status": "UNDERKÄND",
+      "motivering": "Analysen fokuserade på potentiella arkitekturrisker och säkerhetsaspekter med att hämta data från DOM/lokaliserad lagring kontra servern, samt implikationer av UI-bibliotek för toast-meddelanden. Dessa aspekter är relevanta för att säkerställa en robust och säker implementering även för en 'enkel' UI-funktion.",
+      "findings": [
+        "Datan som ska kopieras till urklipp (den genererade specifikationen) specificeras inte var den ska hämtas ifrån. Om den hämtas direkt från DOM/klientens lokala lagring, finns en risk att den manipulerats av användaren lokalt, vilket kan leda till att felaktig/ofullständig data kopieras.",
+        "Beroende på hur UI för Prompt Team är implementerat, kan introduktionen av ett nytt toast-meddelande-system medföra nya beroenden eller kollidera med befintliga UI-mönster/bibliotek, vilket kan leda till inkonsistent UI eller ökad komplexitet i frontend-arkitekturen.",
+        "Avsaknad av specifikation kring felhantering. Vad händer om kopiering till urklipp misslyckas (t.ex. på grund av webbläsarens säkerhetsrestriktioner eller att användaren nekar behörighet)? Detta kan leda till en dålig användarupplevelse och potentiell dataförlust om användaren tror att data kopierats när den inte har det."
+      ],
+      "severity": "MEDIUM",
+      "suggestions": [
+        "Säkerställ att den data som kopieras till urklipp valideras på serversidan eller hämtas direkt från en betrodd källa på servern för att förhindra manipulation och säkerställa dataintegritet. Om hämtning från DOM är nödvändig, tydliggör eventuella datavalideringssteg.",
+        "Använd ett befintligt toast- eller meddelandesystem om Prompt Team redan har ett. Om inte, välj ett lättviktsbibliotek för att hantera toast-meddelanden som är kompatibelt med den befintliga frontend-stacken (vanilla JS) för att undvika överflödiga beroenden och säkerställa ett konsekvent utseende.",
+        "Implementera robust felhantering för kopieringsfunktionen. Informera användaren om kopieringen misslyckas och ge potentialt råd om hur man löser problemet (t.ex. att webbläsaren blockerar och hur man tillåter det manuellt).",
+        "Överväg en 'fallback'-mekanism om webbläsarens Clipboard API inte är tillgängligt eller nekas, som att markera texten för manuell kopiering."
+      ],
+      "raw": "{\n  \"status\": \"UNDERKÄND\",\n  \"motivering\": \"Analysen fokuserade på potentiella arkitekturrisker och säkerhetsaspekter med att hämta data från DOM/lokaliserad lagring kontra servern, samt implikationer av UI-bibliotek för toast-meddelanden. Dessa aspekter är relevanta för att säkerställa en robust och säker implementering även för en 'enkel' UI-funktion.\",\n  \"findings\": [\n    \"Datan som ska kopieras till urklipp (den genererade specifikationen) specificeras inte var den ska hämtas ifrån. Om den hämtas direkt från DOM/klientens lokala lagring, finns en risk att den manipulerats av användaren lokalt, vilket kan leda till att felaktig/ofullständig data kopieras.\",\n    \"Beroende på hur UI för Prompt Team är implementerat, kan introduktionen av ett nytt toast-meddelande-system medföra nya beroenden eller kollidera med befintliga UI-mönster/bibliotek, vilket kan leda till inkonsistent UI eller ökad komplexitet i frontend-arkitekturen.\",\n    \"Avsaknad av specifikation kring felhantering. Vad händer om kopiering till urklipp misslyckas (t.ex. på grund av webbläsarens säkerhetsrestriktioner eller att användaren nekar behörighet)? Detta kan leda till en dålig användarupplevelse och potentiell dataförlust om användaren tror att data kopierats när den inte har det.\"\n  ],\n  \"severity\": \"MEDIUM\",\n  \"suggestions\": [\n    \"Säkerställ att den data som kopieras till urklipp valideras på serversidan eller hämtas direkt från en betrodd källa på servern för att förhindra manipulation och säkerställa dataintegritet. Om hämtning från DOM är nödvändig, tydliggör eventuella datavalideringssteg.\",\n    \"Använd ett befintligt toast- eller meddelandesystem om Prompt Team redan har ett. Om inte, välj ett lättviktsbibliotek för att hantera toast-meddelanden som är kompatibelt med den befintliga frontend-stacken (vanilla JS) för att undvika överflödiga beroenden och säkerställa ett konsekvent utseende.\",\n    \"Implementera robust felhantering för kopieringsfunktionen. Informera användaren om kopieringen misslyckas och ge potentialt råd om hur man löser problemet (t.ex. att webbläsaren blockerar och hur man tillåter det manuellt).\",\n    \"Överväg en 'fallback'-mekanism om webbläsarens Clipboard API inte är tillgängligt eller nekas, som att markera texten för manuell kopiering.\"\n  ]\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 988,
+      "tokens_out": 642,
+      "cost_usd": 0.001901
+    },
+    {
+      "id": "integration",
+      "name": "Integrationsanalytikern",
+      "emoji": "🔗",
+      "phase": "pre",
+      "status": "UNDERKÄND",
+      "motivering": "Har bedömt idén om en 'Kopiera spec'-funktion. Även om det primärt är en UI-funktion, har den implikationer för integrationsarkitekturen vad gäller testning och potentiella ramverksberoenden, men inga direkta integrationer med backend eller externa tjänster. Det finns även behov av att klargöra hur UI/UX-detaljer som toast-meddelandet ska implementeras, vilket påverkar frontend-arkitekturen.",
+      "findings": [
+        "Krav K3 och K4 (toast-meddelande) saknar specifikation för vilket bibliotek/ramverk/CSS-ramverk som ska användas för att implementera toast-funktionaliteten. Beroende på val kan det introducera ett nytt externt beroende i frontend-arkitekturen eller kräva implementation från grunden.",
+        "Inget förslag finns för att hantera scenarion där kopiering till urklipp misslyckas (t.ex. webbläsarrestriktioner, användarbehörigheter). Detta är ett UI/UX-problem men kan också påverka felrapporteringsmekanismer."
+      ],
+      "severity": "MEDIUM",
+      "suggestions": [
+        "Specificera vilket frontend-bibliotek eller vilken metod som ska användas för att implementera toast-meddelanden. Överväg befintliga UI-komponentbibliotek om sådana används, annars kan ett lättviktigt bibliotek som 'Toastify-JS' eller en egen enkel implementation övervägas. Detta bör dokumenteras för frontend-utvecklarna.",
+        "Definiera beteendet och användaråterkopplingen om kopiering till urklipp misslyckas. Ska ett alternativt meddelande visas? Ska knappen bli inaktiv? Detta påverkar frontend-logiken.",
+        "Teststrategin bör inkludera enhetstester och end-to-end-tester för kopieringsfunktionen och toast-meddelanden i olika webbläsare, samt tester för misslyckade kopieringsförsök om det finns felhantering."
+      ],
+      "raw": "{\n  \"status\": \"UNDERKÄND\",\n  \"motivering\": \"Har bedömt idén om en 'Kopiera spec'-funktion. Även om det primärt är en UI-funktion, har den implikationer för integrationsarkitekturen vad gäller testning och potentiella ramverksberoenden, men inga direkta integrationer med backend eller externa tjänster. Det finns även behov av att klargöra hur UI/UX-detaljer som toast-meddelandet ska implementeras, vilket påverkar frontend-arkitekturen.\",\n  \"findings\": [\n    {\n      \"description\": \"Krav K3 och K4 (toast-meddelande) saknar specifikation för vilket bibliotek/ramverk/CSS-ramverk som ska användas för att implementera toast-funktionaliteten. Beroende på val kan det introducera ett nytt externt beroende i frontend-arkitekturen eller kräva implementation från grunden.\",\n      \"severity\": \"LOW\"\n    },\n    {\n      \"description\": \"Inget förslag finns för att hantera scenarion där kopiering till urklipp misslyckas (t.ex. webbläsarrestriktioner, användarbehörigheter). Detta är ett UI/UX-problem men kan också påverka felrapporteringsmekanismer.\",\n      \"severity\": \"LOW\"\n    }\n  ],\n  \"suggestions\": [\n    {\n      \"description\": \"Specificera vilket frontend-bibliotek eller vilken metod som ska användas för att implementera toast-meddelanden. Överväg befintliga UI-komponentbibliotek om sådana används, annars kan ett lättviktigt bibliotek som 'Toastify-JS' eller en egen enkel implementation övervägas. Detta bör dokumenteras för frontend-utvecklarna.\",\n      \"severity\": \"MEDIUM\"\n    },\n    {\n      \"description\": \"Definiera beteendet och användaråterkopplingen om kopiering till urklipp misslyckas. Ska ett alternativt meddelande visas? Ska knappen bli inaktiv? Detta påverkar frontend-logiken.\",\n      \"severity\": \"MEDIUM\"\n    },\n    {\n      \"description\": \"Teststrategin bör inkludera enhetstester och end-to-end-tester för kopieringsfunktionen och toast-meddelanden i olika webbläsare, samt tester för misslyckade kopieringsförsök om det finns felhantering.\",\n      \"severity\": \"LOW\"\n    }\n  ]\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 1047,
+      "tokens_out": 564,
+      "cost_usd": 0.001724
+    },
+    {
+      "id": "risk",
+      "name": "Riskvärderaren",
+      "emoji": "⚠️",
+      "phase": "pre",
+      "status": "UNDERKÄND",
+      "motivering": "Idén involverar klient-sidig funktionalitet för urklippshantering och visuell feedback, vilket introducerar tekniska beroenderisker och kompatibilitetsrisker som måste beaktas i specifikationen.",
+      "findings": [
+        "Risk: Användning av webbläsar-API:er för urklippshantering → Konsekvens: Variationer i webbläsarstöd, potentiella säkerhetsbegränsningar och användarinteraktion krävs. → Mitigation: Specen måste innehålla krav på felhantering och fallback-mekanismer för webbläsare som inte stöder 'navigator.clipboard.writeText()' fullt ut (t.ex. äldre IE/Edge eller Safari utan https).",
+        "Risk: Visuell bekräftelse med toast-meddelande → Konsekvens: Kräver specifik design och implementering som kan påverka UX eller kollidera med befintlig UI/bibliotek. → Mitigation: Specen bör inkludera designspecifikationer för toast-meddelandet (position, varaktighet, stil) eller referera till befintliga UI-komponenter för detta."
+      ],
+      "severity": "MEDIUM",
+      "suggestions": [
+        "Inkludera detaljerade instruktioner för hur kopieringsfunktionen ska hantera webbläsare som saknar eller begränsar 'navigator.clipboard.writeText()'.",
+        "Definiera design och beteende för toast-meddelandet, inklusive om det ska vara en befintlig komponent eller en ny implementering."
+      ],
+      "raw": "{\n  \"status\": \"UNDERKÄND\",\n  \"motivering\": \"Idén involverar klient-sidig funktionalitet för urklippshantering och visuell feedback, vilket introducerar tekniska beroenderisker och kompatibilitetsrisker som måste beaktas i specifikationen.\",\n  \"findings\": [\n    \"Risk: Användning av webbläsar-API:er för urklippshantering → Konsekvens: Variationer i webbläsarstöd, potentiella säkerhetsbegränsningar och användarinteraktion krävs. → Mitigation: Specen måste innehålla krav på felhantering och fallback-mekanismer för webbläsare som inte stöder 'navigator.clipboard.writeText()' fullt ut (t.ex. äldre IE/Edge eller Safari utan https).\",\n    \"Risk: Visuell bekräftelse med toast-meddelande → Konsekvens: Kräver specifik design och implementering som kan påverka UX eller kollidera med befintlig UI/bibliotek. → Mitigation: Specen bör inkludera designspecifikationer för toast-meddelandet (position, varaktighet, stil) eller referera till befintliga UI-komponenter för detta.\"\n  ],\n  \"severity\": \"MEDIUM\",\n  \"suggestions\": [\n    \"Inkludera detaljerade instruktioner för hur kopieringsfunktionen ska hantera webbläsare som saknar eller begränsar 'navigator.clipboard.writeText()'.\",\n    \"Definiera design och beteende för toast-meddelandet, inklusive om det ska vara en befintlig komponent eller en ny implementering.\"\n  ]\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 2160,
+      "tokens_out": 481,
+      "cost_usd": 0.00185
+    },
+    {
+      "id": "ux",
+      "name": "UX-agenten",
+      "emoji": "🧭",
+      "phase": "pre",
+      "status": "UNDERKÄND",
+      "motivering": "Idén beskriver ett nytt gränssnittselement och interaktion, vilket direkt berör UX-, flödes- och tillgänglighetsöverväganden, samt hur användaren uppfattar och agerar i Prompt Team-applikationen.",
+      "findings": [
+        "Användaren kan uppleva frustration om kopieringsfunktionen misslyckas tyst, t.ex. på grund av webbläsarbegränsningar eller behörighetsproblem. Det finns inget krav eller förslag på felhantering för kopieringsfunktionen.",
+        "Användaren kan potentiellt klicka på kopieringsknappen flera gånger i snabb följd, vilket kan leda till repetitiva toast-meddelanden eller en känsla av att funktionen är ostabil om det inte hanteras korrekt.",
+        "Kravet nämner inte att toast-meddelandet ska vara tillgängligt. Användare med nedsatt syn kan missa visuell bekräftelse och behöver en alternativ form av feedback (t.ex. ARIA live regions).",
+        "Inga instruktioner finns för positionering eller stil för toast-meddelandet, vilket kan leda till att det blockerar viktig information eller är inkonsekvent med Prompt Teams befintliga designsystem (om sådant finns)."
+      ],
+      "severity": "MEDIUM",
+      "suggestions": [
+        "Inkludera ett krav på felhantering för kopieringsfunktionen. Om kopiering misslyckas, bör ett tydligt men icke-påträngande felmeddelande visas (t.ex. 'Kopiering misslyckades. Se konsolen för mer information eller prova igen.').",
+        "Lägg till ett krav att kopieringsknappen tillfälligt inaktiveras eller att en visuell indikation (t.ex. en snurrande ikon) visas under kopieringsprocessen, samt att endast ett toast-meddelande kan visas åt gången.",
+        "Formulera ett krav som säkerställer att toast-meddelandet är tillgängligt, exempelvis genom att använda ARIA live regions för att meddela skärmläsare vid framgångsrik kopiering.",
+        "Inkludera riktlinjer för toast-meddelandets placering (t.ex. 'längst ner i mitten'), dess varaktighet (t.ex. '3 sekunder') och se till att dess utseende och beteende är konsekvent med befintliga UI-element i Prompt Team."
+      ],
+      "raw": "{\n  \"status\": \"UNDERKÄND\",\n  \"motivering\": \"Idén beskriver ett nytt gränssnittselement och interaktion, vilket direkt berör UX-, flödes- och tillgänglighetsöverväganden, samt hur användaren uppfattar och agerar i Prompt Team-applikationen.\",\n  \"findings\": [\n    {\n      \"finding\": \"Användaren kan uppleva frustration om kopieringsfunktionen misslyckas tyst, t.ex. på grund av webbläsarbegränsningar eller behörighetsproblem. Det finns inget krav eller förslag på felhantering för kopieringsfunktionen.\",\n      \"severity\": \"MEDIUM\"\n    },\n    {\n      \"finding\": \"Användaren kan potentiellt klicka på kopieringsknappen flera gånger i snabb följd, vilket kan leda till repetitiva toast-meddelanden eller en känsla av att funktionen är ostabil om det inte hanteras korrekt.\",\n      \"severity\": \"LOW\"\n    },\n    {\n      \"finding\": \"Kravet nämner inte att toast-meddelandet ska vara tillgängligt. Användare med nedsatt syn kan missa visuell bekräftelse och behöver en alternativ form av feedback (t.ex. ARIA live regions).\",\n      \"severity\": \"MEDIUM\"\n    },\n    {\n      \"finding\": \"Inga instruktioner finns för positionering eller stil för toast-meddelandet, vilket kan leda till att det blockerar viktig information eller är inkonsekvent med Prompt Teams befintliga designsystem (om sådant finns).\",\n      \"severity\": \"LOW\"\n    }\n  ],\n  \"severity\": \"MEDIUM\",\n  \"suggestions\": [\n    \"Inkludera ett krav på felhantering för kopieringsfunktionen. Om kopiering misslyckas, bör ett tydligt men icke-påträngande felmeddelande visas (t.ex. 'Kopiering misslyckades. Se konsolen för mer information eller prova igen.').\",\n    \"Lägg till ett krav att kopieringsknappen tillfälligt inaktiveras eller att en visuell indikation (t.ex. en snurrande ikon) visas under kopieringsprocessen, samt att endast ett toast-meddelande kan visas åt gången.\",\n    \"Formulera ett krav som säkerställer att toast-meddelandet är tillgängligt, exempelvis genom att använda ARIA live regions för att meddela skärmläsare vid framgångsrik kopiering.\",\n    \"Inkludera riktlinjer för toast-meddelandets placering (t.ex. 'längst ner i mitten'), dess varaktighet (t.ex. '3 sekunder') och se till att dess utseende och beteende är konsekvent med befintliga UI-element i Prompt Team.\"\n  ]\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 1053,
+      "tokens_out": 656,
+      "cost_usd": 0.001956
+    },
+    {
+      "id": "ui_design",
+      "name": "UI/Design-granskaren",
+      "emoji": "🎨",
+      "phase": "pre",
+      "status": "UNDERKÄND",
+      "motivering": "En ny interaktiv komponent (knapp) och ett systemmeddelande (toast) ska introduceras. Detta kräver specificering kring design tokens, visuell hierarki, färger, kontrast och konsistens för att säkerställa en högkvalitativ och användarvänlig implementering.",
+      "findings": [
+        "K1: Design tokens måste definieras för den nya knappen 'Kopiera spec' för att säkerställa konsekvent styling (t.ex. bakgrundsfärg, textfärg, hovringstillstånd, fokusindikator).",
+        "K2: Visuell hierarki måste specificeras för att klargöra om 'Kopiera spec'-knappen är primär, sekundär eller tertiär i relation till exportknappen. Om exportknappen redan är primär bör den nya knappen vara sekundär.",
+        "K3: Design tokens för toast-meddelandet måste definieras (t.ex. bakgrundsfärg, textfärg, ikonfärg om tillämpligt, skugga/höjd) för att säkerställa att det följer ett etablerat mönster. Kontrastförhållandet för text i toast-meddelandet mot dess bakgrundsfärg måste uppfylla WCAG AA (minst 4.5:1).",
+        "K4: Plats och varaktighet för toast-meddelandet behöver explicit definieras för att säkerställa optimal användarupplevelse och för att det inte blockerar viktig information. Överväg en fade-ut animation och respekt för prefers-reduced-motion.",
+        "K5: Om det finns ett designsystem för Prompt Team, måste de nya komponenterna (knappen och toasten) baseras på befintliga komponenter eller designmönster för att upprätthålla konsistens."
+      ],
+      "severity": "MEDIUM",
+      "suggestions": [
+        "Definiera design tokens för knappen (t.ex. `--color-button-primary-bg`, `--color-button-primary-text`, `--color-button-secondary-bg`, `--color-button-secondary-text`, `--color-button-hover-bg`, `--color-button-focus-ring`) och använd dessa i CSS. Bestäm dess visuell hierarki (t.ex. primär eller sekundär).",
+        "Definiera design tokens för toast-komponenten (t.ex. `--color-toast-success-bg`, `--color-toast-success-text`). Specifiera exakt text- och bakgrundsfärger för toasten med tillhörande hexkoder och bekräfta att de uppfyller WCAG AA-krav för kontrast.",
+        "Specificera var toast-meddelandet ska visas på skärmen (t.ex. 'nederkant, centrerad' eller 'övre högra hörnet') och hur länge det ska visas (t.ex. 3 sekunder, med en fade-ut-animation). Addera hantering för `prefers-reduced-motion`.",
+        "Om inga etablerade designpattern finns, ta fram en minsta uppsättning stilriktlinjer för dessa nya komponenter för att säkerställa enhetlighet i Prompt Team."
+      ],
+      "raw": "{\n  \"status\": \"UNDERKÄND\",\n  \"motivering\": \"En ny interaktiv komponent (knapp) och ett systemmeddelande (toast) ska introduceras. Detta kräver specificering kring design tokens, visuell hierarki, färger, kontrast och konsistens för att säkerställa en högkvalitativ och användarvänlig implementering.\",\n  \"findings\": [\n    \"K1: Design tokens måste definieras för den nya knappen 'Kopiera spec' för att säkerställa konsekvent styling (t.ex. bakgrundsfärg, textfärg, hovringstillstånd, fokusindikator).\",\n    \"K2: Visuell hierarki måste specificeras för att klargöra om 'Kopiera spec'-knappen är primär, sekundär eller tertiär i relation till exportknappen. Om exportknappen redan är primär bör den nya knappen vara sekundär.\",\n    \"K3: Design tokens för toast-meddelandet måste definieras (t.ex. bakgrundsfärg, textfärg, ikonfärg om tillämpligt, skugga/höjd) för att säkerställa att det följer ett etablerat mönster. Kontrastförhållandet för text i toast-meddelandet mot dess bakgrundsfärg måste uppfylla WCAG AA (minst 4.5:1).\",\n    \"K4: Plats och varaktighet för toast-meddelandet behöver explicit definieras för att säkerställa optimal användarupplevelse och för att det inte blockerar viktig information. Överväg en fade-ut animation och respekt för prefers-reduced-motion.\",\n    \"K5: Om det finns ett designsystem för Prompt Team, måste de nya komponenterna (knappen och toasten) baseras på befintliga komponenter eller designmönster för att upprätthålla konsistens.\"\n  ],\n  \"severity\": \"MEDIUM\",\n  \"suggestions\": [\n    \"Definiera design tokens för knappen (t.ex. `--color-button-primary-bg`, `--color-button-primary-text`, `--color-button-secondary-bg`, `--color-button-secondary-text`, `--color-button-hover-bg`, `--color-button-focus-ring`) och använd dessa i CSS. Bestäm dess visuell hierarki (t.ex. primär eller sekundär).\",\n    \"Definiera design tokens för toast-komponenten (t.ex. `--color-toast-success-bg`, `--color-toast-success-text`). Specifiera exakt text- och bakgrundsfärger för toasten med tillhörande hexkoder och bekräfta att de uppfyller WCAG AA-krav för kontrast.\",\n    \"Specificera var toast-meddelandet ska visas på skärmen (t.ex. 'nederkant, centrerad' eller 'övre högra hörnet') och hur länge det ska visas (t.ex. 3 sekunder, med en fade-ut-animation). Addera hantering för `prefers-reduced-motion`.\",\n    \"Om inga etablerade designpattern finns, ta fram en minsta uppsättning stilriktlinjer för dessa nya komponenter för att säkerställa enhetlighet i Prompt Team.\"\n  ]\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 1066,
+      "tokens_out": 735,
+      "cost_usd": 0.002157
+    },
+    {
+      "id": "frontend",
+      "name": "Frontend-agenten",
+      "emoji": "🧱",
+      "phase": "pre",
+      "status": "UNDERKÄND",
+      "motivering": "Idén 'Lägg till en knapp 'Kopiera spec' bredvid exportknappen...' berör direkt frontend-domänen, specifikt DOM-manipulation, eventhantering och interaktion med webbläsarens API:er (Clipboard API). Det krävs tydliga specifikationer kring dessa aspekter för att undvika problem och säkerställa en robust implementering.",
+      "findings": [
+        "K2: Ingen specifikation om hur felhantering ska ske om kopiering till urklipp misslyckas. Webbläsare kan neka tillgång till Clipboard API av säkerhetsskäl, t.ex. om sidan inte serveras över HTTPS eller om användaren blockerar det.",
+        "K3, K4: Ingen specifikation för hur toast-meddelandena ska implementeras. Detta kan leda till inkonsekventa UI-element, DOM-manipulation utanför ramverkets livscykler (om det hade funnits ett sådant) och eventuella minnesläckor om inte elementen rensas korrekt.",
+        "K1, K2: Ingen specifikation för exakt var specifikationen hämtas ifrån (t.ex. ett specifikt DOM-element med ID, en variabel eller via ett API-anrop). Detta kan leda till att utvecklaren gör antaganden som inte stämmer, eller direkt DOM-manipulation för att hämta texten istället för en mer robust lösning.",
+        "K1: Ingen specifikation för exakt placeringstilering av knappen 'Kopiera spec' i förhållande till den befintliga exportknappen, samt eventuell styling. Detta kan leda till inkonsekvent design."
+      ],
+      "severity": "MEDIUM",
+      "suggestions": [
+        "Specifikation för felhantering vid misslyckad kopiering: 'Om kopiering (navigator.clipboard.writeText) misslyckas, ska ett felmeddelande (toast) visas med texten 'Kopiering misslyckades. Se konsolen för mer info.' Alternativt kan en fallback-mekanism implementeras, som att markera texten och instruera användaren att kopiera manuellt, om webbläsaren stöder det.",
+        "Specifikation för toast-meddelande: 'Använd en befintlig toast-komponent/tjänst, eller implementera en med följande specifikationer: 1. Position: Övre högra hörnet. 2. Varaktighet: 3 sekunder. 3. Visuell stil: Enhetlig med övriga meddelanden i applikationen. Se till att toast-elementen skapas och förstörs programmatiskt och inte leder till DOM-läckage.'",
+        "Specifikation för källa till specifikationstext: 'Den genererade specifikationen som ska kopieras finns tillgänglig i en global JavaScript-variabel `window.currentSpecification` eller hämtas från ett DOM-element med ID `specification-output`.",
+        "Specifikation för knappens placering och stil: 'Knappen 'Kopiera spec' ska placeras omedelbart till höger om den befintliga 'Export'-knappen. Använd samma styling och storlek som exportknappen med undantag för texten.'."
+      ],
+      "raw": "{\n  \"status\": \"UNDERKÄND\",\n  \"motivering\": \"Idén 'Lägg till en knapp 'Kopiera spec' bredvid exportknappen...' berör direkt frontend-domänen, specifikt DOM-manipulation, eventhantering och interaktion med webbläsarens API:er (Clipboard API). Det krävs tydliga specifikationer kring dessa aspekter för att undvika problem och säkerställa en robust implementering.\",\n  \"findings\": [\n    {\n      \"severity\": \"HIGH\",\n      \"description\": \"K2: Ingen specifikation om hur felhantering ska ske om kopiering till urklipp misslyckas. Webbläsare kan neka tillgång till Clipboard API av säkerhetsskäl, t.ex. om sidan inte serveras över HTTPS eller om användaren blockerar det.\"\n    },\n    {\n      \"severity\": \"MEDIUM\",\n      \"description\": \"K3, K4: Ingen specifikation för hur toast-meddelandena ska implementeras. Detta kan leda till inkonsekventa UI-element, DOM-manipulation utanför ramverkets livscykler (om det hade funnits ett sådant) och eventuella minnesläckor om inte elementen rensas korrekt.\"\n    },\n    {\n      \"severity\": \"MEDIUM\",\n      \"description\": \"K1, K2: Ingen specifikation för exakt var specifikationen hämtas ifrån (t.ex. ett specifikt DOM-element med ID, en variabel eller via ett API-anrop). Detta kan leda till att utvecklaren gör antaganden som inte stämmer, eller direkt DOM-manipulation för att hämta texten istället för en mer robust lösning.\"\n    },\n    {\n      \"severity\": \"LOW\",\n      \"description\": \"K1: Ingen specifikation för exakt placeringstilering av knappen 'Kopiera spec' i förhållande till den befintliga exportknappen, samt eventuell styling. Detta kan leda till inkonsekvent design.\"\n    }\n  ],\n  \"suggestions\": [\n    {\n      \"severity\": \"HIGH\",\n      \"description\": \"Specifikation för felhantering vid misslyckad kopiering: 'Om kopiering (navigator.clipboard.writeText) misslyckas, ska ett felmeddelande (toast) visas med texten 'Kopiering misslyckades. Se konsolen för mer info.' Alternativt kan en fallback-mekanism implementeras, som att markera texten och instruera användaren att kopiera manuellt, om webbläsaren stöder det.\"\n    },\n    {\n      \"severity\": \"MEDIUM\",\n      \"description\": \"Specifikation för toast-meddelande: 'Använd en befintlig toast-komponent/tjänst, eller implementera en med följande specifikationer: 1. Position: Övre högra hörnet. 2. Varaktighet: 3 sekunder. 3. Visuell stil: Enhetlig med övriga meddelanden i applikationen. Se till att toast-elementen skapas och förstörs programmatiskt och inte leder till DOM-läckage.'\"\n    },\n    {\n      \"severity\": \"MEDIUM\",\n      \"description\": \"Specifikation för källa till specifikationstext: 'Den genererade specifikationen som ska kopieras finns tillgänglig i en global JavaScript-variabel `window.currentSpecification` eller hämtas från ett DOM-element med ID `specification-output`.\"\n    },\n    {\n      \"severity\": \"LOW\",\n      \"description\": \"Specifikation för knappens placering och stil: 'Knappen 'Kopiera spec' ska placeras omedelbart till höger om den befintliga 'Export'-knappen. Använd samma styling och storlek som exportknappen med undantag för texten.'.\"\n    }\n  ]\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 1049,
+      "tokens_out": 879,
+      "cost_usd": 0.002512
+    },
+    {
+      "id": "responsive",
+      "name": "Responsivitet & Mobil",
+      "emoji": "📐",
+      "phase": "pre",
+      "status": "UNDERKÄND",
+      "motivering": "Idén innefattar tillägg av en ny interaktiv komponent (en knapp) och ett feedback-element (ett toast-meddelande). Responsiv webbdesign, touch-mål, och visuell läsbarhet är relevanta för dessa komponenter. Granskningen fokuserar på att säkerställa att implementeringen från början tar hänsyn till dessa aspekter för att undvika framtida omdesign.",
+      "findings": [
+        "K1: Designen av den nya 'Kopiera spec'-knappen måste ta hänsyn till responsivitet och touch-målets storlek (minst 44x44px) för att säkerställa god användbarhet på alla enheter, särskilt mobila enheter. (Severity: MEDIUM)",
+        "K2: Placeringen av den nya knappen bredvid 'exportknappen' bör noggrant övervägas för att undvika överfyllnad på små skärmar, vilket kan leda till horisontell scroll eller svårigheter att klicka på rätt element. (Severity: MEDIUM)",
+        "K3: Toast-meddelandets utformning och placering måste vara responsiv och inte skymma viktigt innehåll, samt säkerställa att texten är läsbar (minst 14px) på alla skärmstorlekar utan zoom. (Severity: MEDIUM)",
+        "K4: Implementeringen av toast-meddelandet får inte enbart förlita sig på hover-effekter för att visa eller dölja, då detta inte fungerar på touch-enheter. (Severity: MEDIUM)"
+      ],
+      "severity": "MEDIUM",
+      "suggestions": [
+        "Vid implementering av 'Kopiera spec'-knappen, se till att dess storlek och utfyllnad uppfyller kriterierna för touch-mål (rekommenderat 44x44px) genom CSS, med tanke på olika viewport-storlekar. Använd flexbox eller grid för att hantera placeringen bredvid exportknappen för att undvika layoutproblem på små skärmar.",
+        "Utforma toast-meddelandet med relativa enheter (t.ex. 'em' eller 'rem') för textstorlek och positionering för att säkerställa skalbarhet. Positionera det strategiskt (t.ex. längst ner eller överst i mitten) för att minimera störningar av UI-element. Säkerställ att textstorleken är minst 14px på alla enheter.",
+        "Se till att toast-meddelandet har en tillräckligt lång visningstid och/eller en tydlig 'stäng'-knapp, och att det inte är beroende av hover för dess interaktion eller synlighet."
+      ],
+      "raw": "{\n  \"status\": \"UNDERKÄND\",\n  \"motivering\": \"Idén innefattar tillägg av en ny interaktiv komponent (en knapp) och ett feedback-element (ett toast-meddelande). Responsiv webbdesign, touch-mål, och visuell läsbarhet är relevanta för dessa komponenter. Granskningen fokuserar på att säkerställa att implementeringen från början tar hänsyn till dessa aspekter för att undvika framtida omdesign.\",\n  \"findings\": [\n    \"K1: Designen av den nya 'Kopiera spec'-knappen måste ta hänsyn till responsivitet och touch-målets storlek (minst 44x44px) för att säkerställa god användbarhet på alla enheter, särskilt mobila enheter. (Severity: MEDIUM)\",\n    \"K2: Placeringen av den nya knappen bredvid 'exportknappen' bör noggrant övervägas för att undvika överfyllnad på små skärmar, vilket kan leda till horisontell scroll eller svårigheter att klicka på rätt element. (Severity: MEDIUM)\",\n    \"K3: Toast-meddelandets utformning och placering måste vara responsiv och inte skymma viktigt innehåll, samt säkerställa att texten är läsbar (minst 14px) på alla skärmstorlekar utan zoom. (Severity: MEDIUM)\",\n    \"K4: Implementeringen av toast-meddelandet får inte enbart förlita sig på hover-effekter för att visa eller dölja, då detta inte fungerar på touch-enheter. (Severity: MEDIUM)\"\n  ],\n  \"severity\": \"MEDIUM\",\n  \"suggestions\": [\n    \"Vid implementering av 'Kopiera spec'-knappen, se till att dess storlek och utfyllnad uppfyller kriterierna för touch-mål (rekommenderat 44x44px) genom CSS, med tanke på olika viewport-storlekar. Använd flexbox eller grid för att hantera placeringen bredvid exportknappen för att undvika layoutproblem på små skärmar.\",\n    \"Utforma toast-meddelandet med relativa enheter (t.ex. 'em' eller 'rem') för textstorlek och positionering för att säkerställa skalbarhet. Positionera det strategiskt (t.ex. längst ner eller överst i mitten) för att minimera störningar av UI-element. Säkerställ att textstorleken är minst 14px på alla enheter.\",\n    \"Se till att toast-meddelandet har en tillräckligt lång visningstid och/eller en tydlig 'stäng'-knapp, och att det inte är beroende av hover för dess interaktion eller synlighet.\"\n  ]\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 1023,
+      "tokens_out": 628,
+      "cost_usd": 0.001877
+    },
+    {
+      "id": "accessibility",
+      "name": "Tillgänglighet",
+      "emoji": "♿",
+      "phase": "pre",
+      "status": "UNDERKÄND",
+      "motivering": "Jag har bedömt den föreslagna funktionaliteten 'Kopiera spec' och baserat på WCAG 2.2 AA standarder och principer för tillgänglighetsdesign, finns det flera aspekter som måste specificeras för att säkerställa att funktionen är tillgänglig för alla användare, särskilt de som förlitar sig på skärmläsare eller tangentbordsnavigering.",
+      "findings": [
+        "K1: Den nya knappen 'Kopiera spec' behöver specificera tillgänglighetsnamn och roll. Även om knappen har synlig text, bör en `aria-label` eller en `aria-labelledby` attribut övervägas om den synliga texten inte är tillräcklig i vissa kontexter, eller om ikoner används. (WCAG 2.2 Success Criterion 4.1.2 Name, Role, Value)",
+        "K2: Implementationen av kopieringsfunktionen måste vara testbar med tangentbord. Det måste säkerställas att knappen är nåbar via Tab-tangenten och att funktionen kan aktiveras med Enter eller mellanslag. (WCAG 2.2 Success Criterion 2.1.1 Keyboard)",
+        "K3: Toast-meddelandets bekräftelse måste vara tillgänglig för skärmläsaranvändare. Det får inte försvinna för snabbt och måste kommuniceras korrekt via ARIA live regions. Meddelandet bör placeras i en `aria-live='assertive'`-region för att säkerställa att det läses upp omedelbart för användare av skärmläsare. (WCAG 2.2 Success Criterion 4.1.3 Status Messages)",
+        "K4: Fokushantering efter att en användare har kopierat texten och toastmeddelandet visas. Efter att toastmeddelandet försvunnit bör fokus återgå till en logisk plats, eller åtminstone inte flyttas till en oväntad position. Fastnar användaren i en 'keyboard trap', eller tappas fokus helt, är det ett allvarligt tillgänglighetsproblem. (WCAG 2.2 Success Criterion 2.1.2 No Keyboard Trap)",
+        "K5: Kontrastförhållandet för den nya knappen 'Kopiera spec' och dess `:focus-visible` stil, samt för toast-meddelandets text och bakgrund, måste uppfylla WCAG 2.2 AA-kraven. Text bör ha minst 4.5:1 kontrast mot bakgrunden och interaktiva element (som fokusindikatorer) minst 3:1. (WCAG 2.2 Success Criterion 1.4.3 Contrast (Minimum), 1.4.11 Non-text Contrast)",
+        "K6: Den nya knappen måste ha en visuell `focus-visible` indikator som är tydlig och uppfyller kontrastkraven. Detta är avgörande för tangentbordsanvändare att veta var de befinner sig på sidan. (WCAG 2.2 Success Criterion 2.4.7 Focus Visible)",
+        "K7: Klickytans storlek för knappen 'Kopiera spec' bör vara minst 24x24 pixlar för att enklare kunna aktiveras, särskilt för användare med motoriska svårigheter eller som använder pekskärmar. (WCAG 2.2 Success Criterion 2.5.8 Target Size (Minimum))"
+      ],
+      "severity": "HIGH",
+      "suggestions": [
+        "I specifikationsdokumentet för den nya funktionen, inkludera detaljerade anvisningar för implementering av ARIA-attribut för knappen och live region för toast-meddelandet. Exempelvis: `<button type='button' aria-label='Kopiera specifikation till urklipp'>Kopiera spec</button>`",
+        "Specificera hur tangentbordsfokus ska hanteras efter kopiering och visning av toastmeddelandet. Dokumentera att knappen ska vara tillgänglig via tangentbord (Tab, Enter/Space) – och att fokus inte får fastna.",
+        "Kräv att designteamet levererar wireframes eller mockups som inkluderar `focus-visible` stilar för knappen och färgspecifikationer för toast-meddelandet som följer WCAG 2.2 AA kontrastkrav.",
+        "Inkludera krav på testfall som verifierar tillgängligheten, som till exempel: testning med skärmläsare (t.ex. NVDA eller VoiceOver), tangentbordsnavigering och kontroller av fokusindikatorer.",
+        "Säkerställ att toast-meddelandet designas för att inte försvinna för snabbt och att användaren har tillräckligt med tid att uppfatta meddelandet, om det inte kan stoppas/pausas. Rekommendation: minst 5 sekunder."
+      ],
+      "raw": "{\n  \"status\": \"UNDERKÄND\",\n  \"motivering\": \"Jag har bedömt den föreslagna funktionaliteten 'Kopiera spec' och baserat på WCAG 2.2 AA standarder och principer för tillgänglighetsdesign, finns det flera aspekter som måste specificeras för att säkerställa att funktionen är tillgänglig för alla användare, särskilt de som förlitar sig på skärmläsare eller tangentbordsnavigering.\",\n  \"findings\": [\n    \"K1: Den nya knappen 'Kopiera spec' behöver specificera tillgänglighetsnamn och roll. Även om knappen har synlig text, bör en `aria-label` eller en `aria-labelledby` attribut övervägas om den synliga texten inte är tillräcklig i vissa kontexter, eller om ikoner används. (WCAG 2.2 Success Criterion 4.1.2 Name, Role, Value)\",\n    \"K2: Implementationen av kopieringsfunktionen måste vara testbar med tangentbord. Det måste säkerställas att knappen är nåbar via Tab-tangenten och att funktionen kan aktiveras med Enter eller mellanslag. (WCAG 2.2 Success Criterion 2.1.1 Keyboard)\",\n    \"K3: Toast-meddelandets bekräftelse måste vara tillgänglig för skärmläsaranvändare. Det får inte försvinna för snabbt och måste kommuniceras korrekt via ARIA live regions. Meddelandet bör placeras i en `aria-live='assertive'`-region för att säkerställa att det läses upp omedelbart för användare av skärmläsare. (WCAG 2.2 Success Criterion 4.1.3 Status Messages)\",\n    \"K4: Fokushantering efter att en användare har kopierat texten och toastmeddelandet visas. Efter att toastmeddelandet försvunnit bör fokus återgå till en logisk plats, eller åtminstone inte flyttas till en oväntad position. Fastnar användaren i en 'keyboard trap', eller tappas fokus helt, är det ett allvarligt tillgänglighetsproblem. (WCAG 2.2 Success Criterion 2.1.2 No Keyboard Trap)\",\n    \"K5: Kontrastförhållandet för den nya knappen 'Kopiera spec' och dess `:focus-visible` stil, samt för toast-meddelandets text och bakgrund, måste uppfylla WCAG 2.2 AA-kraven. Text bör ha minst 4.5:1 kontrast mot bakgrunden och interaktiva element (som fokusindikatorer) minst 3:1. (WCAG 2.2 Success Criterion 1.4.3 Contrast (Minimum), 1.4.11 Non-text Contrast)\",\n    \"K6: Den nya knappen måste ha en visuell `focus-visible` indikator som är tydlig och uppfyller kontrastkraven. Detta är avgörande för tangentbordsanvändare att veta var de befinner sig på sidan. (WCAG 2.2 Success Criterion 2.4.7 Focus Visible)\",\n    \"K7: Klickytans storlek för knappen 'Kopiera spec' bör vara minst 24x24 pixlar för att enklare kunna aktiveras, särskilt för användare med motoriska svårigheter eller som använder pekskärmar. (WCAG 2.2 Success Criterion 2.5.8 Target Size (Minimum))\"\n  ],\n  \"severity\": \"HIGH\",\n  \"suggestions\": [\n    \"I specifikationsdokumentet för den nya funktionen, inkludera detaljerade anvisningar för implementering av ARIA-attribut för knappen och live region för toast-meddelandet. Exempelvis: `<button type='button' aria-label='Kopiera specifikation till urklipp'>Kopiera spec</button>`\",\n    \"Specificera hur tangentbordsfokus ska hanteras efter kopiering och visning av toastmeddelandet. Dokumentera att knappen ska vara tillgänglig via tangentbord (Tab, Enter/Space) – och att fokus inte får fastna.\",\n    \"Kräv att designteamet levererar wireframes eller mockups som inkluderar `focus-visible` stilar för knappen och färgspecifikationer för toast-meddelandet som följer WCAG 2.2 AA kontrastkrav.\",\n    \"Inkludera krav på testfall som verifierar tillgängligheten, som till exempel: testning med skärmläsare (t.ex. NVDA eller VoiceOver), tangentbordsnavigering och kontroller av fokusindikatorer.\",\n    \"Säkerställ att toast-meddelandet designas för att inte försvinna för snabbt och att användaren har tillräckligt med tid att uppfatta meddelandet, om det inte kan stoppas/pausas. Rekommendation: minst 5 sekunder.\"\n  ]\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 1081,
+      "tokens_out": 1122,
+      "cost_usd": 0.003129
+    },
+    {
+      "id": "database",
+      "name": "Databasagenten",
+      "emoji": "🗄️",
+      "phase": "pre",
+      "status": "GODKÄND",
+      "motivering": "Idén beskriver en funktion för klient-sidig UI/UX som inte involverar databasinteraktion, datamodellering eller säkerhet kopplad till databaskommunikation. Därmed är det utanför mitt expertområde som databasarkitekt att granska.",
+      "findings": [],
+      "severity": null,
+      "suggestions": [],
+      "raw": "{\n  \"status\": \"GODKÄND\",\n  \"motivering\": \"Idén beskriver en funktion för klient-sidig UI/UX som inte involverar databasinteraktion, datamodellering eller säkerhet kopplad till databaskommunikation. Därmed är det utanför mitt expertområde som databasarkitekt att granska.\",\n  \"findings\": [],\n  \"severity\": null,\n  \"suggestions\": []\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 1043,
+      "tokens_out": 102,
+      "cost_usd": 0.000568
+    },
+    {
+      "id": "api",
+      "name": "API-agenten",
+      "emoji": "📜",
+      "phase": "pre",
+      "status": "GODKÄND",
+      "motivering": "Idén beskriver en UI-funktion (knapp, kopiering till urklipp, toast-meddelande) som helt och hållet hanteras på klientsidan. Denna funktionalitet kräver ingen interaktion med ett API för varken att hämta data, skicka data, eller hantera autentisering/auktorisering. Därmed berör den inte API-design eller datakontrakt, vilket är mitt granskningsområde.",
+      "findings": [],
+      "severity": null,
+      "suggestions": [],
+      "raw": "{\n  \"status\": \"GODKÄND\",\n  \"motivering\": \"Idén beskriver en UI-funktion (knapp, kopiering till urklipp, toast-meddelande) som helt och hållet hanteras på klientsidan. Denna funktionalitet kräver ingen interaktion med ett API för varken att hämta data, skicka data, eller hantera autentisering/auktorisering. Därmed berör den inte API-design eller datakontrakt, vilket är mitt granskningsområde.\",\n  \"findings\": [],\n  \"severity\": null,\n  \"suggestions\": []\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 2132,
+      "tokens_out": 179,
+      "cost_usd": 0.001087
+    },
+    {
+      "id": "error_handling",
+      "name": "Felhantering",
+      "emoji": "🧯",
+      "phase": "pre",
+      "status": "UNDERKÄND",
+      "motivering": "Idén med att kopiera till urklipp och visa ett toast-meddelande introducerar nya interaktioner i gränssnittet, vilket kräver specifik felhantering och observerbarhet ur ett klientperspektiv för att säkerställa en robust användarupplevelse. Även om ingen server-side kod är involverad direkt, finns det fallgropar relaterade till asynkrona fel i JavaScript, tysta fel i web API:er och hur feedback kommuniceras till användaren.",
+      "findings": [
+        "Ohanterade asynkrona fel: K2 och K3 involverar Web Clipboard API, som är asynkront och returnerar Promises. Om dessa Promises rejectas (t.ex. på grund av säkerhetsrestriktioner i webbläsaren, ogiltig kontext (ej HTTPS), eller att användaren nekar behörighet), måste dessa rejections hanteras för att undvika ohanterade fel i webbläsarens konsol och för att ge korrekt feedback till användaren. Om 'clipboard-write' permission inte finns eller nekas, kommer Promise att förkastas. Brist på explicit hantering av rejected Promises kan leda till 'Uncaught (in Promise)' fel.",
+        "Tysta fel vid kopiering: Kopiering till urklipp kan misslyckas tyst i vissa webbläsarkonfigurationer eller säkerhetssammanhang. Att bara kalla på `navigator.clipboard.writeText()` utan att fånga potentiella fel och ge feedback kommer att resultera i en dålig användarupplevelse där användaren tror att kopieringen lyckades men så var inte fallet. En tom 'catch'-block, eller att helt enkelt inte ha någon felhantering, skulle dölja dessa problem.",
+        "Brukarmeddelanden: Krav K3 anger att en bekräftelse ska visas. Dock specifieras inte vad som ska hända vid misslyckad kopiering. Ett misslyckat kopieringsförsök behöver också ett förståeligt felmeddelande för användaren för att undvika förvirring, t.ex. 'Kopiering misslyckades: Otillräckliga rättigheter eller webbläsarbegränsning.'",
+        "Observability (klient-sida): Det finns ingen specifikation för hur klient-sida fel vid kopieringsfunktionen ska loggas eller rapporteras. Detta är viktigt för att felsöka problem i produktion, t.ex. att identifiera problem med specifika webbläsare eller användarkonfigurationer som förhindrar kopiering.",
+        "Stacktrace-läckage (Potentiell): Även om inte direkt relevant för denna specifika idé i sig, är det viktigt att säkerställa att om det asynkrona Promise rejection-felet hanteras, att eventuella felmeddelanden som visas för användaren INTE innehåller tekniska stacktraces eller implementationdetaljer. Endast enkla, användarvänliga felmeddelanden bör visas."
+      ],
+      "severity": "MEDIUM",
+      "suggestions": [
+        "För asynkrona fel och tysta fel: Vid implementering av kopieringsfunktion i JavaScript, se till att det Promise som returneras av `navigator.clipboard.writeText()` alltid hanteras med både `.then()` och `.catch()`. `.catch()`-blocket ska fånga upp fel specifikt relaterade till behörigheter eller andra Web Clipboard API-specifika problem och trigga ett lämpligt felmeddelande till användaren.",
+        "För brukarmeddelanden: Utöver bekräftelsemeddelandet för lyckad kopiering (K3), lägg till ett krav för ett tydligt, icke-tekniskt felmeddelande om kopieringen misslyckas. Detta meddelande bör antyda möjliga orsaker (t.ex. 'Kopiering till urklipp misslyckades. Kontrollera webbläsarens behörigheter.').",
+        "För observability: Implementera grundläggande klient-sidig loggning av 'error' händelser från kopieringsfunktionen (t.ex. via `console.error` för utveckling, och eventuellt en extern felrapporteringstjänst för produktion). Detta hjälper till att övervaka och felsöka kopieringsproblem för slutanvändare, samt identifiera eventuella webbläsar- eller OS-specifika begränsningar."
+      ],
+      "raw": "{\n  \"status\": \"UNDERKÄND\",\n  \"motivering\": \"Idén med att kopiera till urklipp och visa ett toast-meddelande introducerar nya interaktioner i gränssnittet, vilket kräver specifik felhantering och observerbarhet ur ett klientperspektiv för att säkerställa en robust användarupplevelse. Även om ingen server-side kod är involverad direkt, finns det fallgropar relaterade till asynkrona fel i JavaScript, tysta fel i web API:er och hur feedback kommuniceras till användaren.\",\n  \"findings\": [\n    \"Ohanterade asynkrona fel: K2 och K3 involverar Web Clipboard API, som är asynkront och returnerar Promises. Om dessa Promises rejectas (t.ex. på grund av säkerhetsrestriktioner i webbläsaren, ogiltig kontext (ej HTTPS), eller att användaren nekar behörighet), måste dessa rejections hanteras för att undvika ohanterade fel i webbläsarens konsol och för att ge korrekt feedback till användaren. Om 'clipboard-write' permission inte finns eller nekas, kommer Promise att förkastas. Brist på explicit hantering av rejected Promises kan leda till 'Uncaught (in Promise)' fel.\",\n    \"Tysta fel vid kopiering: Kopiering till urklipp kan misslyckas tyst i vissa webbläsarkonfigurationer eller säkerhetssammanhang. Att bara kalla på `navigator.clipboard.writeText()` utan att fånga potentiella fel och ge feedback kommer att resultera i en dålig användarupplevelse där användaren tror att kopieringen lyckades men så var inte fallet. En tom 'catch'-block, eller att helt enkelt inte ha någon felhantering, skulle dölja dessa problem.\",\n    \"Brukarmeddelanden: Krav K3 anger att en bekräftelse ska visas. Dock specifieras inte vad som ska hända vid misslyckad kopiering. Ett misslyckat kopieringsförsök behöver också ett förståeligt felmeddelande för användaren för att undvika förvirring, t.ex. 'Kopiering misslyckades: Otillräckliga rättigheter eller webbläsarbegränsning.'\",\n    \"Observability (klient-sida): Det finns ingen specifikation för hur klient-sida fel vid kopieringsfunktionen ska loggas eller rapporteras. Detta är viktigt för att felsöka problem i produktion, t.ex. att identifiera problem med specifika webbläsare eller användarkonfigurationer som förhindrar kopiering.\",\n    \"Stacktrace-läckage (Potentiell): Även om inte direkt relevant för denna specifika idé i sig, är det viktigt att säkerställa att om det asynkrona Promise rejection-felet hanteras, att eventuella felmeddelanden som visas för användaren INTE innehåller tekniska stacktraces eller implementationdetaljer. Endast enkla, användarvänliga felmeddelanden bör visas.\"\n  ],\n  \"severity\": \"MEDIUM\",\n  \"suggestions\": [\n    \"För asynkrona fel och tysta fel: Vid implementering av kopieringsfunktion i JavaScript, se till att det Promise som returneras av `navigator.clipboard.writeText()` alltid hanteras med både `.then()` och `.catch()`. `.catch()`-blocket ska fånga upp fel specifikt relaterade till behörigheter eller andra Web Clipboard API-specifika problem och trigga ett lämpligt felmeddelande till användaren.\",\n    \"För brukarmeddelanden: Utöver bekräftelsemeddelandet för lyckad kopiering (K3), lägg till ett krav för ett tydligt, icke-tekniskt felmeddelande om kopieringen misslyckas. Detta meddelande bör antyda möjliga orsaker (t.ex. 'Kopiering till urklipp misslyckades. Kontrollera webbläsarens behörigheter.').\",\n    \"För observability: Implementera grundläggande klient-sidig loggning av 'error' händelser från kopieringsfunktionen (t.ex. via `console.error` för utveckling, och eventuellt en extern felrapporteringstjänst för produktion). Detta hjälper till att övervaka och felsöka kopieringsproblem för slutanvändare, samt identifiera eventuella webbläsar- eller OS-specifika begränsningar.\"\n  ]\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 1038,
+      "tokens_out": 1009,
+      "cost_usd": 0.002834
+    },
+    {
+      "id": "edge_case",
+      "name": "Edge-case-jägaren",
+      "emoji": "🪤",
+      "phase": "pre",
+      "status": "UNDERKÄND",
+      "motivering": "Idén 'Kopiera spec' berör direkt domänen för användarinteraktion och potentiella felkällor vid urklippshantering. Det finns flera scenarier där kraven är otydliga eller riskfyllt formulerade vilket kan leda till en dålig användarupplevelse eller funktionsfel som byggaren annars missar.",
+      "findings": [
+        "Om användaren trycker på 'Kopiera spec' men webbläsaren inte tillåter programmatisk kopiering till urklipp (t.ex. av säkerhetsskäl eller om sidan inte är via HTTPS), så kommer kopieringen att misslyckas tyst eller generera ett konsolloggfel utan feedback till användaren, vilket bryter mot K3 och K4. — MEDIUM",
+        "Om den genererade specifikationen är extremt stor (t.ex. flera megabyte lång sträng), så kan kopieringsoperationen ta lång tid eller i värsta fall frysa gränssnittet, eftersom omedelbar feedback under långa operationer saknas, vilket leder till en dålig användarupplevelse. — LOW",
+        "Om användaren trycker på 'Kopiera spec' flera gånger i snabb följd, så kan flera toast-meddelanden visas 'ovanpå varandra' eller 'flimra' innan de försvinner, vilket ger en oelegant och eventuellt förvirrande upplevelse. — LOW",
+        "Om användaren navigerar bort från sidan omedelbart efter att ha tryckt på 'Kopiera spec' men innan toast-meddelandet hunnit visas eller försvinna, så får användaren ingen definitiv bekräftelse på kopieringens utfall. — LOW",
+        "Om den 'genererade specifikationen' är tom (t.ex. om ingen spec har genererats än), så kan 'Kopiera spec' antingen kopiera en tom sträng utan explicit feedback eller försöka kopiera ett 'null' eller 'undefined' värde, vilket kan orsaka klient-sidiga fel. — MEDIUM"
+      ],
+      "severity": "MEDIUM",
+      "suggestions": [
+        "K1-S1: Säkerställ att kopieringsfunktionen hanterar fall där webbläsarens API för urklipp saknas eller nekar behörighet. Informera användaren med ett felmeddelande (toast) om kopieringen misslyckas av dessa skäl, t.ex. 'Kopiering misslyckades: Webbläsaren nekade åtkomst till urklipp. Vänligen kopiera manuellt.'",
+        "K2-S1: Definiera vad som händer om specifikationen är tom eller 'null'. Antingen ska knappen vara inaktiverad tills en specifikation finns, eller så ska en toast visas som 'Inget att kopiera!' om den trycks när specifikationen är tom.",
+        "K3-S1: Implementera en enkel debounce-mekanism för 'Kopiera spec'-knappen för att förhindra flera toast-meddelanden vid snabba klick. Alternativt, se till att endast ett toast-meddelande är aktivt och uppdateras om ett nytt försök görs.",
+        "K4-S1: Specifiera hur länge toast-meddelandet ska visas. En standard på 3-5 sekunder är ofta lämplig. Överväg också möjligheten för användaren att klicka bort toast-meddelandet tidigare.",
+        "K5-S1: För mycket stora specifikationer, överväg att implementera en asynkron kopieringsmekanism eller ge en visuell indikation att kopieringen pågår (t.ex. genom att inaktivera knappen och ändra texten till 'Kopierar...' under processen).",
+        "K6-S1: Se till att den genererade specifikationen kan vara av olika format (t.ex. ren text, Markdown, JSON) och att kopieringsfunktionen hanterar detta korrekt genom att kopiera det råa textinnehållet, utan HTML-formattering såvida inte explicit annat anges."
+      ],
+      "raw": "{\n  \"status\": \"UNDERKÄND\",\n  \"motivering\": \"Idén 'Kopiera spec' berör direkt domänen för användarinteraktion och potentiella felkällor vid urklippshantering. Det finns flera scenarier där kraven är otydliga eller riskfyllt formulerade vilket kan leda till en dålig användarupplevelse eller funktionsfel som byggaren annars missar.\",\n  \"findings\": [\n    {\n      \"scenario\": \"Om användaren trycker på 'Kopiera spec' men webbläsaren inte tillåter programmatisk kopiering till urklipp (t.ex. av säkerhetsskäl eller om sidan inte är via HTTPS), så kommer kopieringen att misslyckas tyst eller generera ett konsolloggfel utan feedback till användaren, vilket bryter mot K3 och K4.\",\n      \"severity\": \"MEDIUM\"\n    },\n    {\n      \"scenario\": \"Om den genererade specifikationen är extremt stor (t.ex. flera megabyte lång sträng), så kan kopieringsoperationen ta lång tid eller i värsta fall frysa gränssnittet, eftersom omedelbar feedback under långa operationer saknas, vilket leder till en dålig användarupplevelse.\",\n      \"severity\": \"LOW\"\n    },\n    {\n      \"scenario\": \"Om användaren trycker på 'Kopiera spec' flera gånger i snabb följd, så kan flera toast-meddelanden visas 'ovanpå varandra' eller 'flimra' innan de försvinner, vilket ger en oelegant och eventuellt förvirrande upplevelse.\",\n      \"severity\": \"LOW\"\n    },\n    {\n      \"scenario\": \"Om användaren navigerar bort från sidan omedelbart efter att ha tryckt på 'Kopiera spec' men innan toast-meddelandet hunnit visas eller försvinna, så får användaren ingen definitiv bekräftelse på kopieringens utfall.\",\n      \"severity\": \"LOW\"\n    },\n    {\n      \"scenario\": \"Om den 'genererade specifikationen' är tom (t.ex. om ingen spec har genererats än), så kan 'Kopiera spec' antingen kopiera en tom sträng utan explicit feedback eller försöka kopiera ett 'null' eller 'undefined' värde, vilket kan orsaka klient-sidiga fel.\",\n      \"severity\": \"MEDIUM\"\n    }\n  ],\n  \"severity\": \"MEDIUM\",\n  \"suggestions\": [\n    \"K1-S1: Säkerställ att kopieringsfunktionen hanterar fall där webbläsarens API för urklipp saknas eller nekar behörighet. Informera användaren med ett felmeddelande (toast) om kopieringen misslyckas av dessa skäl, t.ex. 'Kopiering misslyckades: Webbläsaren nekade åtkomst till urklipp. Vänligen kopiera manuellt.'\",\n    \"K2-S1: Definiera vad som händer om specifikationen är tom eller 'null'. Antingen ska knappen vara inaktiverad tills en specifikation finns, eller så ska en toast visas som 'Inget att kopiera!' om den trycks när specifikationen är tom.\",\n    \"K3-S1: Implementera en enkel debounce-mekanism för 'Kopiera spec'-knappen för att förhindra flera toast-meddelanden vid snabba klick. Alternativt, se till att endast ett toast-meddelande är aktivt och uppdateras om ett nytt försök görs.\",\n    \"K4-S1: Specifiera hur länge toast-meddelandet ska visas. En standard på 3-5 sekunder är ofta lämplig. Överväg också möjligheten för användaren att klicka bort toast-meddelandet tidigare.\",\n    \"K5-S1: För mycket stora specifikationer, överväg att implementera en asynkron kopieringsmekanism eller ge en visuell indikation att kopieringen pågår (t.ex. genom att inaktivera knappen och ändra texten till 'Kopierar...' under processen).\",\n    \"K6-S1: Se till att den genererade specifikationen kan vara av olika format (t.ex. ren text, Markdown, JSON) och att kopieringsfunktionen hanterar detta korrekt genom att kopiera det råa textinnehållet, utan HTML-formattering såvida inte explicit annat anges.\"\n  ]\n}",
+      "error": null,
+      "model": "google/gemini-2.5-flash",
+      "tokens_in": 1031,
+      "tokens_out": 1019,
+      "cost_usd": 0.002857
+    }
+  ],
+  "smith": {
+    "type": "prompt",
+    "content": "## CONTEXT\nPrompt Team is a web application with a vanilla JavaScript frontend (no framework). It has an existing export button for generated specifications. The task is to add a 'Kopiera spec' (Copy spec) button adjacent to the export button, which copies the generated specification text to the clipboard and shows a toast notification as confirmation.\n\n## TASK\nImplement a 'Kopiera spec' button in Prompt Team's frontend that:\n1. Appears next to the existing export button\n2. Reads the generated specification from a trusted in-memory JavaScript variable (not from DOM scraping)\n3. Copies the specification to the clipboard using `navigator.clipboard.writeText()`\n4. Shows a success toast on copy, or an error toast if copying fails\n5. Is fully accessible and responsive\n\nAll implementation must be in Python-rendered HTML templates or vanilla JS files. No new npm dependencies may be introduced — implement the toast system from scratch.\n\n## CONSTRAINTS\n- Frontend: Vanilla JavaScript (no framework, no npm)\n- No external toast libraries (e.g. no Toastify-JS) — implement a minimal custom toast\n- Must work over HTTPS (Clipboard API requires secure context)\n- WCAG 2.2 AA compliance required\n- Touch targets minimum 44×44 px\n- All new CSS must use CSS custom properties (design tokens) defined in the existing stylesheet\n- Python is used for any server-side rendering or test scripts\n\n## IDENTIFIED ISSUES\n\n### HIGH — Accessibility (WCAG 2.2)\n- [HIGH-A1] Button must have explicit `type=\"button\"` and a descriptive `aria-label=\"Kopiera specifikation till urklipp\"`\n- [HIGH-A2] Button must be keyboard-reachable via Tab and activatable with Enter/Space — verify focus order is logical\n- [HIGH-A3] Toast container must be a persistent `aria-live=\"assertive\"` region in the DOM (present on page load, never removed) so screen readers announce it immediately on update\n- [HIGH-A4] Toast must remain visible for at least 3 seconds; focus must not be moved to the toast, and must not be trapped after dismissal\n\n### MEDIUM — Error Handling & Clipboard API\n- [MED-E1] `navigator.clipboard.writeText()` returns a Promise — always attach `.then()` and `.catch()`. Never leave a rejected Promise unhandled\n- [MED-E2] On failure, show an error toast: 'Kopiering misslyckades. Kontrollera att sidan använder HTTPS och att webbläsarbehörigheter tillåter urklipp.'\n- [MED-E3] If `navigator.clipboard` is undefined (insecure context or old browser), handle gracefully with the same error toast — do not throw\n- [MED-E4] If the spec variable is `null`, `undefined`, or empty string, disable the button and optionally show 'Inget att kopiera' on click attempt\n\n### MEDIUM — Toast System\n- [MED-T1] Only one toast may be visible at a time — if a new toast is triggered while one is showing, replace it immediately\n- [MED-T2] Toast auto-dismisses after 3000 ms; clear any pending dismiss timer before showing a new toast\n- [MED-T3] Toast position: bottom-center on mobile (viewport < 768 px), top-right on desktop\n- [MED-T4] Toast min font-size: 14 px (use `rem`); must not obscure primary content\n\n### MEDIUM — Design & Responsiveness\n- [MED-D1] 'Kopiera spec' is a secondary action — style as secondary button relative to export (primary)\n- [MED-D2] Define and use CSS custom properties: `--color-btn-secondary-bg`, `--color-btn-secondary-text`, `--color-btn-secondary-hover-bg`, `--color-btn-focus-ring`, `--color-toast-success-bg`, `--color-toast-success-text`, `--color-toast-error-bg`, `--color-toast-error-text`\n- [MED-D3] Toast text contrast must meet WCAG AA (≥ 4.5:1) — verify chosen hex values\n- [MED-D4] Button row must use flexbox with `gap` and `flex-wrap: wrap` to prevent overflow on small screens\n- [MED-D5] Button padding must ensure 44×44 px touch target\n\n### MEDIUM — Data Source\n- [MED-DS1] Specification text must be read from a JavaScript variable (e.g. `window.promptTeam.currentSpec`) set server-side or by the generation logic — never scraped from `innerHTML` or `textContent` of a DOM element\n\n## ASSUMPTIONS\n- The existing export button is rendered in a `<div class=\"action-bar\">` or equivalent container; the new button is inserted as a sibling inside that container\n- The generated spec is already stored in a JS variable accessible as `window.promptTeam.currentSpec` (string or null); this assumption must be confirmed and the variable name adjusted if different\n- No existing toast system is present in Prompt Team — a minimal custom implementation is required\n- The app is served over HTTPS in production; local development over HTTP is acceptable with a console warning\n- Python test scripts use `pytest` and `playwright` for integration tests\n\n## TEST CASES\n\n```python\n# tests/test_copy_spec_button.py\nimport pytest\nfrom playwright.sync_api import Page, expect\n\nBASE_URL = \"http://localhost:8000\"\n\ndef test_copy_button_present_next_to_export(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    export_btn = page.locator(\"[data-testid='export-btn']\")\n    copy_btn = page.locator(\"[data-testid='copy-spec-btn']\")\n    expect(export_btn).to_be_visible()\n    expect(copy_btn).to_be_visible()\n    # Verify they share the same parent container\n    assert export_btn.evaluate(\"el => el.parentElement\") == copy_btn.evaluate(\"el => el.parentElement\")\n\ndef test_copy_button_aria_attributes(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    copy_btn = page.locator(\"[data-testid='copy-spec-btn']\")\n    expect(copy_btn).to_have_attribute(\"type\", \"button\")\n    expect(copy_btn).to_have_attribute(\"aria-label\", \"Kopiera specifikation till urklipp\")\n\ndef test_copy_button_keyboard_accessible(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    page.keyboard.press(\"Tab\")  # navigate to button area\n    # Tab until copy button is focused\n    for _ in range(10):\n        focused = page.evaluate(\"document.activeElement.dataset.testid\")\n        if focused == \"copy-spec-btn\":\n            break\n        page.keyboard.press(\"Tab\")\n    assert page.evaluate(\"document.activeElement.dataset.testid\") == \"copy-spec-btn\"\n\ndef test_success_toast_shown_on_copy(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    # Inject a spec value\n    page.evaluate(\"window.promptTeam.currentSpec = 'Test specification content'\")\n    copy_btn = page.locator(\"[data-testid='copy-spec-btn']\")\n    copy_btn.click()\n    toast = page.locator(\"[data-testid='toast']\", has_text=\"Specifikationen kopierades\")\n    expect(toast).to_be_visible()\n\ndef test_error_toast_when_clipboard_unavailable(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    page.evaluate(\"window.promptTeam.currentSpec = 'Some spec'\")\n    # Simulate clipboard failure\n    page.evaluate(\"\"\"\n        navigator.clipboard.writeText = () => Promise.reject(new Error('Permission denied'))\n    \"\"\")\n    page.locator(\"[data-testid='copy-spec-btn']\").click()\n    toast = page.locator(\"[data-testid='toast']\")\n    expect(toast).to_contain_text(\"Kopiering misslyckades\")\n\ndef test_button_disabled_when_spec_is_empty(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    page.evaluate(\"window.promptTeam.currentSpec = null\")\n    copy_btn = page.locator(\"[data-testid='copy-spec-btn']\")\n    # Trigger re-evaluation of disabled state\n    page.evaluate(\"window.promptTeam.updateCopyButton()\")\n    expect(copy_btn).to_be_disabled()\n\ndef test_only_one_toast_at_a_time(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    page.evaluate(\"window.promptTeam.currentSpec = 'Spec'\")\n    copy_btn = page.locator(\"[data-testid='copy-spec-btn']\")\n    copy_btn.click()\n    copy_btn.click()\n    toasts = page.locator(\"[data-testid='toast']\")\n    expect(toasts).to_have_count(1)\n\ndef test_aria_live_region_present_on_load(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    live_region = page.locator(\"[aria-live='assertive'][data-testid='toast-container']\")\n    expect(live_region).to_be_attached()  # present in DOM even before any toast\n\ndef test_toast_auto_dismisses_after_3s(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    page.evaluate(\"window.promptTeam.currentSpec = 'Spec'\")\n    page.locator(\"[data-testid='copy-spec-btn']\").click()\n    toast = page.locator(\"[data-testid='toast']\")\n    expect(toast).to_be_visible()\n    page.wait_for_timeout(3500)\n    expect(toast).not_to_be_visible()\n```\n\n## ACCEPTANCE CRITERIA\n[ ] Knappen 'Kopiera spec' visas bredvid exportknappen i samma behållare\n[ ] Knappen har `type=\"button\"`, `data-testid=\"copy-spec-btn\"` och `aria-label=\"Kopiera specifikation till urklipp\"`\n[ ] Specifikationstexten hämtas från `window.promptTeam.currentSpec` (ej från DOM)\n[ ] Lyckad kopiering visar en grön success-toast med texten 'Specifikationen kopierades till urklipp'\n[ ] Misslyckad kopiering (Promise reject eller saknat API) visar en röd error-toast med texten 'Kopiering misslyckades. Kontrollera att sidan använder HTTPS och att webbläsarbehörigheter tillåter urklipp.'\n[ ] Knappen är inaktiverad (`disabled`) när `window.promptTeam.currentSpec` är null, undefined eller tom sträng\n[ ] Maximalt en toast visas åt gången — ny toast ersätter pågående toast direkt\n[ ] Toast försvinner automatiskt efter 3 sekunder\n[ ] Toast-containern (`aria-live=\"assertive\"`) finns i DOM från sidladdning\n[ ] Knappen är nåbar via Tab och aktiverbar med Enter/Space utan att fokus fastnar\n[ ] Kontrastförhållande för toast-text mot bakgrund uppfyller WCAG AA (≥ 4.5:1)\n[ ] Touch-mål för knappen är minst 44×44 px\n[ ] Knappraden använder flexbox med `flex-wrap: wrap` — ingen horisontell scroll på 320 px viewport\n[ ] Alla nya stilar använder definierade CSS custom properties\n[ ] Inga externa JS-bibliotek introduceras\n[ ] Alla 8 Playwright-testfall passerar: `pytest tests/test_copy_spec_button.py`"
+  },
+  "krav_result": {
+    "underlag": "TILLRÄCKLIGT",
+    "tolkad_ide": "Beställaren vill lägga till en funktion för att kopiera den genererade specifikationen till användarens urklipp genom en ny knapp, med visuell bekräftelse.",
+    "krav": [
+      "K1: Lägg till en knapp med texten 'Kopiera spec' bredvid den befintliga exportknappen på gränssnittet där genererade specifikationer visas.",
+      "K2: När knappen 'Kopiera spec' trycks ska den genererade specifikationen kopieras till användarens urklipp.",
+      "K3: Efter framgångsrik kopiering ska en tillfällig bekräftelse (toast-meddelande) visas för användaren.",
+      "K4: Toast-meddelandet ska ha text som indikerar att specifikationen är kopierad (t.ex. 'Specifikation kopierad!')."
+    ],
+    "oklarheter": [],
+    "utanfor_scope": [
+      "Ändra funktionalitet eller placering av den befintliga exportknappen."
+    ]
+  },
+  "completeness_result": {
+    "status": "OKÄND",
+    "completeness_score": 0,
+    "saknas": [],
+    "styrkor": []
+  },
+  "bestallare_result": {
+    "sammanfattning": "En ny knapp ska läggas till för att enkelt kunna kopiera innehållet i en specifikation till användarens urklipp. Processen ska bekräftas med ett litet meddelande som försvinner av sig själv (en 'toast'). Granskningen har identifierat flera viktiga områden som behöver förbättras, särskilt kring tillgänglighet, hur fel hanteras om kopieringen misslyckas, och hur det lilla bekräftelsemeddelandet visas rent visuellt. Rekommendationen är att följa de tekniska kraven noggrant för en robust lösning.",
+    "punkter": [
+      {
+        "vad": "Se till att knappen 'Kopiera spec' är lätt att använda för alla, inklusive de som navigerar med tangentbordet eller använder skärmläsare.",
+        "varfor": "För att ingen ska exkluderas från att använda funktionen kan knappen behöva en beskrivande text för skärmläsare, vara möjlig att nå via tangentbord och fungera med Enter/mellanslag. Detta förbättrar användarupplevelsen för alla.",
+        "insats": "stor"
+      },
+      {
+        "vad": "Knappen ska visuellt se ut som en mindre viktig funktion jämfört med exportknappen och följa befintlig designstil.",
+        "varfor": "En konsekvent design gör att systemet upplevs enklare att använda. Genom att använda designprinciperna för 'sekundära knappar' och 'design-tokens' smälter knappen in med resten av systemet.",
+        "insats": "liten"
+      },
+      {
+        "vad": "Bekräftelsemeddelanden ska synas tydligt och vara utformade enligt de designregler som finns, så att de inte krockar med andra delar av gränssnittet.",
+        "varfor": "För att användaren ska veta att kopieringen lyckades eller misslyckades behövs ett snabbt meddelande. Detta meddelande måste vara tydligt och läsbart, och inte störa skärmläsare eller navigering för att fungera för alla användare.",
+        "insats": "mellan"
+      },
+      {
+        "vad": "Se till att data som kopieras är korrekt och att knappen inte är aktiverad om det inte finns något att kopiera.",
+        "varfor": "För att undvika att användare kopierar felaktig eller ofullständig information måste källan för den kopierade texten vara säker. Knappen ska också vara avaktiverad om det inte finns någon text att kopiera, vilket förhindrar förvirring.",
+        "insats": "mellan"
+      },
+      {
+        "vad": "Visa ett tydligt felmeddelande om kopieringen misslyckas, till exempel om webbläsaren inte tillåter det eller om sidan inte är säker (saknar HTTPS).",
+        "varfor": "Om kopieringen misslyckas tyst kan användaren tro att texten kopierades, vilket skapar frustration. Ett tydligt felmeddelande hjälper användaren att förstå problemet och vad de eventuellt kan göra åt det.",
+        "insats": "mellan"
+      },
+      {
+        "vad": "Se till att endast ett bekräftelsemeddelande visas åt gången, även om användaren klickar på knappen snabbt flera gånger, och att meddelandet försvinner efter en kort stund.",
+        "varfor": "För att undvika att systemet känns instabilt eller spammar med meddelanden ska endast ett bekräftelsemeddelande visas åt gången. Att meddelandet försvinner automatiskt efter en kort stund undviker att det skymmer viktig information.",
+        "insats": "liten"
+      }
+    ],
+    "beslut": [
+      "Hur ska vi hantera att kopiering till urklipp kräver en säker anslutning (HTTPS)? Ska vi informera användaren tydligt om detta om de besöker sidan över HTTP?",
+      "Ska vi utveckla ett helt anpassat system för bekräftelsemeddelanden (toasts) enligt specifikationerna, eller finns det ett internt bibliotek vi kan använda?",
+      "Är den interna JavaScript-variabeln med specifikationen (`window.promptTeam.currentSpec`) bekräftad och tillförlitlig, eller behöver vi en annan källa för texten som ska kopieras?"
+    ]
+  },
+  "backlog_result": {
+    "items": [],
+    "note": ""
+  },
+  "backlog_items": [],
+  "final_prompt": "## CONTEXT\nPrompt Team is a web application with a vanilla JavaScript frontend (no framework). It has an existing export button for generated specifications. The task is to add a 'Kopiera spec' (Copy spec) button adjacent to the export button, which copies the generated specification text to the clipboard and shows a toast notification as confirmation.\n\n## TASK\nImplement a 'Kopiera spec' button in Prompt Team's frontend that:\n1. Appears next to the existing export button\n2. Reads the generated specification from a trusted in-memory JavaScript variable (not from DOM scraping)\n3. Copies the specification to the clipboard using `navigator.clipboard.writeText()`\n4. Shows a success toast on copy, or an error toast if copying fails\n5. Is fully accessible and responsive\n\nAll implementation must be in Python-rendered HTML templates or vanilla JS files. No new npm dependencies may be introduced — implement the toast system from scratch.\n\n## CONSTRAINTS\n- Frontend: Vanilla JavaScript (no framework, no npm)\n- No external toast libraries (e.g. no Toastify-JS) — implement a minimal custom toast\n- Must work over HTTPS (Clipboard API requires secure context)\n- WCAG 2.2 AA compliance required\n- Touch targets minimum 44×44 px\n- All new CSS must use CSS custom properties (design tokens) defined in the existing stylesheet\n- Python is used for any server-side rendering or test scripts\n\n## IDENTIFIED ISSUES\n\n### HIGH — Accessibility (WCAG 2.2)\n- [HIGH-A1] Button must have explicit `type=\"button\"` and a descriptive `aria-label=\"Kopiera specifikation till urklipp\"`\n- [HIGH-A2] Button must be keyboard-reachable via Tab and activatable with Enter/Space — verify focus order is logical\n- [HIGH-A3] Toast container must be a persistent `aria-live=\"assertive\"` region in the DOM (present on page load, never removed) so screen readers announce it immediately on update\n- [HIGH-A4] Toast must remain visible for at least 3 seconds; focus must not be moved to the toast, and must not be trapped after dismissal\n\n### MEDIUM — Error Handling & Clipboard API\n- [MED-E1] `navigator.clipboard.writeText()` returns a Promise — always attach `.then()` and `.catch()`. Never leave a rejected Promise unhandled\n- [MED-E2] On failure, show an error toast: 'Kopiering misslyckades. Kontrollera att sidan använder HTTPS och att webbläsarbehörigheter tillåter urklipp.'\n- [MED-E3] If `navigator.clipboard` is undefined (insecure context or old browser), handle gracefully with the same error toast — do not throw\n- [MED-E4] If the spec variable is `null`, `undefined`, or empty string, disable the button and optionally show 'Inget att kopiera' on click attempt\n\n### MEDIUM — Toast System\n- [MED-T1] Only one toast may be visible at a time — if a new toast is triggered while one is showing, replace it immediately\n- [MED-T2] Toast auto-dismisses after 3000 ms; clear any pending dismiss timer before showing a new toast\n- [MED-T3] Toast position: bottom-center on mobile (viewport < 768 px), top-right on desktop\n- [MED-T4] Toast min font-size: 14 px (use `rem`); must not obscure primary content\n\n### MEDIUM — Design & Responsiveness\n- [MED-D1] 'Kopiera spec' is a secondary action — style as secondary button relative to export (primary)\n- [MED-D2] Define and use CSS custom properties: `--color-btn-secondary-bg`, `--color-btn-secondary-text`, `--color-btn-secondary-hover-bg`, `--color-btn-focus-ring`, `--color-toast-success-bg`, `--color-toast-success-text`, `--color-toast-error-bg`, `--color-toast-error-text`\n- [MED-D3] Toast text contrast must meet WCAG AA (≥ 4.5:1) — verify chosen hex values\n- [MED-D4] Button row must use flexbox with `gap` and `flex-wrap: wrap` to prevent overflow on small screens\n- [MED-D5] Button padding must ensure 44×44 px touch target\n\n### MEDIUM — Data Source\n- [MED-DS1] Specification text must be read from a JavaScript variable (e.g. `window.promptTeam.currentSpec`) set server-side or by the generation logic — never scraped from `innerHTML` or `textContent` of a DOM element\n\n## ASSUMPTIONS\n- The existing export button is rendered in a `<div class=\"action-bar\">` or equivalent container; the new button is inserted as a sibling inside that container\n- The generated spec is already stored in a JS variable accessible as `window.promptTeam.currentSpec` (string or null); this assumption must be confirmed and the variable name adjusted if different\n- No existing toast system is present in Prompt Team — a minimal custom implementation is required\n- The app is served over HTTPS in production; local development over HTTP is acceptable with a console warning\n- Python test scripts use `pytest` and `playwright` for integration tests\n\n## TEST CASES\n\n```python\n# tests/test_copy_spec_button.py\nimport pytest\nfrom playwright.sync_api import Page, expect\n\nBASE_URL = \"http://localhost:8000\"\n\ndef test_copy_button_present_next_to_export(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    export_btn = page.locator(\"[data-testid='export-btn']\")\n    copy_btn = page.locator(\"[data-testid='copy-spec-btn']\")\n    expect(export_btn).to_be_visible()\n    expect(copy_btn).to_be_visible()\n    # Verify they share the same parent container\n    assert export_btn.evaluate(\"el => el.parentElement\") == copy_btn.evaluate(\"el => el.parentElement\")\n\ndef test_copy_button_aria_attributes(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    copy_btn = page.locator(\"[data-testid='copy-spec-btn']\")\n    expect(copy_btn).to_have_attribute(\"type\", \"button\")\n    expect(copy_btn).to_have_attribute(\"aria-label\", \"Kopiera specifikation till urklipp\")\n\ndef test_copy_button_keyboard_accessible(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    page.keyboard.press(\"Tab\")  # navigate to button area\n    # Tab until copy button is focused\n    for _ in range(10):\n        focused = page.evaluate(\"document.activeElement.dataset.testid\")\n        if focused == \"copy-spec-btn\":\n            break\n        page.keyboard.press(\"Tab\")\n    assert page.evaluate(\"document.activeElement.dataset.testid\") == \"copy-spec-btn\"\n\ndef test_success_toast_shown_on_copy(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    # Inject a spec value\n    page.evaluate(\"window.promptTeam.currentSpec = 'Test specification content'\")\n    copy_btn = page.locator(\"[data-testid='copy-spec-btn']\")\n    copy_btn.click()\n    toast = page.locator(\"[data-testid='toast']\", has_text=\"Specifikationen kopierades\")\n    expect(toast).to_be_visible()\n\ndef test_error_toast_when_clipboard_unavailable(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    page.evaluate(\"window.promptTeam.currentSpec = 'Some spec'\")\n    # Simulate clipboard failure\n    page.evaluate(\"\"\"\n        navigator.clipboard.writeText = () => Promise.reject(new Error('Permission denied'))\n    \"\"\")\n    page.locator(\"[data-testid='copy-spec-btn']\").click()\n    toast = page.locator(\"[data-testid='toast']\")\n    expect(toast).to_contain_text(\"Kopiering misslyckades\")\n\ndef test_button_disabled_when_spec_is_empty(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    page.evaluate(\"window.promptTeam.currentSpec = null\")\n    copy_btn = page.locator(\"[data-testid='copy-spec-btn']\")\n    # Trigger re-evaluation of disabled state\n    page.evaluate(\"window.promptTeam.updateCopyButton()\")\n    expect(copy_btn).to_be_disabled()\n\ndef test_only_one_toast_at_a_time(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    page.evaluate(\"window.promptTeam.currentSpec = 'Spec'\")\n    copy_btn = page.locator(\"[data-testid='copy-spec-btn']\")\n    copy_btn.click()\n    copy_btn.click()\n    toasts = page.locator(\"[data-testid='toast']\")\n    expect(toasts).to_have_count(1)\n\ndef test_aria_live_region_present_on_load(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    live_region = page.locator(\"[aria-live='assertive'][data-testid='toast-container']\")\n    expect(live_region).to_be_attached()  # present in DOM even before any toast\n\ndef test_toast_auto_dismisses_after_3s(page: Page):\n    page.goto(f\"{BASE_URL}/\")\n    page.evaluate(\"window.promptTeam.currentSpec = 'Spec'\")\n    page.locator(\"[data-testid='copy-spec-btn']\").click()\n    toast = page.locator(\"[data-testid='toast']\")\n    expect(toast).to_be_visible()\n    page.wait_for_timeout(3500)\n    expect(toast).not_to_be_visible()\n```\n\n## ACCEPTANCE CRITERIA\n[ ] Knappen 'Kopiera spec' visas bredvid exportknappen i samma behållare\n[ ] Knappen har `type=\"button\"`, `data-testid=\"copy-spec-btn\"` och `aria-label=\"Kopiera specifikation till urklipp\"`\n[ ] Specifikationstexten hämtas från `window.promptTeam.currentSpec` (ej från DOM)\n[ ] Lyckad kopiering visar en grön success-toast med texten 'Specifikationen kopierades till urklipp'\n[ ] Misslyckad kopiering (Promise reject eller saknat API) visar en röd error-toast med texten 'Kopiering misslyckades. Kontrollera att sidan använder HTTPS och att webbläsarbehörigheter tillåter urklipp.'\n[ ] Knappen är inaktiverad (`disabled`) när `window.promptTeam.currentSpec` är null, undefined eller tom sträng\n[ ] Maximalt en toast visas åt gången — ny toast ersätter pågående toast direkt\n[ ] Toast försvinner automatiskt efter 3 sekunder\n[ ] Toast-containern (`aria-live=\"assertive\"`) finns i DOM från sidladdning\n[ ] Knappen är nåbar via Tab och aktiverbar med Enter/Space utan att fokus fastnar\n[ ] Kontrastförhållande för toast-text mot bakgrund uppfyller WCAG AA (≥ 4.5:1)\n[ ] Touch-mål för knappen är minst 44×44 px\n[ ] Knappraden använder flexbox med `flex-wrap: wrap` — ingen horisontell scroll på 320 px viewport\n[ ] Alla nya stilar använder definierade CSS custom properties\n[ ] Inga externa JS-bibliotek introduceras\n[ ] Alla 8 Playwright-testfall passerar: `pytest tests/test_copy_spec_button.py`",
+  "stats": {
+    "total": 14,
+    "approved": 4,
+    "rejected": 10,
+    "errors": 0,
+    "skipped": 0
+  },
+  "cost_summary": {
+    "tokens_in": 31020,
+    "tokens_out": 12698,
+    "total_usd": 0.0953,
+    "by_agent": [
+      {
+        "name": "Tillgänglighet",
+        "cost_usd": 0.00313
+      },
+      {
+        "name": "Edge-case-jägaren",
+        "cost_usd": 0.00286
+      },
+      {
+        "name": "Felhantering",
+        "cost_usd": 0.00283
+      },
+      {
+        "name": "Frontend-agenten",
+        "cost_usd": 0.00251
+      },
+      {
+        "name": "UI/Design-granskaren",
+        "cost_usd": 0.00216
+      }
+    ]
+  },
+  "saved": {
+    "local": true,
+    "cloud": true
+  }
+}

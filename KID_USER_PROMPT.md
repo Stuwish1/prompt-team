@@ -41,6 +41,9 @@
 | `byggsätt` | Visa aldrig för barnet |
 | `fas N/M` | "Del N av M" |
 | `försök N` | Visa aldrig |
+| `Snabbläge` / `Djupläge` | "Snabb kontroll ⚡" / "Noggrann kontroll 🔍" |
+| `kvarstående problem` | "saker som inte stämmer" |
+| `Specifikationen` | "Din plan" |
 
 ---
 
@@ -239,6 +242,64 @@ const _MODE_HELP_KID = {
 ```
 
 **Godkänt när:** Orden "spec", "backlog", "fix-spec" syns inte på läge-knapparna.
+
+---
+
+#### TASK-36 · Byt run-knappens text "Skicka till teamet"
+
+**Fil:** `index.html` → `#runBtn` (rad ~865) + `depth-btn`-knapparna (rad ~862)
+
+**Bakgrund:**
+Huvud-knappen är det barnet klickar på för att starta. Den säger:
+`"▶ Skicka till teamet"` — "teamet" är ett internt kodnamn barnet aldrig hört.
+Depth-knapparna bredvid har tooltips: `"7 kärnagenter — snabb iteration (~25s)"` och
+`"Hela teamet — gedigen leverans (~60s)"` — synliga vid hover.
+
+**Vad ska göras:**
+```html
+<!-- FÖRE -->
+<button class="depth-btn" title="7 kärnagenter — snabb iteration (~25s)">⚡ Snabbläge</button>
+<button class="depth-btn active" title="Hela teamet — gedigen leverans (~60s)">🏢 Djupläge</button>
+<button class="btn btn-primary" id="runBtn">▶ Skicka till teamet</button>
+
+<!-- EFTER -->
+<button class="depth-btn" title="Snabbare (~25s)">⚡ Snabb kontroll</button>
+<button class="depth-btn active" title="Noggrannare (~60s)">🔍 Noggrann kontroll</button>
+<button class="btn btn-primary" id="runBtn">▶ Kör!</button>
+```
+
+I `runReview()` när mode = `ny_funktion`:
+```javascript
+// Knapp-text anpassas per läge:
+const _RUN_LABEL = {
+  ny_funktion:  '▶ Förstå min idé!',
+  granska_kod:  '▶ Kolla koden!',
+  buggrapport:  '▶ Hitta felet!',
+};
+document.getElementById('runBtn').textContent = _RUN_LABEL[currentMode] || '▶ Kör!';
+```
+
+**Godkänt när:** Knappen säger aldrig "teamet". Tooltips innehåller ingen agent-jargong.
+
+---
+
+#### TASK-37 · Byt kravBox-titel "📋 Kravanalytikern"
+
+**Fil:** `index.html` → `renderKravBox()` (rad ~2315)
+
+**Bakgrund:**
+Resultatvyns första block visar alltid `"📋 Kravanalytikern"` som rubrik.
+Barnet har aldrig hört termen "Kravanalytikern".
+
+```javascript
+// FÖRE:
+`<div class="krav-title">📋 Kravanalytikern</div>`
+
+// EFTER:
+`<div class="krav-title">📋 ${kidMode ? 'Jag förstår din idé så här:' : 'Kravanalytikern'}</div>`
+```
+
+**Godkänt när:** Barnvy visar "Jag förstår din idé så här:" — inte "Kravanalytikern".
 
 ---
 
@@ -517,6 +578,169 @@ banner.innerHTML = schemaBehind
 
 ---
 
+#### TASK-40 · Ge "Byggresultat"-modalen admin-only i barnläge
+
+**Fil:** `index.html` → `#buildResultModal` (rad ~975)
+
+**Bakgrund:**
+Modalen "📦 Byggresultat" visas när barnet klickat "▶ Bygg det här!" och ska granska resultatet.
+Den kräver att barnet klistrar in kod manuellt med texten:
+`"Den byggda koden (teamet granskar + verifierar mot specen automatiskt)"` och
+`"Klistra in koden som byggaren producerade..."`.
+Det här är direkt kopplat till det manuella copy-paste-flödet som TASK-04 ersätter med chatbox.
+Tills chatbox är klar: dölja modalen i barnläge, eller ersätt med ett "Väntar på byggaren..."-meddelande.
+
+**Vad ska göras (tillfällig lösning tills TASK-04 är klar):**
+```javascript
+// I startBuild(): i barnläge, visa INTE buildResultModal
+// Visa istället ett enkelt vänte-meddelande i kö-kortet
+if (kidMode) {
+  showToast('⏳ Bygget är skickat! Jag meddelar dig när det är klart.', 5000);
+  return;
+}
+// Admin-flöde: öppna buildResultModal som vanligt
+openBuildResult(id);
+```
+
+**Långsiktig lösning:** Hela detta flöde ersätts av chatbox-integrationen (AGENT_CHATBOX_BUILD.md).
+
+**Godkänt när:** Barnvy ser aldrig "teamet granskar", "mot specen", "byggaren producerade".
+
+---
+
+#### TASK-41 · Ge Projektprofil-flikens tekniska fält `admin-only`
+
+**Fil:** `index.html` → `#tab-profile` (rad ~1095)
+
+**Bakgrund:**
+Projektprofil-fliken innehåller fält som ett barn aldrig kan fylla i:
+- "Teknikstack" (React, TypeScript...)
+- "Arkitektur" (Server components, Monorepo...)
+- "Kodkonventioner" (camelCase, snake_case...)
+- "Constraints" (Får ej byta databas...)
+
+**Vad ska göras:**
+```html
+<!-- Ge hela fliken admin-only -->
+<button class="modal-tab admin-only" onclick="switchProjTab('profile')">📋 Projektprofil</button>
+<div class="tab-pane admin-only" id="tab-profile">...</div>
+```
+
+Alternativt: behåll bara "Projektets syfte"-fältet synligt för barn (det kan ett barn faktiskt fylla i).
+
+**Godkänt när:** Barnvy ser inte Teknikstack, Arkitektur, Kodkonventioner eller Constraints.
+
+---
+
+#### TASK-38 · Byt completenessBox-texterna
+
+**Fil:** `index.html` → `renderCompletenessBox()` (rad ~2337)
+
+**Bakgrund:**
+Kompletthetsrutan visar `"✅ Specifikationen är komplett"` eller `"⚠️ Specifikationen kan förbättras"`.
+"Specifikationen" är teknisk term. Rutan visar även ett poäng `7/10` utan förklaring.
+
+```javascript
+// FÖRE:
+isComplete ? '✅ Specifikationen är komplett' : '⚠️ Specifikationen kan förbättras'
+
+// EFTER (kid-mode):
+isComplete ? '✅ Din plan är redo att byggas!' : '⚠️ Din plan kan bli ännu bättre'
+```
+
+Poänget `7/10` bör kompletteras med en förklaring i barnläge:
+```javascript
+`<div class="completeness-score">${score}<span>/10</span></div>`
+// Lägg till under poänget:
+kidMode ? `<div style="font-size:11px;color:var(--text3);">hur komplett din plan är</div>` : ''
+```
+
+**Godkänt när:** Barnvy ser aldrig "Specifikationen". Poänget har en förklaring.
+
+---
+
+#### TASK-39 · Rensa tekniska toast-meddelanden
+
+**Fil:** `index.html` → alla `showToast()`-anrop med teknisk text
+
+**Bakgrund:**
+Systemet har 20+ toast-meddelanden. Dessa är tekniska och visas direkt för barnet:
+
+| Rad | Nuvarande text | Barnvänlig ersättning |
+|---|---|---|
+| ~1986 | `"Klistra in den byggda koden först."` | `"Klistra in koden du fick från byggaren."` |
+| ~1999 | `"Bygget godkänt och verifierat — nästa i kön är redo!"` | `"✅ Bra jobbat! Nästa projekt kan börja."` |
+| ~2002 | `"Granskningen hittade ${n} kvarstående problem — se kortet."` | `"⚠️ Jag hittade ${n} saker att fixa — se kortet."` |
+| ~2058 | `"Ingen spec att köa."` | `"Välj en plan att bygga först."` |
+| ~2074 | `"Lagd i byggkön — öppna Att bygga för att bygga den"` | `"✅ Tillagd! Öppna 'Att bygga' för att starta."` |
+| ~2205 | `"Promptsmeden behöver mer info — formulera om fyndet eller kör djupläge."` | `"Jag behöver mer info — beskriv problemet lite mer detaljerat."` |
+| ~2668 | `"⬇ Exporterad som Markdown"` | `"⬇ Filen är nedladdad!"` |
+| multipla | `"❌ " + e.message` (råa JS-fel) | `"❌ Något gick fel. Försök igen."` (barn) / full text (admin) |
+
+**Vad ska göras:**
+Skapa en hjälpfunktion:
+```javascript
+function kidToast(kidMsg, adminMsg, duration) {
+  showToast(kidMode ? kidMsg : (adminMsg || kidMsg), duration);
+}
+```
+Byt ut berörda `showToast()`-anrop till `kidToast()`.
+
+**Godkänt när:** Barnvy ser aldrig "spec", "köa", "kön", "Promptsmeden", "Markdown" i toast-meddelanden.
+
+---
+
+#### TASK-42 · Fixa "Kvarstående:"-texten i kö-korten
+
+**Fil:** `index.html` → `renderQueueBox()` (rad ~1892)
+
+**Bakgrund:**
+När ett bygge är underkänt visar kö-kortet direkt:
+`"<b>Kvarstående:</b>"` följt av bullet-punkter.
+"Kvarstående" är ett ovanligt ord för ett 10-årigt barn.
+
+```javascript
+// FÖRE:
+`<div class="qc-verdict"><b>Kvarstående:</b>${...}</div>`
+
+// EFTER:
+`<div class="qc-verdict"><b>${kidMode ? '⚠️ Behöver fixas:' : 'Kvarstående:'}</b>${...}</div>`
+```
+
+**Godkänt när:** Barnvy visar "Behöver fixas:" i stället för "Kvarstående:".
+
+---
+
+#### TASK-43 · Fixa GitHub-sektionens labels i barnläge
+
+**Fil:** `index.html` → `#githubSection` (rad ~785)
+
+**Bakgrund:**
+GitHub-sektionen (synlig i "Kolla min kod"- och "Buggrapport"-lägena) visar:
+- Tooltip: `"Hämta koden nu för att se exakt vad teamet kommer granska"` — "teamet"
+- "Gren:" label — teknisk term
+- `"Lämna tomt för att klistra in kod manuellt"` — oklart för barn
+- "Kod att granska" — OK men kan förbättras
+
+```javascript
+// GitHub-sektion tooltip (kid-mode):
+fetchBtn.title = kidMode
+  ? 'Hämta den senaste koden'
+  : 'Hämta koden nu för att se exakt vad teamet kommer granska';
+
+// "Gren:"-label (kid-mode):
+kidMode ? 'Version:' : 'Gren:'
+
+// "Lämna tomt..."-status:
+kidMode
+  ? 'Klistra in koden om du vill — annars hämtar jag den från GitHub'
+  : 'Lämna tomt för att klistra in kod manuellt'
+```
+
+**Godkänt när:** Barnvy ser inte "teamet", "Gren" (som git-term) i GitHub-sektionen.
+
+---
+
 #### TASK-24 · Byt P0/P1/P2-etiketter i backlog-vyn
 
 **Fil:** `index.html` → `renderBacklogBox()` (rad ~2115)
@@ -693,6 +917,15 @@ Om inga inställningar finns: visa välkomstsida med `"👋 Hej! Be en vuxen hj�
 - [ ] Supabase SQL-banners
 - [ ] "Standard byggsätt"-raden
 - [ ] "Kön är tom — lägg en spec i byggkön"
+- [ ] "Skicka till teamet" (run-knapp)
+- [ ] "📋 Kravanalytikern" (kravBox-rubrik)
+- [ ] "Specifikationen är komplett/kan förbättras"
+- [ ] Toast-meddelanden med "spec", "köa", "Promptsmeden", "Markdown"
+- [ ] Råa `❌ e.message`-fel visade direkt för barn
+- [ ] "teamet granskar + verifierar mot specen" i Byggresultat-modalen
+- [ ] Projektprofil-flikens tekniska fält (Teknikstack, Arkitektur, Kodkonventioner)
+- [ ] "Gren:" + "teamet"-tooltip i GitHub-sektionen
+- [ ] "Kvarstående:" i kö-korten
 
 ---
 
@@ -707,6 +940,8 @@ Om inga inställningar finns: visa välkomstsida med `"👋 Hej! Be en vuxen hj�
 | 2026-06-10 | Omstrukturering till 27 sendable builder tasks | Claude |
 | 2026-06-10 | Ny push 3654bd7 — 2 regressions, 6 fynd, taskboard uppdaterat | Claude |
 | 2026-06-10 | Djup iteration ogranskade delar — 10 nya fynd (välkomstskärm, fasrubriker, historikvy, backlog-etiketter). 35 tasks totalt, omordnat. | Claude |
+| 2026-06-10 | Final iteration — 4 nya fynd (run-knapp, kravBox-titel, completenessBox, 20+ tekniska toasts). 39 tasks totalt. | Claude |
+| 2026-06-10 | Sista iteration — 4 nya fynd (Byggresultat-modal, Projektprofil tekniska fält, Kvarstående-text, GitHub-sektionens labels). 43 tasks totalt. | Claude |
 
 ---
 
