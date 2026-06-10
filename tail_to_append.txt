@@ -1,0 +1,35 @@
+eventDefault();
+    // Respect the disabled run button — otherwise concurrent reviews race
+    if (!document.getElementById('runBtn').disabled) runReview();
+  }
+});
+
+// Paste screenshots from clipboard (code/bug modes)
+document.addEventListener('paste', (e) => {
+  if (currentMode === 'ny_funktion') return;
+  const items = (e.clipboardData || {}).items || [];
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      const file = it.getAsFile();
+      if (file) { _addScreenshot(file); showToast('📸 Skärmdump tillagd'); }
+    }
+  }
+});
+
+// ── LIVE RELOAD (dev) ──
+(async () => {
+  let lastMtime = null;
+  const poll = async () => {
+    try {
+      const r = await fetch('/api/version');
+      const { mtime } = await r.json();
+      if (lastMtime === null) { lastMtime = mtime; return; }
+      if (mtime !== lastMtime) { location.reload(); }
+    } catch {}
+  };
+  await poll();
+  setInterval(poll, 1000);
+})();
+</script>
+</body>
+</html>

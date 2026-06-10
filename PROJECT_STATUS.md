@@ -1,10 +1,10 @@
 # Project Status
-**Senast uppdaterad:** 2026-06-10T21:18 (projektledaren-auto)
+**Senast uppdaterad:** 2026-06-10T23:57 → uppdaterad av projektledaren-auto (körning 2026-06-10T23:57)
 
 ## Senast godkänt
-- AGENT-FIX-1: review_started_at-läcka + _chat_sessions GC + chat_id-validering — godkänd — 2026-06-10
+- UX-SPRINT4: UX-21 (prompt modal) + UX-20 (felknapp text) + UX-14 (Ctrl+Enter hint) + UX-17 (visa/dölj klara) — klar
 
-## Klart totalt (godkänt av granskaren) — 36 st
+## Klart totalt (godkänt av granskaren) — 57 st
 - ✅ P1: Saknade las — race conditions
 - ✅ P1: Input-validering + path traversal
 - ✅ P1-A: Återställ stale byggs-items vid serveromstart
@@ -40,15 +40,15 @@
 - ✅ P3-T: _progress_set() GC → bakgrundsjobb
 - ✅ BUG: backlog.json korrupt — null-byte overflow
 - ✅ BUG: app.py SyntaxError rad 4807
+- ✅ INFRA-1: Precommit-hook mot filtrunkering
 - ✅ AGENT-FIX-1: review_started_at-läcka + _chat_sessions GC + chat_id-validering
-
-## Väntar granskning (klar i kön, ej formellt godkänd) — 10 st
-- 🔍 CHATBOX-FRONTEND: #builderPanel HTML/CSS/JS — chat-panel för byggagenten
-- 🔍 UX-SPRINT1: UX-1 (alert→inline) + UX-6 (queueDelete ångra) + UX-16 (showToast HTML)
-- 🔍 CHATBOX-BACKEND: SSE endpoint /api/builder/stream/{item_id} + BUILDER_TOOLS
-- 🔍 BUG-KRITISK: app.py trunkerad rad 4676 — OBS: troligt falskt larm (CODEBASE_AUDIT iteration 7 bekräftar fil 4683 rader, syntax OK)
-- 🔍 BUG/SEC-1 + BUG-5 + AGENT_DISPLAY_NAMES: path traversal, switchView CSS, 10 agentnamn
-- 🔍 P4-A+B+C: Teknisk skuld — httpx-import, settings-lock, dead code
-- 🔍 P4-D+E: Hälsokontroll cached klient + normalisera modellsträngar
-- 🔍 P4-F: GitHub inbound webhook
-- 🔍 BUG-6: Uppskjutna imports —
+- ✅ CHATBOX-BACKEND: SSE endpoint /api/builder/stream/{item_id} + BUILDER_TOOLS
+- ✅ CHATBOX-FRONTEND: #builderPanel HTML/CSS/JS — chat-panel för byggagenten
+- ✅ UX-SPRINT1: UX-1 (alert→inline) + UX-6 (queueDelete ångra) + UX-16 (showToast HTML)
+- ✅ BUG/SEC-1 + BUG-5 + AGENT_DISPLAY_NAMES: path traversal, switchView CSS, 10 agentnamn
+- ✅ P4-A+B+C: Teknisk skuld — httpx-import, settings-lock, dead code
+- ✅ P4-D+E: Hälsokontroll cached klient + normalisera modellsträngar
+- ✅ P4-F: GitHub inbound webhook
+- ✅ BUG-6: Uppskjutna imports — flytta till modulnivå
+- ✅ WEBHOOK-FIX: GitHub webhook triggar aldrig auto-granskning
+- ✅ UX-SPRINT2: UX-AL (

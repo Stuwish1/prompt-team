@@ -2,6 +2,18 @@
 
 ---
 
+## 2026-06-10 — KRITISK: index.html trunkerad — byggaren pausad (SANITET HALT)
+
+**Meddelande:** `index.html saknar </html> — filen är trunkerad`
+
+**Kontext:** Sanitetsvakten detekterade att index.html slutar abrupt vid rad 4620 mitt i en `paste`-eventlyssnare, utan avslutande `</html>`. Troligen trunkerad av senaste UX-SPRINT2-bygget som modifierade filen. SANITET_HALT.txt är satt och byggaren är pausad tills felet åtgärdas.
+
+**Föreslagen fix:** Återställ index.html till senast fungerande git-commit (`git checkout <commit> -- index.html`) eller komplettera den saknade slutdelen av filen manuellt.
+
+**Status:** ej inlagd i backlog (API nere)
+
+---
+
 ## 2026-06-10 — KRITISK: app.py trunkerad rad 4676 — server startar inte (ny instans)
 
 **Meddelande:** `SyntaxError: unterminated string literal (detected at line 4677)`
@@ -26,16 +38,4 @@ Kontrollera även git-diff för att se vad som ändrades i senaste commit nära 
 
 **Meddelande:** `json.JSONDecodeError: Extra data: line 190 column 2 (char 11498)`
 
-**Kontext:** backlog.json innehåller giltig JSON (10 items, 11 497 tecken) följt av 9 367 null-bytes (`\x00`). Orsakas troligen av en atomic write-operation som pre-allokerade filen till en större buffert men aldrig trunkerade den efteråt. `json.loads()` misslyckas vid parse → hela backloggen är oläsbar för appen.
-
-**Föreslagen fix:**
-1. Strippa null-bytes vid läsning i `_backlog_load()`:
-   ```python
-   content = path.read_text(encoding="utf-8").rstrip('\x00')
-   ```
-2. Lägg till trunkering i `_backlog_write()` (använd `f.truncate()` efter skrivning)
-3. Korrigera den existerande filen omedelbart:
-   ```bash
-   python3 -c "
-   import json, pathlib
-   p = pathlib.Path('backlog.json')
+**Kontext:** backlog.json innehålle

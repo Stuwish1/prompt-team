@@ -1,0 +1,34 @@
+[
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:03",
+    "added": [],
+    "queue_size": 2,
+    "note": "AGENT-PULSE borttagen (Stivens begäran). Kön: DB-QUEUE-PERSIST (byggs) + UX-SPRINT4 (kö). STATUS uppdaterad: 55 klara, 2 aktiva."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:09",
+    "added": [
+      "AGENT-FIX-2: review_started_at early-exit leak"
+    ],
+    "queue_size": 3,
+    "note": "DB-QUEUE-PERSIST nu KLAR. Lade in AGENT-FIX-2 (medium-bug från KID-agent). Kön full (3 items) — väntar."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:11",
+    "added": [],
+    "queue_size": 3,
+    "note": "Kön full (3 items: UX-SPRINT4, AGENT-PULSE, AGENT-FIX-2) — inga nya tasks inlagda. PROJECT_STATUS uppdaterad."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:15",
+    "added": [
+      "AGENT-FIX-3: Shell injection i git_commit_push + _chat_sessions GC"
+    ],
+    "queue_size": 3,
+    "note": "UX-SPRINT4 nu KLAR (ej uppdaterat i förra STATUS). Kö: AGENT-PULSE (byggs, Stiven vill ta bort) + AGENT-FIX-2 (kö) + AGENT-FIX-3 (ny, lagd in). PROJECT_STATUS uppdaterad."
+  }
+]

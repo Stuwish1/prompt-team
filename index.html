@@ -458,6 +458,11 @@ body.view-chatt .history-panel { display: none; }
 .attention-banner .btn { padding: 4px 12px; font-size: 12px; }
 @keyframes attnPulse { 50% { opacity: .75; } }
 .attention-banner.show { display: flex; animation: attnPulse 2.4s var(--ease) infinite; }
+@keyframes healthPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.health-pulse { animation: healthPulse 1.5s ease-in-out infinite; }
 
 /* ── ATT BYGGA VIEW ── */
 #attByggaView { flex: 1; overflow: hidden; display: flex; gap: 0; }
@@ -966,7 +971,7 @@ body.view-chatt .history-panel { display: none; }
       </div>
       <button class="btn btn-primary" id="runBtn" onclick="runReview()">
         ▶ Skicka till teamet
-      </button>
+      </button><span style="font-size:10px;color:var(--text3);margin-left:4px;">Ctrl+Retur</span>
     </div>
 
   </div>
@@ -1079,6 +1084,7 @@ body.view-chatt .history-panel { display: none; }
           <span class="bygga-section-title">Byggkön</span>
           <div class="bygga-divider"></div>
           <span class="phase-stat" id="queueStat"></span>
+          <button class="btn btn-ghost btn-sm" id="toggleKlaraBtn" onclick="toggleKlara()" style="font-size:11px;padding:2px 8px;">Visa klara</button>
         </div>
         <div id="queueBox"><div style="font-size:12px;color:var(--text3);padding:20px 0;">Kön är tom — lägg en spec i byggkön så hamnar den här.</div></div>
       </div>
@@ -1166,6 +1172,14 @@ body.view-chatt .history-panel { display: none; }
       <label>Prompt Teams egna GitHub-repo <span style="font-weight:400;color:var(--text3)">(owner/repo)</span></label>
       <input type="text" id="selfRepoInput" placeholder="Stuwish1/prompt-team" style="font-family:monospace;font-size:12px;">
       <div style="font-size:11px;color:var(--text3);margin-top:4px;">Fylls i automatiskt av push_to_github.bat</div>
+    </div>
+    <div class="form-group">
+      <label>Lokal sökväg till repo</label>
+      <input type="text" id="localPathInput" placeholder="C:\innob-agent\prompt-team"
+             style="font-family:monospace;font-size:12px;">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">
+        Mappen agenten läser/skriver filer i. Standard = samma mapp som app.py.
+      </div>
     </div>
     <div class="form-group">
       <label>Supabase URL</label>
@@ -1374,9 +1388,9 @@ function setDepth(d) {
 const _MODE_MIGRATE = { pre: 'ny_funktion', post: 'granska_kod', both: 'granska_kod' };
 
 const _MODE_HELP = {
-  ny_funktion: 'Beskriv vad du vill — teamet analyserar, granskar och skriver en färdig beställning till din byggare.',
-  granska_kod: 'Teamet läser senaste koden i ditt projekt och listar vad som behöver fixas, sorterat efter hur allvarligt det är.',
-  buggrapport: 'Beskriv vad som blir fel — teamet hittar orsaken i koden och skriver en färdig fix-beställning.',
+  ny_funktion: 'Beskriv din idé — teamet analyserar och skapar en spec 🚀',
+  granska_kod: 'Klistra in koden du vill att teamet ska kolla igenom 🔍',
+  buggrapport: 'Beskriv felet — teamet hittar grundorsaken och föreslår fix 🐛',
 };
 
 function setMode(mode) {
@@ -1436,7 +1450,7 @@ function updateSourceStatusLine() {
 // ── SCREENSHOT HANDLING (→ base64 for Visuell QA-granskaren) ──
 function _addScreenshot(file) {
   if (!file || !file.type.startsWith('image/')) return;
-  if (_screenshots.length >= 6) { alert('Max 6 skärmdumpar.'); return; }
+  if (_screenshots.length >= 6) { showToast('❌ Max 6 skärmdumpar.', 5000); return; }
   const reader = new FileReader();
   reader.onload = e => { _screenshots.push(e.target.result); renderShotThumbs(); };
   reader.readAsDataURL(file);
@@ -1519,6 +1533,7 @@ async function openSettings() {
     document.getElementById('supabaseUrlInput').value = s.supabase_url || '';
     document.getElementById('supabaseKeyInput').value = s.supabase_key || '';
     document.getElementById('selfRepoInput').value = s.self_repo || '';
+    document.getElementById('localPathInput').value = s.local_path || '';
     renderAgentModelRows(s.agent_models || {});
   } catch(e) { /* ignore */ }
   document.getElementById('settingsModal').classList.add('open');
@@ -1587,7 +1602,8 @@ async function saveSettings() {
   const githubToken = document.getElementById('githubTokenInput').value.trim();
   const selfRepo = document.getElementById('selfRepoInput').value.trim();
   const agentModels = getAgentModelsFromUI();
-  const payload = { supabase_url: supabaseUrl, self_repo: selfRepo, agent_models: agentModels };
+  const localPath = document.getElementById('localPathInput').value.trim();
+  const payload = { supabase_url: supabaseUrl, self_repo: selfRepo, local_path: localPath, agent_models: agentModels };
   if (githubToken && !githubToken.startsWith('***')) payload.github_token = githubToken;
   if (orKey && !orKey.startsWith('sk-or-***')) payload.openrouter_key = orKey;
   if (supabaseKey && !supabaseKey.startsWith('***')) payload.supabase_key = supabaseKey;
@@ -1669,8 +1685,15 @@ function updateHealthBadges(services) {
     } else {
       const orOk = services.openrouter?.ok;
       const allOk = Object.values(services).every(s => s.ok);
-      badge.innerHTML = allOk ? ' ✅' : (!orOk ? ' ❌' : '');
-      badge.title = Object.entries(services).map(([k,v]) => `${k}: ${v.ok ? '✓' : '✗'} ${v.msg}`).join('\n');
+      if (allOk) {
+        badge.innerHTML = ' ✅';
+        badge.title = Object.entries(services).map(([k,v]) => `${k}: ${v.ok ? '✓' : '✗'} ${v.msg}`).join('\n');
+        badge.classList.remove('health-pulse');
+      } else {
+        badge.textContent = '⚠️';
+        badge.title = 'Något är fel — klicka för att se detaljer';
+        badge.classList.add('health-pulse');
+      }
     }
   }
 
@@ -1747,7 +1770,7 @@ async function runReview() {
   if (currentMode === 'buggrapport') {
     const bd = document.getElementById('bugDescInput')?.value.trim() || '';
     if (bd.length < 20 || bd.split(/\s+/).length < 3) {
-      alert('Beskriv felet utförligare — minst en mening: vad händer, vad förväntade du dig, vilka steg leder dit? Utan ett riktigt symptom gissar teamet bara.');
+      showFieldError('bugDescInput', 'Beskriv felet utförligare — minst en mening: vad händer, vad förväntade du dig, vilka steg leder dit? Utan ett riktigt symptom gissar teamet bara.');
       document.getElementById('bugDescInput')?.focus();
       return;
     }
@@ -1793,13 +1816,13 @@ async function runReview() {
 
   if (!inputText) {
     if (activeProj && activeProj.repo && usesCode) {
-      alert(`Kunde inte hämta kod från ${activeProj.repo}. Kontrollera att repot finns och att GitHub-token är inställd.`);
+      showToast(`❌ Kunde inte hämta kod från ${activeProj.repo}. Kontrollera att repot finns och att GitHub-token är inställd.`, 5000);
     } else if (isNy) {
-      alert('Beskriv vad du vill bygga.');
+      showFieldError('ideaInput', 'Beskriv vad du vill bygga.');
     } else if (currentMode === 'buggrapport') {
-      alert('Beskriv felet och/eller klistra in koden.');
+      showFieldError('bugDescInput', 'Beskriv felet och/eller klistra in koden.');
     } else {
-      alert('Klistra in kod att granska.');
+      showFieldError('codeInput', 'Klistra in kod att granska.');
     }
     return;
   }
@@ -1809,7 +1832,7 @@ async function runReview() {
     const s = await fetch('/api/settings').then(r => r.json());
     if (!s.openrouter_key) {
       openSettings();
-      alert('Ange din OpenRouter API-nyckel i inställningarna först.');
+      showToast('❌ Ange din OpenRouter API-nyckel i inställningarna först.', 5000);
       return;
     }
   } catch(e) { /* continue if settings endpoint fails */ }
@@ -2291,6 +2314,8 @@ function renderHeaderProjectSelect() {
 
 // ── ATT BYGGA — backlog + byggkö ────────────────────────────────
 let _queueItems = [];
+let _showKlara = false;
+function toggleKlara() { _showKlara = !_showKlara; loadAttBygga(); }
 
 async function loadAttBygga() {
   const pid = getActiveProject()?.id || '';
@@ -2309,14 +2334,16 @@ async function loadAttBygga() {
   } catch (e) { showToast('Kunde inte ladda Att bygga: ' + e.message); }
 }
 
-const _Q_STATUS_LABEL = { 'kö': 'I kö', 'byggs': 'Byggs', 'behover_dig': 'Behöver dig', 'klar': 'Klar' };
+const _Q_STATUS_LABEL = { 'kö': '🕐 Väntar på sin tur', 'byggs': '⏳ Håller på att byggas...', 'behover_dig': '🙋 Jag behöver din hjälp!', 'klar': '✅ Klart!' };
 
 function renderQueueBox() {
   const box = document.getElementById('queueBox');
   const stat = document.getElementById('queueStat');
-  const items = _queueItems;
+  const toggleBtn = document.getElementById('toggleKlaraBtn');
+  if (toggleBtn) toggleBtn.textContent = _showKlara ? 'Dölj klara' : 'Visa klara';
+  const items = _showKlara ? _queueItems : _queueItems.filter(i => i.status !== 'klar');
   if (!items.length) {
-    box.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:20px 0;">Kön är tom — lägg en spec i byggkön så hamnar den här.</div>';
+    box.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)"><div>Kön är tom! 🎉</div><button class="btn btn-primary" style="margin-top:12px" onclick="switchView(\'bestall\')">→ Gå till Beställ</button></div>';
     if (stat) stat.textContent = '';
     updateAttentionBanner();
     return;
@@ -2347,8 +2374,8 @@ function renderQueueBox() {
           : `🔒 '${escHtml(redItem.title)}' är underkänd och måste bli grön först`;
         actions = `<span style="font-size:12px;color:var(--yellow);font-weight:600;">${why}</span>`;
       } else if (it.status === 'kö') {
-        actions = `<button class="btn btn-primary" onclick="startBuild('${it.id}', this)">▶ Bygg nästa</button>
-                   <span style="font-size:11px;color:var(--text3);">Specen kopieras — klistra in i din byggare</span>`;
+        actions = `<button class="btn btn-primary" onclick="startBuild('${it.id}', this)">▶ Bygg det här!</button>
+                   <span style="font-size:11px;color:var(--text3);">Tryck för att börja bygga 🚀</span>`;
       } else if (it.status === 'byggs') {
         const hasRepo = !!(getActiveProject()?.repo);
         actions = (hasRepo
@@ -2356,14 +2383,14 @@ function renderQueueBox() {
              <button class="btn btn-ghost" onclick="openBuildResult('${it.id}')" style="font-size:11px;">📋 ...eller klistra in koden själv</button>`
           : `<button class="btn btn-primary" onclick="kontrolleraBuild('${it.id}', this)" title="Hämtar senaste koden och låter teamet granska">🔍 Kontrollera bygget</button>
              <button class="btn btn-ghost" onclick="openBuildResult('${it.id}')" style="font-size:11px;">📋 Klistra in resultatet</button>`)
-          + `<button class="btn btn-ghost" onclick="queueSetStatus('${it.id}','kö')">↩ Tillbaka till kö</button>`;
+          + `<button class="btn btn-ghost" onclick="queueSetStatus('${it.id}','kö')">← Avbryt, vänta istället</button>`;
       } else if (it.status === 'behover_dig') {
-        actions = `<button class="btn btn-primary" onclick="startBuild('${it.id}', this)">🔄 Skicka igen (specen skrivs om med kvarståendena)</button>
+        actions = `<button class="btn btn-primary" onclick="startBuild('${it.id}', this)">🔄 Försök igen</button>
                    <button class="btn btn-ghost" onclick="queueSetStatus('${it.id}','klar')" title="Kräver motivering — loggas i ärendehistoriken">Markera klar ändå</button>`;
       }
       const verdictHtml = (it.status === 'behover_dig' && (v.kvarstaende || []).length)
         ? `<div class="qc-verdict"><b>Kvarstående:</b>${(v.kvarstaende || []).slice(0, 6).map(k => `<div>• ${escHtml(k)}</div>`).join('')}</div>`
-        : '';
+        : (it.status === 'byggs' ? '<div class="qc-verdict" style="display:none;"></div>' : '');
       body = `<div class="qc-body">
           ${verdictHtml}
           <div class="qc-actions">${actions}
@@ -2372,7 +2399,7 @@ function renderQueueBox() {
           </div>
         </div>`;
     }
-    return `<div class="queue-card ${expanded ? 'expanded' : ''} st-${it.status}">
+    return `<div class="queue-card ${expanded ? 'expanded' : ''} st-${it.status}" data-id="${it.id}">
         <div class="qc-row">
           <div class="qc-move">
             <button onclick="queueMove('${it.id}',-1)" title="Flytta upp">▲</button>
@@ -2538,7 +2565,7 @@ async function startBuild(id, btn) {
     await loadAttBygga();
   } catch (e) {
     showToast('❌ ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = '▶ Bygg nästa'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Bygg det har!'; }
   }
 }
 
@@ -2569,7 +2596,16 @@ async function kontrolleraBuild(id, btn) {
       showToast(`🔴 UNDERKÄNT — ${kv || 'flera'} kvarstående problem. Tryck "Skicka igen" så skrivs specen om.`, 7000);
     }
     await loadAttBygga();
-    refreshByggaBadge();
+    refreshByggaBadge();   // UX-19: refresh badge after review
+    const item = _queueItems.find(x => x.id === id);
+    if (item?.last_verdict?.kvarstaende?.length) {
+      const el = document.querySelector(`[data-id="${id}"] .qc-verdict`);
+      if (el) {
+        el.innerHTML = `<b>Kvarstående problem (${item.last_verdict.kvarstaende.length}):</b><ul>` +
+          item.last_verdict.kvarstaende.map(p => `<li>${escHtml(p)}</li>`).join('') + '</ul>';
+        el.style.display = 'block';
+      }
+    }
   } catch (e) {
     showToast('❌ ' + e.message, 6000);
     if (btn) { btn.disabled = false; btn.textContent = '🔍 Kontrollera bygget'; }
@@ -2622,7 +2658,17 @@ async function queueSetStatus(id, status) {
   // Friskförklara underkänt bygge = medvetet beslut → motivering krävs och loggas
   const it = _queueItems.find(x => x.id === id);
   if (status === 'klar' && it?.status === 'behover_dig') {
-    const reason = prompt('Bygget är underkänt. Varför ska det ändå markeras klart?\n(Motiveringen loggas i ärendehistoriken)');
+    const reason = await new Promise(resolve => {
+      const dlg = document.getElementById('overrideReasonDialog');
+      const inp = document.getElementById('overrideReasonInput');
+      inp.value = '';
+      dlg.showModal();
+      const onClose = () => {
+        dlg.removeEventListener('close', onClose);
+        resolve(dlg.returnValue === '' ? null : inp.value);
+      };
+      dlg.addEventListener('close', onClose);
+    });
     if (!reason || reason.trim().length < 10) {
       if (reason !== null) showToast('Motiveringen måste vara minst 10 tecken.');
       return;
@@ -2641,14 +2687,28 @@ async function queueSetStatus(id, status) {
 }
 
 async function queueDelete(id) {
-  if (!confirm('Ta bort denna spec ur byggkön?')) return;
+  const item = _queueItems.find(i => i.id === id);
+  const title = item?.title || id;
+  // Optimistic deletion
   try {
     await fetch('/api/build-queue/' + id, {
       method: 'PATCH', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ deleted: true })
     });
-    await loadAttBygga();
+    loadAttBygga();
+    showToast(`🗑 "${title}" borttagen <button onclick="undoQueueDelete('${id}')" style="margin-left:8px;padding:2px 8px;border-radius:4px;cursor:pointer;">Ångra</button>`, 5000);
   } catch (e) { showToast('❌ ' + e.message); }
+}
+
+async function undoQueueDelete(id) {
+  try {
+    await fetch('/api/build-queue/' + id, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ deleted: false })
+    });
+    await loadAttBygga();
+    showToast('↩️ Ångrat — spec återställd', 3000);
+  } catch (e) { showToast('❌ Kunde inte ångra: ' + e.message); }
 }
 
 async function queueMove(id, dir) {
@@ -2812,22 +2872,38 @@ async function planBacklog(btn, silent) {
 }
 
 async function deleteBacklogItem(id) {
-  if (!confirm('Ta bort fyndet permanent?')) return;
+  // Optimistic deletion with undo
+  const item = (_lastBacklog || []).find(x => x.id === id);
   try {
     const res = await fetch('/api/backlog/' + id, { method: 'DELETE' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     _lastBacklog = (_lastBacklog || []).filter(x => x.id !== id);
     renderBacklogBox(_lastBacklog);
     refreshByggaBadge();
-    showToast('🗑 Fynd borttaget');
+    const undoBtn = item
+      ? `<button onclick="undoDeleteBacklogItem(${JSON.stringify(item).replace(/"/g,'&quot;')})" style="margin-left:8px;padding:2px 8px;border-radius:4px;cursor:pointer;">Ångra</button>`
+      : '';
+    showToast('🗑 Fynd borttaget' + undoBtn, 5000);
   } catch(e) { showToast('❌ Kunde inte ta bort fyndet'); }
+}
+
+async function undoDeleteBacklogItem(item) {
+  try {
+    const res = await fetch('/api/backlog/add', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(item)
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    await loadAttBygga();
+    showToast('↩️ Fynd återställt', 3000);
+  } catch(e) { showToast('❌ Kunde inte återställa fyndet'); }
 }
 
 async function clearBacklog() {
   const pid = getActiveProject()?.id || '';
   if (!pid) return;
   const n = (_lastBacklog || []).length;
-  if (!confirm(`Ta bort ALLA ${n} fynd för projektet? Detta går inte att ångra.`)) return;
+  // Optimistic — delete directly, show undo toast
   try {
     const res = await fetch('/api/backlog/clear', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -2837,7 +2913,7 @@ async function clearBacklog() {
     if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
     await loadAttBygga();
     refreshByggaBadge();
-    showToast(`🗑 ${data.removed} fynd borttagna`);
+    showToast(`🗑 ${data.removed} fynd borttagna`, 5000);
   } catch(e) { showToast('❌ ' + e.message); }
 }
 
@@ -3497,7 +3573,7 @@ function copyPrompt() {
       btn.classList.remove('copied');
     }, 2000);
   }).catch(() => {
-    prompt('Kopiera prompten manuellt (Ctrl+A, Ctrl+C):', text);
+    showToast('Kunde inte kopiera - markera manuellt', 5000);
   });
 }
 
@@ -3841,13 +3917,13 @@ async function loadSession(id) {
     const el = document.getElementById('hist-' + id);
     if (el) el.classList.add('active');
   } catch(e) {
-    alert('Kunde inte ladda session: ' + e.message);
+    showToast('❌ Kunde inte ladda session: ' + e.message, 5000);
   }
 }
 
 async function deleteSession(e, id) {
   e.stopPropagation();
-  if (!confirm('Radera denna session?')) return;
+  // Optimistic deletion with undo toast
   await fetch('/api/sessions/' + id, {method: 'DELETE'});
   if (_activeSessionId === id) {
     _activeSessionId = null;
@@ -3856,6 +3932,7 @@ async function deleteSession(e, id) {
     document.getElementById('emptyState').style.display = 'flex';
   }
   loadHistory();
+  showToast('🗑 Session raderad', 5000);
 }
 
 // Load history on startup
@@ -4494,9 +4571,7 @@ async function fetchActiveProjectCode() {
   }
 }
 
-async function deleteProject(id) {
-  if (id === 'main') return; // main project is permanently locked
-  if (!confirm('Ta bort projektet? Sessionshistoriken bevaras.')) return;
+async function deleteProjectConfirmed(id) {
   const projects = getProjects().filter(p => p.id !== id);
   setProjects(projects);
   await fetch(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
@@ -4513,6 +4588,27 @@ async function deleteProject(id) {
   renderProjects();
   updateActiveProjBadge();
   showToast('Projektet borttaget');
+}
+
+function confirmDeleteProject(id) {
+  const dlg = document.createElement('dialog');
+  dlg.innerHTML = `
+    <div style="padding:20px;max-width:320px;">
+      <h3 style="margin:0 0 12px">Ta bort projektet?</h3>
+      <p style="color:var(--text2)">Det går inte att ångra detta.</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+        <button class="btn btn-ghost" onclick="this.closest('dialog').close()">Avbryt</button>
+        <button class="btn btn-danger" onclick="deleteProjectConfirmed('${id}');this.closest('dialog').close()">Ta bort</button>
+      </div>
+    </div>`;
+  document.body.appendChild(dlg);
+  dlg.showModal();
+  dlg.addEventListener('close', () => dlg.remove());
+}
+
+async function deleteProject(id) {
+  if (id === 'main') return; // main project is permanently locked
+  confirmDeleteProject(id);
 }
 
 function escHtml(str) {
@@ -4546,15 +4642,27 @@ function showToast(msg, duration = 3000) {
     toast.className = 'toast';
     toast.style.cssText = [
       'position:fixed', 'bottom:24px', 'left:50%', 'transform:translateX(-50%)',
-      'z-index:9999', 'pointer-events:none', 'max-width:420px', 'text-align:center',
+      'z-index:9999', 'pointer-events:auto', 'max-width:480px', 'text-align:center',
       'transition:opacity .2s'
     ].join(';');
     document.body.appendChild(toast);
   }
-  toast.textContent = msg;
+  toast.innerHTML = msg;
   toast.style.opacity = '1';
   clearTimeout(toast._t);
   toast._t = setTimeout(() => { toast.style.opacity = '0'; }, duration);
+}
+
+function showFieldError(elementId, msg) {
+  const el = document.getElementById(elementId);
+  if (!el) { showToast('❌ ' + msg, 5000); return; }
+  el.style.borderColor = 'var(--red, #e55)';
+  const err = document.createElement('div');
+  err.className = 'field-error';
+  err.style.cssText = 'color:var(--red,#e55);font-size:12px;margin-top:2px;';
+  err.textContent = msg;
+  el.parentNode.insertBefore(err, el.nextSibling);
+  setTimeout(() => { el.style.borderColor = ''; err.remove(); }, 4000);
 }
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -4610,7 +4718,7 @@ document.addEventListener('paste', (e) => {
   for (const it of items) {
     if (it.type && it.type.startsWith('image/')) {
       const file = it.getAsFile();
-      if (file) { _addScreenshot(file); showToast('📸 Skärmdump tillagd'); }
+      if (file) { _addScreenshot(file); showToast('\u{1F4F8} Sk\u00E4rmdump tillagd'); }
     }
   }
 });
@@ -4630,5 +4738,47 @@ document.addEventListener('paste', (e) => {
   setInterval(poll, 1000);
 })();
 </script>
+
+<dialog id="overrideReasonDialog"><form method="dialog">
+  <p style="margin:0 0 8px;font-size:14px;">Varför ska bygget markeras klart ändå?</p>
+  <textarea id="overrideReasonInput" rows="3" style="width:100%;box-sizing:border-box;"></textarea>
+  <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end;">
+    <button type="button" onclick="document.getElementById('overrideReasonDialog').close('')">Avbryt</button>
+    <button type="submit">OK</button>
+  </div>
+</form></dialog>
+
+<div id="agentPulse" style="
+  position:fixed; bottom:8px; right:12px;
+  font-size:11px; color:var(--text3);
+  background:var(--surface2,rgba(0,0,0,0.04));
+  padding:3px 8px; border-radius:10px;
+  opacity:0; transition:opacity 0.5s;
+  pointer-events:none; z-index:9;
+" title="Senaste agentaktivitet"></div>
+
+<script>
+(async function agentPulse() {
+  const el = document.getElementById('agentPulse');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/agent-log');
+    const { entries } = await r.json();
+    if (!entries?.length) return;
+    const last = entries[entries.length - 1];
+    const names = { projektledare: '🗂', snickare: '🔨', granskare: '✅', specskrivare: '📝', logg: '📋' };
+    const icon = names[last.agent] || '🤖';
+    const note = last.note || (last.added?.length ? `+${last.added.length} task` : 'körde');
+    el.textContent = `${icon} ${last.ts.slice(11,16)} — ${note}`;
+    el.style.opacity = '0.7';
+    // Blinka till vid ny post
+    el.style.transition = 'none';
+    el.style.opacity = '1';
+    setTimeout(() => { el.style.transition = 'opacity 2s'; el.style.opacity = '0.5'; }, 2000);
+  } catch {}
+  setTimeout(agentPulse, 30_000);
+})();
+</script>
+
 </body>
 </html>

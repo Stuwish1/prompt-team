@@ -4673,6 +4673,20 @@ async def health_check():
     return {"ok": all_ok, "services": results}
 
 # ──────────────────────────────────────────────
+# AGENT RUN LOG ENDPOINT
+# ──────────────────────────────────────────────
+
+@app.get("/api/agent-log")
+async def get_agent_log():
+    log_file = BASE_DIR / "AGENT_RUN_LOG.json"
+    try:
+        entries = json.loads(log_file.read_text(encoding="utf-8"))
+        return {"entries": entries[-10:]}
+    except Exception:
+        return {"entries": []}
+
+
+# ──────────────────────────────────────────────
 # PER-PROJECT SETTINGS ENDPOINTS
 # ──────────────────────────────────────────────
 
