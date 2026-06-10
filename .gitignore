@@ -3,7 +3,6 @@ __pycache__/
 settings.json
 sessions.json
 backlog.json
-build_queue.json
 projects.json
 build_results/
 ai_eval_results.json
@@ -17,3 +16,4 @@ model_list_cache.json
 start_background.vbs
 stop_app.bat
 interim_result*.jso.github/workflows/
+.github/
