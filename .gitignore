@@ -13,3 +13,5 @@ _audit_plan.md
 model_list_cache.json
 .claude/settings.local.json
 .env
+start_background.vbs
+stop_app.bat
