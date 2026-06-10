@@ -96,7 +96,7 @@ NY_INPUT = (
 
 PASS, FAIL = [], []
 
-def req(path, payload, timeout=300):
+def req(path, payload, timeout=700):  # serverns lagliga värsta fall är ~650s efter kapacitetshöjningen
     data = json.dumps(payload).encode()
     r = urllib.request.Request(BASE + path, data=data, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(r, timeout=timeout) as resp:
@@ -153,7 +153,12 @@ def main():
         with concurrent.futures.ThreadPoolExecutor(3) as ex:
             futs = {mode: ex.submit(run_mode, mode, payloads[mode], i) for mode in payloads}
             for mode, fut in futs.items():
-                runs[mode].append(fut.result(timeout=400))
+                try:
+                    runs[mode].append(fut.result(timeout=750))
+                except Exception as e:
+                    # Ett kraschat läge får inte slänga alla lägens resultat
+                    print(f"  [FEL] {mode} #{i+1} kraschade: {str(e)[:200]}")
+                    runs[mode].append({"iteration": i + 1, "error": str(e)[:300], "stats": {"errors": 0}})
 
     out = Path(__file__).parent / "ai_eval_results.json"
     out.write_text(json.dumps(runs, ensure_ascii=False, indent=1), encoding="utf-8")

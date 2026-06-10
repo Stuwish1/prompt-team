@@ -23,7 +23,9 @@ def check(name, cond, detail=""):
     mark = "OK " if cond else "FEL"
     print(f"  [{mark}] {name}" + (f" — {detail}" if detail else ""))
 
-def req(path, payload=None, method=None, timeout=240):
+def req(path, payload=None, method=None, timeout=700):
+    # 700s: serverns lagliga värsta fall är ~650s (gather 320 + smith 240 + eftersteg 120)
+    # efter kapacitetshöjningen — 240s gav URLError mitt i lyckade körningar
     data = json.dumps(payload).encode() if payload is not None else None
     r = urllib.request.Request(BASE + path, data=data, method=method,
                                headers={"Content-Type": "application/json"})
@@ -45,7 +47,7 @@ def main():
     # ── 1. Edge cases (snabba, inga modellanrop) ──────────────────────
     print("\n[1] Felhantering & edge cases")
     check("tom input ger 400", req_err("/api/review", {"mode": "ny_funktion", "input_text": ""}) == 400)
-    check("för lång input ger 400", req_err("/api/review", {"mode": "ny_funktion", "input_text": "x" * 90_000}) == 400)
+    check("för lång input ger 400", req_err("/api/review", {"mode": "ny_funktion", "input_text": "x" * 460_000}) == 400)
     check("ogiltig backlog-status ger 400",
           req_err("/api/backlog/finns-ej", {"status": "blah"}) in (400, 405)
           or True)  # PATCH via urllib needs method arg; validated below instead

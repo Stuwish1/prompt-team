@@ -775,29 +775,36 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
           <div class="section-label">🐛 Beskriv felet</div>
           <textarea id="bugDescInput" rows="3" style="min-height:70px;"
             placeholder="Vad händer som inte borde hända? När? Vilka steg leder till felet? T.ex: När jag klickar 'Spara' andra gången fryser sidan och badge-räknaren nollställs inte."></textarea>
+          <div style="margin-top:10px;">
+            <div class="section-label">📋 Felmeddelande / loggar <span style="font-weight:400;color:var(--text3)">(valfritt — guld för rotorsaksanalysen)</span></div>
+            <textarea id="bugLogsInput" rows="3" style="min-height:60px;font-family:'SF Mono',Consolas,monospace;font-size:11px;"
+              placeholder="Klistra in stacktrace, konsol-fel eller serverlogg. T.ex: TypeError: Cannot read properties of undefined (reading 'id') at SaveButton.tsx:42"></textarea>
+          </div>
         </div>
 
-        <!-- Active project badge -->
-        <div id="activeProjBadge" style="display:none;padding:8px 12px;background:var(--bg3);border:1px solid var(--accent);border-radius:8px;font-size:12px;color:var(--text1);align-items:center;gap:10px;">
-          <span>🗂</span>
-          <span style="font-weight:600;" id="activeProjName"></span>
-          <span style="color:var(--text3);font-size:11px;" id="activeProjRepo"></span>
-          <span style="margin-left:auto;color:var(--accent);font-size:11px;">Auto-sync ✓</span>
-        </div>
-
+        <!-- KÄLLA: en box — projektläge (auto-sync) eller manuellt läge -->
         <div class="github-section" id="githubSection">
-          <div class="github-header">
+          <!-- Projekt-header (visas när aktivt projekt har repo) -->
+          <div id="activeProjBadge" style="display:none;align-items:center;gap:10px;margin-bottom:10px;font-size:12px;color:var(--text1);">
+            <span>🗂</span>
+            <span style="font-weight:600;" id="activeProjName"></span>
+            <span style="color:var(--text3);font-size:11px;" id="activeProjRepo"></span>
+            <span style="margin-left:auto;color:var(--accent);font-size:11px;white-space:nowrap;">Koden hämtas automatiskt ✓</span>
+          </div>
+          <!-- Manuell header (visas när inget repo är kopplat) -->
+          <div class="github-header" id="githubHeader">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
             GitHub — hämta kod automatiskt
           </div>
-          <!-- Project repo row (shown when active project has repo) -->
+          <!-- Projektrad: gren + mappval + förhandsgranskning -->
           <div id="githubProjRow" style="display:none">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <span style="font-size:12px;color:var(--text2);flex:1;" id="githubProjLabel"></span>
+              <span style="font-size:11px;color:var(--text3);">Gren:</span>
               <select id="githubBranchSelect" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text1);font-size:12px;padding:4px 8px;" onchange="onBranchChange()">
                 <option>main</option>
               </select>
-              <button class="btn-fetch" id="fetchBtn" onclick="fetchGithub()">Hämta</button>
+              <span style="flex:1;"></span>
+              <button class="btn-fetch" id="fetchBtn" onclick="fetchGithub()" title="Hämta koden nu för att se exakt vad teamet kommer granska — annars hämtas den automatiskt när du skickar">Förhandsgranska</button>
             </div>
             <!-- Folder picker -->
             <div id="folderPickerWrap" style="display:none;margin-bottom:8px;">
@@ -817,8 +824,12 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
         </div>
 
         <div>
-          <div class="section-label">Kod att granska <span style="font-weight:400;color:var(--text3)" id="codeSourceLabel">(klistra in eller hämta från GitHub)</span></div>
+          <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">
+            <span>Kod att granska <span style="font-weight:400;color:var(--text3)" id="codeSourceLabel">(klistra in eller hämta från GitHub)</span></span>
+            <button id="codeToggleBtn" onclick="toggleCodeBox()" style="display:none;background:none;border:none;color:var(--accent2);font-size:11px;cursor:pointer;padding:0;font-family:inherit;">Visa ▾</button>
+          </div>
           <textarea id="codeInput" rows="8" style="font-family:'SF Mono',Consolas,monospace;font-size:12px;"
+            oninput="updateCodeSourceHint()"
             placeholder="// Klistra in din kod här, eller hämta från GitHub ovan..."></textarea>
         </div>
         <!-- Screenshot dropzone — feeds the Visuell QA-granskaren -->
@@ -836,9 +847,12 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
         </div>
 
         <div>
-          <div class="section-label">Projektkontext <span style="font-weight:400;color:var(--text3)">(valfritt)</span></div>
+          <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">
+            <span>Extra kontext <span style="font-weight:400;color:var(--text3)">(valfritt)</span></span>
+            <span style="font-size:10px;color:var(--text3);font-weight:400;">Projektprofil injiceras automatiskt</span>
+          </div>
           <textarea id="postContextInput" rows="2"
-            placeholder="T.ex: React Next.js-app, TypeScript, detta är en ny komponent för checkout..."></textarea>
+            placeholder="T.ex: Fokusera granskningen på checkout-flödet. Den nya koden ligger i /components/Checkout..."></textarea>
         </div>
       </div>
     </div>
@@ -917,6 +931,7 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
             <button class="view-btn" id="vt-teknisk" onclick="setSpecView('teknisk')">👩‍💻 Teknisk läge</button>
           </div>
           <button class="btn btn-ghost" onclick="exportSession()" style="padding:4px 10px;font-size:11px;white-space:nowrap;">⬇ Exportera</button>
+          <button class="btn btn-ghost" onclick="exportAgentAudit()" style="padding:4px 10px;font-size:11px;white-space:nowrap;" title="Fullständig export av varje agents arbete + råsvar — för att dubbelkolla att alla gör rätt">🔬 Agentgranskning</button>
         </div>
         <div id="bestallareBox"></div>
         <div class="final-prompt-box" id="finalPromptBox"></div>
@@ -940,6 +955,7 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
         <span class="bygga-section-title">Nya fynd</span>
         <div class="bygga-divider"></div>
         <span class="phase-stat" id="backlogStat"></span>
+        <button class="btn btn-ghost" id="backlogClearBtn" style="display:none;padding:3px 10px;font-size:11px;color:var(--red);" onclick="clearBacklog()" title="Ta bort ALLA fynd för projektet — t.ex. efter en felaktig körning">🗑 Rensa alla</button>
       </div>
       <div id="backlogBox"><div style="font-size:12px;color:var(--text3);padding:20px 0;">Inga fynd ännu — kör en granskning i Beställ-vyn.</div></div>
     </div>
@@ -1107,6 +1123,12 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
       <div class="form-group">
         <label>Constraints <span style="font-weight:400;color:var(--text3)">(valfritt)</span></label>
         <textarea id="projConstraintsInput" rows="2" placeholder="T.ex: Måste fungera offline. Får ej byta databas. Inga externa CDN-beroenden." style="font-size:12px;min-height:60px;"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Undanta från granskning <span style="font-weight:400;color:var(--text3)">(valfritt — filer/mappar, kommaseparerat)</span></label>
+        <input type="text" id="projExcludeInput" placeholder="T.ex: ai_eval.py, e2e_test.py, tests/fixtures" style="font-size:12px;">
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Testfixturer med medvetet trasig kod ger falska fynd — undanta dem här så hämtas de aldrig.</div>
       </div>
     </div>
 
@@ -1431,19 +1453,26 @@ function updateHealthBadges(services) {
   const dot = document.getElementById('dbStatusDot');
   const banner = document.getElementById('dbWarningBanner');
   if (dot && services) {
-    const sbOk = services.supabase?.ok;
-    const sbConfigured = services.supabase?.msg && !services.supabase.msg.includes('saknas');
+    const sb = services.supabase || {};
+    const sbConfigured = sb.configured === true;  // structured flag, not string-match
+    const schemaBehind = sb.schema && sb.schema.ok === false && (sb.schema.current ?? null) !== null;
     if (!sbConfigured) {
       dot.textContent = '';
       if (banner) banner.style.display = 'none';
-    } else if (sbOk) {
+    } else if (sb.ok) {
       dot.textContent = '🟢';
-      dot.title = 'Supabase ansluten: ' + services.supabase.msg;
+      dot.title = 'Supabase ansluten: ' + sb.msg;
       if (banner) banner.style.display = 'none';
     } else {
-      dot.textContent = '🔴';
-      dot.title = 'Supabase fel: ' + services.supabase.msg;
-      if (banner) banner.style.display = 'block';
+      // Connected but schema drift → yellow + schema-specific banner; otherwise red + generic
+      dot.textContent = schemaBehind ? '🟡' : '🔴';
+      dot.title = 'Supabase: ' + sb.msg;
+      if (banner) {
+        banner.innerHTML = schemaBehind
+          ? `⚠️ Supabase-schemat ligger efter (v${sb.schema.current} av v${sb.schema.expected}) — kör om <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;">supabase_setup.sql</code> i SQL Editor.`
+          : `⚠️ Supabase ej ansluten — sessioner sparas endast lokalt. <span style="text-decoration:underline;cursor:pointer;" onclick="openSettings()">Konfigurera</span>`;
+        banner.style.display = 'block';
+      }
     }
   }
 
@@ -1488,6 +1517,16 @@ const AGENT_LABELS = {
 async function runReview() {
   const isNy = currentMode === 'ny_funktion';
   const usesCode = !isNy;
+  // Buggrapport utan riktigt symptom → ingen rotorsaksanalys möjlig. Stoppa direkt.
+  // ("iterera" som hela beskrivningen gav en körning där teamet gissade sig till en bugg.)
+  if (currentMode === 'buggrapport') {
+    const bd = document.getElementById('bugDescInput')?.value.trim() || '';
+    if (bd.length < 20 || bd.split(/\s+/).length < 3) {
+      alert('Beskriv felet utförligare — minst en mening: vad händer, vad förväntade du dig, vilka steg leder dit? Utan ett riktigt symptom gissar teamet bara.');
+      document.getElementById('bugDescInput')?.focus();
+      return;
+    }
+  }
   // If a project is active with a repo, auto-fetch latest code first (code modes)
   const activeProj = getActiveProject();
   if (activeProj && activeProj.repo && usesCode) {
@@ -1508,12 +1547,15 @@ async function runReview() {
   }
 
   const bugDesc = document.getElementById('bugDescInput')?.value.trim() || '';
+  const bugLogs = document.getElementById('bugLogsInput')?.value.trim() || '';
   const code = document.getElementById('codeInput').value.trim();
   let inputText;
   if (isNy) {
     inputText = document.getElementById('ideaInput').value.trim();
   } else if (currentMode === 'buggrapport') {
-    inputText = (bugDesc ? `FELBESKRIVNING:\n${bugDesc}\n\n` : '') + (code ? `KOD:\n${code}` : '');
+    inputText = (bugDesc ? `FELBESKRIVNING:\n${bugDesc}\n\n` : '')
+      + (bugLogs ? `FELMEDDELANDE/LOGGAR:\n${bugLogs}\n\n` : '')
+      + (code ? `KOD:\n${code}` : '');
   } else {
     inputText = code;
   }
@@ -1559,6 +1601,7 @@ async function runReview() {
 
   _lastInputText = inputText;
   _lastContext = context;
+  _lastRunMode = currentMode;
   _clarificationRound = 0;
   try {
     const res = await fetch('/api/review', {
@@ -1569,7 +1612,7 @@ async function runReview() {
         run_id: runId, depth: _reviewDepth,
         project_id: reviewProjectId,
         file_manifest: currentMode === 'ny_funktion' ? '' : _githubManifest,
-        profile: getActiveProject()?.profile || {}
+        profile: { ...(getActiveProject()?.profile || {}), name: getActiveProject()?.name || '' }
       })
     });
     if (!res.ok) {
@@ -1584,12 +1627,42 @@ async function runReview() {
       if (banner) banner.style.display = 'block';
     }
   } catch (e) {
+    // Webbläsaren kapar fetch vid ~300s men servern kan jobba klart ändå —
+    // resultatet stashas per run_id på servern. Nätverksfel ⇒ poll:a hem det.
+    const isNetworkDeath = (e instanceof TypeError) || /failed to fetch|network|timed? ?out/i.test(e.message || '');
+    if (isNetworkDeath) {
+      const recovered = await recoverRunResult(runId);
+      if (recovered) {
+        renderResults(recovered);
+        showToast('✅ Anslutningen bröts men resultatet återhämtades från servern');
+        document.getElementById('runBtn').disabled = false;
+        stopProgressPolling();
+        return;
+      }
+    }
     document.getElementById('loadingState').style.display = 'none';
     showError(e.message);
   } finally {
     document.getElementById('runBtn').disabled = false;
     stopProgressPolling();
   }
+}
+
+// Poll:a hem ett färdigt resultat efter att webbläsarens fetch dött (max ~12 min)
+async function recoverRunResult(runId) {
+  const title = document.getElementById('loadingTitle');
+  if (title) title.textContent = 'Anslutningen bröts — väntar på att teamet jobbar klart...';
+  for (let i = 0; i < 144; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    try {
+      const res = await fetch('/api/review/result/' + encodeURIComponent(runId));
+      if (res.ok) {
+        const j = await res.json();
+        if (j.ready) return j.data;
+      }
+    } catch {}
+  }
+  return null;
 }
 
 // ── REAL PROGRESS POLLING ─────────────────────────────────────────
@@ -1639,6 +1712,7 @@ let _answers = {};
 let _questions = {};
 let _lastInputText = '';
 let _lastContext = '';
+let _lastRunMode = '';   // läget vid senaste KÖRNINGEN — exporter ska visa detta, inte aktuellt UI-val
 let _clarificationRound = 0;
 let _lastResults = [];
 let _lastSmith = null;
@@ -1836,6 +1910,7 @@ function renderQueueBox() {
           <span class="qc-title">${escHtml(it.title)}</span>
           ${it.attempt_nr > 1 ? `<span style="font-size:10px;color:var(--text3);">försök ${it.attempt_nr}</span>` : ''}
           <span class="qc-status st-${it.status}">${_Q_STATUS_LABEL[it.status] || it.status}</span>
+          <button class="btn btn-ghost" style="padding:2px 7px;font-size:11px;color:var(--text3);" onclick="event.stopPropagation();queueDelete('${it.id}')" title="Ta bort från byggkön">🗑</button>
         </div>
         ${body}
       </div>`;
@@ -1879,7 +1954,7 @@ async function startBuild(id, btn) {
     const res = await fetch('/api/build-queue/' + id + '/send', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ byggsatt: getActiveProject()?.profile?.byggsatt || {},
-                             profile: getActiveProject()?.profile || {} })
+                             profile: { ...(getActiveProject()?.profile || {}), name: getActiveProject()?.name || '' } })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
@@ -1915,7 +1990,7 @@ async function submitBuildResult() {
     const res = await fetch('/api/build-queue/' + _buildResultItemId + '/review', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ code, images: _screenshots.slice(0, 3),
-                             profile: getActiveProject()?.profile || {} })
+                             profile: { ...(getActiveProject()?.profile || {}), name: getActiveProject()?.name || '' } })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
@@ -2042,6 +2117,8 @@ function renderBacklogBox(items) {
   const stat = document.getElementById('backlogStat');
   const open = items.filter(i => i.status === 'öppen' || i.status === 'återkommit').length;
   if (stat) stat.textContent = `${open} öppna · ${items.length} totalt`;
+  const clearBtn = document.getElementById('backlogClearBtn');
+  if (clearBtn) clearBtn.style.display = items.length ? 'inline-flex' : 'none';
   document.getElementById('backlogBox').innerHTML = items.map(it => {
     const pc = it.priority === 'P0' ? 'p0' : it.priority === 'P1' ? 'p1' : 'p2';
     const done = it.status === 'åtgärdad';
@@ -2060,6 +2137,7 @@ function renderBacklogBox(items) {
           </select>
           <button class="btn btn-ghost bl-tospec" onclick="backlogToSpec('${it.id}', this)" title="Skriver en byggbar spec och lägger den i byggkön">→ Gör till spec & köa</button>
           ${!done ? `<button class="btn btn-ghost bl-tospec" onclick="openVerifyFix('${it.id}')" title="Klistra in den nya koden — Fixverifieraren kontrollerar att just detta problem är löst">🔍 Verifiera fix</button>` : ''}
+          <button class="btn btn-ghost bl-tospec" onclick="deleteBacklogItem('${it.id}')" title="Ta bort fyndet permanent" style="color:var(--text3);">🗑 Ta bort</button>
         </div>
       </div>`;
   }).join('');
@@ -2079,12 +2157,42 @@ async function updateBacklogStatus(id, status) {
   } catch(e) { showToast('❌ Kunde inte uppdatera status'); }
 }
 
+async function deleteBacklogItem(id) {
+  if (!confirm('Ta bort fyndet permanent?')) return;
+  try {
+    const res = await fetch('/api/backlog/' + id, { method: 'DELETE' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _lastBacklog = (_lastBacklog || []).filter(x => x.id !== id);
+    renderBacklogBox(_lastBacklog);
+    refreshByggaBadge();
+    showToast('🗑 Fynd borttaget');
+  } catch(e) { showToast('❌ Kunde inte ta bort fyndet'); }
+}
+
+async function clearBacklog() {
+  const pid = getActiveProject()?.id || '';
+  if (!pid) return;
+  const n = (_lastBacklog || []).length;
+  if (!confirm(`Ta bort ALLA ${n} fynd för projektet? Detta går inte att ångra.`)) return;
+  try {
+    const res = await fetch('/api/backlog/clear', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ project_id: pid })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+    await loadAttBygga();
+    refreshByggaBadge();
+    showToast(`🗑 ${data.removed} fynd borttagna`);
+  } catch(e) { showToast('❌ ' + e.message); }
+}
+
 async function backlogToSpec(id, btn) {
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Skriver spec...'; }
   try {
     const res = await fetch('/api/backlog/' + id + '/to-spec', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ enqueue: true, profile: getActiveProject()?.profile || {} })
+      body: JSON.stringify({ enqueue: true, profile: { ...(getActiveProject()?.profile || {}), name: getActiveProject()?.name || '' } })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -2305,6 +2413,7 @@ async function runWithAnswers() {
 
   _lastInputText = inputText;
   _lastContext = ctx;
+  _lastRunMode = currentMode;
   _clarificationRound = 0;
   const rerunProjectId = getActiveProject() ? getActiveProject().id : '';
   try {
@@ -2316,7 +2425,7 @@ async function runWithAnswers() {
         run_id: runId, depth: _reviewDepth,
         project_id: rerunProjectId,
         file_manifest: currentMode === 'ny_funktion' ? '' : _githubManifest,
-        profile: getActiveProject()?.profile || {}
+        profile: { ...(getActiveProject()?.profile || {}), name: getActiveProject()?.name || '' }
       })
     });
     if (!res.ok) {
@@ -2455,12 +2564,14 @@ function exportSession() {
   // Agent results
   if (results.length) {
     lines.push(`## 🔍 Specialistgranskning\n`);
-    const approved = results.filter(r => r.status === 'GODKÄND');
+    const skippedAgents = results.filter(r => r.skipped);
+    const approved = results.filter(r => r.status === 'GODKÄND' && !r.skipped);
     const rejected = results.filter(r => r.status === 'UNDERKÄND');
     const errors = results.filter(r => r.status === 'FEL');
     const c = _lastCost || {};
     const costLine = c.total_usd > 0 ? ` · kostnad ~$${c.total_usd.toFixed(3)} (${(c.tokens_in||0).toLocaleString()} in / ${(c.tokens_out||0).toLocaleString()} ut tokens)` : '';
-    lines.push(`**Resultat:** ${approved.length} godkända · ${rejected.length} underkända · ${errors.length} fel${costLine}\n`);
+    const skippedLine = skippedAgents.length ? ` · ${skippedAgents.length} hoppade över` : '';
+    lines.push(`**Resultat:** ${approved.length} godkända · ${rejected.length} underkända · ${errors.length} fel${skippedLine}${costLine}\n`);
 
     if (rejected.length) {
       lines.push(`### ❌ Underkända`);
@@ -2475,9 +2586,24 @@ function exportSession() {
       lines.push('');
     }
 
+    // FEL-agenter får aldrig vara anonyma — "1 fel" utan namn gör rapporten omöjlig att granska
+    if (errors.length) {
+      lines.push(`### ⚠️ Fel (agenten levererade inget resultat)`);
+      errors.forEach(r => {
+        lines.push(`- ${r.emoji} ${r.name}: ${(r.findings && r.findings[0]) || r.error || 'okänt fel'}`);
+      });
+      lines.push('');
+    }
+
     if (approved.length) {
       lines.push(`### ✅ Godkända`);
       lines.push(approved.map(r => `${r.emoji} ${r.name}`).join(' · '));
+      lines.push('');
+    }
+
+    if (skippedAgents.length) {
+      lines.push(`### ⏭️ Hoppade över (granskade INTE — räknas ej som godkända)`);
+      skippedAgents.forEach(r => lines.push(`- ${r.emoji} ${r.name}: ${r.skipped}`));
       lines.push('');
     }
   }
@@ -2542,6 +2668,134 @@ function exportSession() {
   showToast('⬇ Exporterad som Markdown');
 }
 
+// ── AGENTGRANSKNING — fullständig diagnostisk export av VARJE agents arbete ──
+// Tänkt att ges till en granskare (eller AI) för att dubbelkolla att alla agenter gör rätt:
+// modell, status, ALLA findings/suggestions, råsvar, kostnad — inget putsas bort.
+function exportAgentAudit() {
+  const results = _lastResults || [];
+  if (!results.length) { showToast('Inget att exportera — kör en granskning först.'); return; }
+  const krav = _lastKrav || {};
+  const smith = _lastSmith || {};
+  const cost = _lastCost || {};
+  const L = [];
+  const ts = new Date().toLocaleString('sv-SE');
+  const proj = (typeof getActiveProject === 'function' && getActiveProject()) || {};
+
+  L.push(`# Prompt Team — Agentgranskning (fullständig)`);
+  L.push(`*Exporterad: ${ts} · Läge: ${_lastRunMode || currentMode} · Djup: ${_reviewDepth}*`);
+  L.push(`*Projekt: ${proj.name || '—'} · Byggsätt: ${(typeof byggsattSummary==='function'?byggsattSummary(proj):'').replace('🛠️ ','')}*`);
+  L.push(`\n> Syfte: kontrollera att varje agent gör sitt jobb. Råsvaret visar exakt vad modellen returnerade.\n`);
+
+  // Indata (så granskaren ser vad agenterna hade att jobba med).
+  // Klipp får ALDRIG vara tysta — förra exporten fick granskare att tro att
+  // agenterna såg trunkerade filer fast de såg allt.
+  const inText = _lastInputText || '(tomt)';
+  const IN_CAP = 60000;
+  L.push(`## 📥 Indata till teamet\n`);
+  if (inText.length > IN_CAP) L.push(`> ⚠️ Exporten visar de första ${IN_CAP.toLocaleString()} av ${inText.length.toLocaleString()} tecken — AGENTERNA SÅG ALLT. Klippet nedan är exportens, inte granskningens.\n`);
+  L.push('```');
+  L.push(inText.slice(0, IN_CAP));
+  L.push('```');
+  if (inText.length > IN_CAP) L.push(`*[…export-klipp: ${(inText.length - IN_CAP).toLocaleString()} tecken utelämnade ur exporten]*`);
+  if (_lastContext) { L.push(`\n**Kontext:** ${_lastContext.slice(0, 4000)}${_lastContext.length > 4000 ? ' *[export-klipp]*' : ''}`); }
+  if ((_screenshots || []).length) L.push(`\n**Skärmdumpar bifogade:** ${_screenshots.length}`);
+  L.push('');
+
+  // Kostnad/token per agent — snabb överblick
+  L.push(`## 💰 Kostnad & modell per agent\n`);
+  L.push(`| Agent | Modell | Status | Severity | Tokens (in/ut) | Kostnad |`);
+  L.push(`|---|---|---|---|---|---|`);
+  results.forEach(r => {
+    L.push(`| ${r.emoji || ''} ${r.name} | \`${r.model || '?'}\` | ${r.status} | ${r.severity || '—'} | ${(r.tokens_in||0)}/${(r.tokens_out||0)} | ${r.cost_usd != null ? '$'+Number(r.cost_usd).toFixed(5) : '—'} |`);
+  });
+  if (cost.total_usd != null) L.push(`\n**Totalt:** ~$${Number(cost.total_usd).toFixed(4)} · ${(cost.tokens_in||0).toLocaleString()} in / ${(cost.tokens_out||0).toLocaleString()} ut tokens`);
+  L.push('');
+
+  // Kravanalytikern — fullständigt
+  L.push(`## 📋 Kravanalytikern\n`);
+  if (krav.tolkad_ide) L.push(`**Tolkad idé:** ${krav.tolkad_ide}\n`);
+  (krav.krav || []).forEach(k => L.push(`- ${k}`));
+  if ((krav.oklarheter||[]).length) { L.push(`\n**Oklarheter:**`); krav.oklarheter.forEach(o => L.push(`- ⚠️ ${o}`)); }
+  if ((krav.utanfor_scope||[]).length) { L.push(`\n**Utanför scope:**`); krav.utanfor_scope.forEach(u => L.push(`- ${u}`)); }
+  L.push('');
+
+  // VARJE specialist — fullständigt, inget putsas bort
+  L.push(`## 🔬 Varje agents fullständiga arbete\n`);
+  const order = { 'UNDERKÄND': 0, 'FEL': 1, 'GODKÄND': 2 };
+  const sorted = [...results].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+  sorted.forEach(r => {
+    const mark = r.status === 'GODKÄND' ? '✅' : r.status === 'UNDERKÄND' ? '❌' : '⚠️';
+    L.push(`### ${mark} ${r.emoji || ''} ${r.name} — ${r.status}${r.severity ? ` [${r.severity}]` : ''}`);
+    L.push(`*Modell: \`${r.model || '?'}\`${r.skipped ? ' · HOPPADES ÖVER: ' + r.skipped : ''}${r.error ? ' · FEL: ' + r.error : ''}*\n`);
+    if ((r.findings || []).length) {
+      L.push(`**Findings (${r.findings.length}):**`);
+      r.findings.forEach(f => L.push(`- ${f}`));
+    } else {
+      L.push(`**Findings:** inga`);
+    }
+    if ((r.suggestions || []).length) {
+      L.push(`\n**Förslag (${r.suggestions.length}):**`);
+      r.suggestions.forEach(s => L.push(`→ ${s}`));
+    }
+    if (r.raw) {
+      const rawStr = String(r.raw);
+      L.push(`\n<details><summary>Råsvar från modellen${rawStr.length > 12000 ? ` (export-klippt: visar 12k av ${rawStr.length.toLocaleString()} tecken)` : ''}</summary>\n`);
+      L.push('```json');
+      L.push(rawStr.slice(0, 12000));
+      if (rawStr.length > 12000) L.push(`\n[…export-klipp: ${(rawStr.length - 12000).toLocaleString()} tecken utelämnade ur exporten — modellen returnerade allt]`);
+      L.push('```\n</details>');
+    }
+    L.push('');
+  });
+
+  // Syntes-agenterna
+  L.push(`## ✍️ Promptsmeden (syntes)\n`);
+  L.push(`*Typ: ${smith.type || '—'}*\n`);
+  const smithContent = smith.content || '(inget)';
+  L.push('```markdown');
+  L.push(smithContent.slice(0, 24000));
+  if (smithContent.length > 24000) L.push(`\n[…export-klipp: ${(smithContent.length - 24000).toLocaleString()} tecken utelämnade ur exporten]`);
+  L.push('```\n');
+
+  const best = _lastBestallare || {};
+  if (best.sammanfattning || (best.punkter||[]).length) {
+    L.push(`## 🧑‍💼 Beställarsammanfattaren\n`);
+    if (best.sammanfattning) L.push(best.sammanfattning + '\n');
+    (best.punkter||[]).forEach(p => L.push(`- **${p.vad||''}** ${p.insats?`_(${p.insats})_`:''}${p.varfor?` — ${p.varfor}`:''}`));
+    (best.beslut||[]).forEach(d => L.push(`- 🤔 ${d}`));
+    L.push('');
+  }
+
+  const comp = _lastCompleteness || {};
+  if (comp.status && comp.status !== 'OKÄND') {
+    L.push(`## ✅ Kompletthetsgranskaren\n`);
+    L.push(`**${comp.status}** (${comp.completeness_score || '?'}/10)`);
+    (comp.styrkor||[]).forEach(s => L.push(`- ✓ ${s}`));
+    (comp.saknas||[]).forEach(s => L.push(`- ⚠️ ${s}`));
+    L.push('');
+  }
+
+  const backlog = _lastBacklog || [];
+  if (backlog.length) {
+    L.push(`## 🗂️ Backloghållaren — prioriterad backlog\n`);
+    backlog.forEach(it => {
+      L.push(`- **[${it.priority}] ${it.title}** _(${it.effort||'M'}, ${it.status})_`);
+      if ((it.source_agents||[]).length) L.push(`  - källor: ${it.source_agents.join(', ')}`);
+      if (it.suggestion) L.push(`  - åtgärd: ${it.suggestion}`);
+    });
+    L.push('');
+  }
+
+  const blob = new Blob([L.join('\n')], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `agentgranskning-${new Date().toISOString().slice(0,10)}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('🔬 Agentgranskning exporterad — ge filen till mig för dubbelkoll');
+}
+
 function copyPrompt() {
   const text = document.getElementById('finalPromptText').textContent;
   navigator.clipboard.writeText(text).then(() => {
@@ -2566,19 +2820,69 @@ function updateGithubSection() {
   const p = getActiveProject();
   const projRow = document.getElementById('githubProjRow');
   const manualRow = document.getElementById('githubManualRow');
+  const ghHeader = document.getElementById('githubHeader');
   if (!projRow || !manualRow) return;
-  if (p && p.repo) {
+  const hasRepo = !!(p && p.repo);
+  if (hasRepo) {
     projRow.style.display = 'block';
     manualRow.style.display = 'none';
-    document.getElementById('githubProjLabel').textContent = p.repo;
-    // Load branches
+    if (ghHeader) ghHeader.style.display = 'none';
+    setGithubStatus('Senaste koden hämtas automatiskt när du skickar till teamet', '');
+    // Load branches + folder picker
     loadGithubBranches(p.repo, p.branch || 'main');
-    // Load folder picker
     loadFolderPicker(p.repo, p.branch || 'main');
   } else {
     projRow.style.display = 'none';
     manualRow.style.display = 'block';
+    if (ghHeader) ghHeader.style.display = '';
+    setGithubStatus('Lämna tomt för att klistra in kod manuellt', '');
   }
+  updateActiveProjBadge();
+  // Kodboxen: hopfälld när koden auto-hämtas (klistra in själv = öppna), expanderad annars
+  const toggleBtn = document.getElementById('codeToggleBtn');
+  const srcLabel = document.getElementById('codeSourceLabel');
+  if (toggleBtn) toggleBtn.style.display = hasRepo ? 'inline' : 'none';
+  if (hasRepo) {
+    _setCodeBoxCollapsed(!document.getElementById('codeInput').value.trim());
+  } else {
+    _setCodeBoxCollapsed(false);
+  }
+  updateCodeSourceHint();
+}
+
+// Etiketten på kodrutan måste alltid spegla VAD som faktiskt skickas till teamet:
+// inklistrad kod åsidosätter auto-hämtningen — det får aldrig ske tyst.
+function updateCodeSourceHint() {
+  const srcLabel = document.getElementById('codeSourceLabel');
+  if (!srcLabel || srcLabel.querySelector('.github-badge')) return;
+  const p = getActiveProject();
+  const hasRepo = !!(p && p.repo);
+  const manual = document.getElementById('codeInput').value.trim();
+  if (hasRepo && manual) {
+    srcLabel.innerHTML = `<span style="color:var(--orange,#f59e0b);">⚠️ ${Math.round(manual.length/1000)}k tecken inklistrad kod används — INTE senaste från GitHub.</span> <span style="text-decoration:underline;cursor:pointer;" onclick="clearManualCode()">Rensa</span>`;
+  } else if (hasRepo) {
+    srcLabel.textContent = '(hämtas automatiskt — öppna för att klistra in själv)';
+  } else {
+    srcLabel.textContent = '(klistra in eller hämta från GitHub)';
+  }
+}
+function clearManualCode() {
+  document.getElementById('codeInput').value = '';
+  _githubManifest = '';
+  updateGithubSection();
+  showToast('Rensat — senaste koden hämtas från GitHub vid körning');
+}
+
+function _setCodeBoxCollapsed(collapsed) {
+  const ta = document.getElementById('codeInput');
+  const btn = document.getElementById('codeToggleBtn');
+  if (!ta) return;
+  ta.style.display = collapsed ? 'none' : '';
+  if (btn) btn.textContent = collapsed ? 'Visa ▾' : 'Dölj ▴';
+}
+function toggleCodeBox() {
+  const ta = document.getElementById('codeInput');
+  _setCodeBoxCollapsed(ta.style.display !== 'none');
 }
 
 async function loadGithubBranches(repo, currentBranch) {
@@ -2659,6 +2963,8 @@ async function fetchGithub() {
   try {
     const body = {repo, branch};
     if (_selectedFolders.length > 0) body.paths = [..._selectedFolders];
+    const excl = _excludeList(p);
+    if (excl.length) body.exclude_paths = excl;
     const res = await fetch('/api/github/fetch', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -2672,6 +2978,7 @@ async function fetchGithub() {
       : '';
     _githubManifest = data.file_manifest || '';
     document.getElementById('codeInput').value = _githubCode;
+    _setCodeBoxCollapsed(false); // visa det som hämtades
 
     const folderNote = _selectedFolders.length > 0 ? ` · 📁 ${_selectedFolders.join(', ')}` : '';
     const skippedNote = data.skipped_files?.length
@@ -2692,7 +2999,7 @@ async function fetchGithub() {
     setGithubStatus(`❌ ${e.message}`, 'err');
   } finally {
     const btn = document.getElementById(fetchBtnId);
-    if (btn) { btn.disabled = false; btn.textContent = 'Hämta'; }
+    if (btn) { btn.disabled = false; btn.textContent = fetchBtnId === 'fetchBtn' ? 'Förhandsgranska' : 'Hämta'; }
   }
 }
 
@@ -2755,12 +3062,26 @@ async function loadSession(id) {
     // Restore re-run context so a questions-type session re-runs with the right input
     _lastInputText = s.input_text || '';
     _lastContext = s.context || '';
+    _lastRunMode = s.mode || '';
     if (currentMode === 'ny_funktion') {
       document.getElementById('ideaInput').value = s.input_text || '';
       document.getElementById('preContextInput').value = s.context || '';
+    } else if (currentMode === 'buggrapport') {
+      // Buggrapport-sessioner sparas som sammansatt text — dela upp den i rätt fält,
+      // annars blockerar felbeskrivnings-gaten en omkörning av den återställda sessionen
+      const raw = s.input_text || '';
+      const desc = (raw.match(/FELBESKRIVNING:\s*([\s\S]*?)(?=\n\s*(?:FELMEDDELANDE\/LOGGAR|KOD):|$)/) || [])[1] || '';
+      const logs = (raw.match(/FELMEDDELANDE\/LOGGAR:\s*([\s\S]*?)(?=\n\s*KOD:|$)/) || [])[1] || '';
+      const code = (raw.match(/KOD:\s*([\s\S]*)$/) || [])[1] || (desc ? '' : raw);
+      const bd = document.getElementById('bugDescInput'); if (bd) bd.value = desc.trim();
+      const bl = document.getElementById('bugLogsInput'); if (bl) bl.value = logs.trim();
+      document.getElementById('codeInput').value = code.trim();
+      document.getElementById('postContextInput').value = s.context || '';
+      _setCodeBoxCollapsed(false); // visa det återställda innehållet
     } else {
       document.getElementById('codeInput').value = s.input_text || '';
       document.getElementById('postContextInput').value = s.context || '';
+      _setCodeBoxCollapsed(false); // visa det återställda innehållet
     }
     // Show results
     if (s.results && s.results.length > 0) {
@@ -2939,6 +3260,8 @@ async function selectProject(id) {
   document.getElementById('resultsView').style.display = 'none';
   document.getElementById('codeInput').value = '';
   document.getElementById('ideaInput').value = '';
+  const bugDescEl = document.getElementById('bugDescInput'); if (bugDescEl) bugDescEl.value = '';
+  const bugLogsEl = document.getElementById('bugLogsInput'); if (bugLogsEl) bugLogsEl.value = '';
   _activeSessionId = null;
   _githubManifest = '';
   _selectedFolders = [];
@@ -2948,16 +3271,9 @@ async function selectProject(id) {
   loadHistory();
 
   if (p.repo) {
-    showToast(`📂 ${p.name} — hämtar senaste kod...`);
+    // Ingen förhandshämtning — senaste koden hämtas automatiskt vid körning
     setMode('granska_kod'); // also calls updateGithubSection()
-    const codeArea = document.getElementById('codeInput');
-    const fetched = await fetchActiveProjectCode();
-    if (fetched) {
-      codeArea.value = fetched.code;
-      showToast(`✅ ${p.name} — ${fetched.stats}`);
-    } else {
-      showToast(`⚠️ ${p.name} valt — kunde inte hämta kod just nu`);
-    }
+    showToast(`📂 ${p.name} — koden hämtas automatiskt vid körning`);
   } else {
     updateGithubSection();
     showToast(`📂 ${p.name} valt`);
@@ -3135,6 +3451,7 @@ function openAddProject() {
   document.getElementById('projArchInput').value = '';
   document.getElementById('projConvInput').value = '';
   document.getElementById('projConstraintsInput').value = '';
+  document.getElementById('projExcludeInput').value = '';
   const s = document.getElementById('projFetchStatus');
   if (s) { s.style.display = 'none'; s.textContent = ''; }
   const btn = document.getElementById('saveProjBtn');
@@ -3161,6 +3478,7 @@ function openEditProject(id) {
   document.getElementById('projArchInput').value = profile.architecture || '';
   document.getElementById('projConvInput').value = profile.conventions || '';
   document.getElementById('projConstraintsInput').value = profile.constraints || '';
+  document.getElementById('projExcludeInput').value = profile.review_exclude || '';
   const s = document.getElementById('projFetchStatus');
   if (s) { s.style.display = 'none'; }
   const btn = document.getElementById('saveProjBtn');
@@ -3276,8 +3594,15 @@ function _readProfile() {
     architecture: document.getElementById('projArchInput').value.trim(),
     conventions: document.getElementById('projConvInput').value.trim(),
     constraints: document.getElementById('projConstraintsInput').value.trim(),
+    review_exclude: document.getElementById('projExcludeInput').value.trim(),
     byggsatt: _readByggsatt(),
   };
+}
+
+// Granskningsundantag som lista — skickas till /api/github/fetch som exclude_paths
+function _excludeList(p) {
+  const raw = p?.profile?.review_exclude || '';
+  return raw.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
 }
 
 async function saveProject() {
@@ -3372,6 +3697,8 @@ async function fetchActiveProjectCode() {
   try {
     const body = {repo: p.repo, branch: p.branch || 'main'};
     if (_selectedFolders.length > 0) body.paths = [..._selectedFolders];
+    const excl = _excludeList(p);
+    if (excl.length) body.exclude_paths = excl;
     const res = await fetch('/api/github/fetch', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},

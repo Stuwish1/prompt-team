@@ -23,7 +23,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Prompt Team")
-executor = ThreadPoolExecutor(max_workers=40)
+# 80 trådar: en djup buggrapport-körning = ~22 trådar; två parallella körningar +
+# byggkö-review + föräldralösa timeout-trådar översteg gamla 40 → falska wait_for-timeouts
+# eftersom kötiden räknas in i agentbudgeten.
+executor = ThreadPoolExecutor(max_workers=80)
 
 @app.on_event("startup")
 async def startup():
@@ -63,12 +66,12 @@ _DEFAULT_AGENT_MODELS = {
     "frontend":        "google/gemini-2.5-flash",
     "responsive":      "google/gemini-2.5-flash",
     "accessibility":   "google/gemini-2.5-flash",
-    "database":        "google/gemini-2.5-flash-lite",  # checklist task
+    "database":        "google/gemini-2.5-flash",  # flash-lite slog i token-taket (4999) → trasig JSON i E2E
     "datamigration":   "google/gemini-2.5-flash",
     "api":             "google/gemini-2.5-flash",
     "error_handling":  "google/gemini-2.5-flash",
     "edge_case":       "google/gemini-2.5-flash",
-    "code_quality":    "google/gemini-2.5-flash-lite",  # style/DRY pass
+    "code_quality":    "google/gemini-2.5-flash",  # flash-lite gav för ytliga svar (1 finding på trasig kod)
     "security":        "google/gemini-2.5-flash",
     "hemlighetsvakten": "google/gemini-2.5-flash",
     "performance":     "google/gemini-2.5-flash",
@@ -143,7 +146,7 @@ def get_openrouter_client():
         client = _openai.OpenAI(
             api_key=key,
             base_url="https://openrouter.ai/api/v1",
-            timeout=80.0,  # must stay below the 95s per-agent budget so our retry can fire
+            timeout=110.0,  # must stay below the 130s per-agent budget so our retry can fire
             max_retries=0,  # we do our own retry with smarter classification
             default_headers={
                 "HTTP-Referer": "https://prompt-team.local",
@@ -154,7 +157,10 @@ def get_openrouter_client():
         return client
 
 
-_TRANSIENT_MARKERS = ("429", "500", "502", "503", "504", "overloaded", "timeout", "timed out",
+# OBS: 'timeout'/'timed out' är MEDVETET borttagna — en HTTP-timeout (110s) kan aldrig
+# hinna med ett omförsök inom agentbudgeten (130s); omförsöket körde bara klart i en
+# föräldralös tråd och fakturerade hela inputen igen (3× på fullrepo-körningar).
+_TRANSIENT_MARKERS = ("429", "500", "502", "503", "504", "overloaded",
                       "connection", "temporarily", "rate limit")
 
 # $/1M tokens (input, output) — for per-run cost reporting. Unknown models → tokens only.
@@ -182,15 +188,19 @@ def _cost_usd(model: str, tok_in: int, tok_out: int):
 
 
 def _or_chat(model: str, messages: list, max_tokens: int, want_json: bool = True,
-             usage_out: list = None) -> str:
+             usage_out: list = None, timeout_s: float = None) -> str:
     """Single hardened OpenRouter chat call.
     - response_format json_object when want_json (eliminates prose-instead-of-JSON failures)
     - falls back without response_format if the provider rejects it
     - retries transient errors (429/5xx/connection) with backoff
-    - appends {model, tokens_in, tokens_out, cost_usd} to usage_out if given"""
+    - appends {model, tokens_in, tokens_out, cost_usd} to usage_out if given
+    - timeout_s overrides the client's HTTP timeout (Promptsmeden: 5k tokens på
+      fullrepo-input tar längre än standardens 110s)"""
     or_client = get_openrouter_client()
     if not or_client:
         raise RuntimeError("OpenRouter-nyckel saknas i inställningar")
+    if timeout_s:
+        or_client = or_client.with_options(timeout=timeout_s)
 
     def _once(use_rf: bool) -> str:
         kwargs = dict(model=model, max_tokens=max_tokens, messages=messages)
@@ -238,6 +248,31 @@ def get_agent_model(agent_id: str, fallback: str) -> str:
     s = load_settings()
     agent_models = s.get("agent_models", {})
     return agent_models.get(agent_id) or _DEFAULT_AGENT_MODELS.get(agent_id) or fallback
+
+
+# Max input-TECKEN per modellfamilj (~3,3 tecken/token, med marginal för system + output).
+# Fullrepo-input är upp till ~450k tecken — modeller med små fönster kraschar hårt utan klipp.
+_MODEL_INPUT_CAP_CHARS = (
+    ("google/gemini-2.5", 3_000_000),   # 1M tokens
+    ("anthropic/claude",    600_000),   # 200k tokens
+    ("openai/gpt-4o",       350_000),   # 128k tokens
+    ("deepseek/",           180_000),   # 64–164k tokens beroende på provider
+)
+_DEFAULT_INPUT_CAP = 350_000  # okänd modell → anta 128k tokens
+
+def _clamp_for_model(model: str, text) -> str:
+    """Klipp inputen till modellens kontextfönster, med tydlig markör så agenten
+    rapporterar täckningsgapet i stället för att krascha med överflödsfel."""
+    if not isinstance(text, str):
+        return text
+    cap = next((c for prefix, c in _MODEL_INPUT_CAP_CHARS if model.startswith(prefix)),
+               _DEFAULT_INPUT_CAP)
+    if len(text) <= cap:
+        return text
+    return text[:cap] + (
+        "\n\n[INPUT KLIPPT AV PROMPT TEAM: modellens kontextfönster rymmer inte allt — "
+        f"{len(text) - cap} tecken utelämnade. Granska det som syns; flagga INTE klippet som kodfel.]"
+    )
 
 
 # ──────────────────────────────────────────────
@@ -634,10 +669,50 @@ def _sb_headers() -> dict | None:
         "Prefer": "return=representation",
     }
 
+def _sb_base() -> str:
+    """Normalised Supabase base URL. Tolerates users pasting either the bare
+    project URL (https://xxx.supabase.co) OR the full REST endpoint (…/rest/v1),
+    so we never end up with a doubled /rest/v1 path."""
+    base = load_settings().get("supabase_url", "").strip().rstrip("/")
+    if base.lower().endswith("/rest/v1"):
+        base = base[: -len("/rest/v1")]
+    return base
+
 def _sb_url(path: str) -> str:
-    s = load_settings()
-    base = s.get("supabase_url", "").strip().rstrip("/")
-    return f"{base}/rest/v1/{path}"
+    return f"{_sb_base()}/rest/v1/{path}"
+
+
+# Latest migration version defined in supabase_setup.sql. Bump when you append a
+# new migration block there. The /api/health check reads the connected DB's
+# schema_migrations table and warns if it's behind this number.
+SUPABASE_SCHEMA_VERSION = 2
+
+def check_supabase_schema() -> dict:
+    """Read the applied schema version from Supabase via REST (no DDL — read-only).
+    Returns {ok, current, expected, msg}. Surfaces schema drift without a Postgres
+    connection: PostgREST can't run DDL, so migrations stay manual, but we CAN read
+    the schema_migrations ledger to tell the user if supabase_setup.sql needs re-running."""
+    headers = _sb_headers()
+    if not headers:
+        return {"ok": False, "current": None, "expected": SUPABASE_SCHEMA_VERSION, "msg": "Supabase ej konfigurerad"}
+    try:
+        r = httpx.get(_sb_url("schema_migrations?select=version&order=version.desc&limit=1"),
+                      headers=headers, timeout=8.0)
+        if r.status_code == 404 or (r.status_code == 400 and "schema_migrations" in r.text):
+            return {"ok": False, "current": 0, "expected": SUPABASE_SCHEMA_VERSION,
+                    "msg": "schema_migrations saknas — kör supabase_setup.sql i Supabase SQL Editor"}
+        if r.status_code != 200:
+            return {"ok": False, "current": None, "expected": SUPABASE_SCHEMA_VERSION,
+                    "msg": f"Kunde inte läsa schemaversion (HTTP {r.status_code})"}
+        rows = r.json()
+        current = rows[0]["version"] if rows else 0
+        if current < SUPABASE_SCHEMA_VERSION:
+            return {"ok": False, "current": current, "expected": SUPABASE_SCHEMA_VERSION,
+                    "msg": f"Schema ligger efter (v{current}, behöver v{SUPABASE_SCHEMA_VERSION}) — kör om supabase_setup.sql"}
+        return {"ok": True, "current": current, "expected": SUPABASE_SCHEMA_VERSION,
+                "msg": f"Schema v{current} ✓"}
+    except Exception as e:
+        return {"ok": False, "current": None, "expected": SUPABASE_SCHEMA_VERSION, "msg": str(e)[:80]}
 
 def _sb_available() -> bool:
     """Quick DNS check — only try Supabase if hostname resolves."""
@@ -1072,7 +1147,7 @@ SPECIALIST_AGENTS = [
         "emoji": "🗄️",
         "phase": "pre", "layer": "specialist",
         "modes": [M_NY, M_GRANSKA, M_BUGG],
-        "model": "google/gemini-2.5-flash-lite",
+        "model": "google/gemini-2.5-flash",
         "system": (
             "Du är senior databasarkitekt med erfarenhet av PostgreSQL, SQLite och NoSQL. Granska beskrivningen/koden.\n"
             "Kontrollera specifikt:\n"
@@ -1143,8 +1218,9 @@ SPECIALIST_AGENTS = [
         "system": (
             "Du är robusthets-, felhanterings- och observability-expert. Granska hur fel hanteras och hur systemet kan felsökas i drift.\n"
             "Kontrollera specifikt:\n"
-            "• Ohanterade promise rejections — finns async-anrop utan .catch() eller try/catch?\n"
-            "• Tysta fel — swallowas exceptions med tom catch-block (catch(e) {})?\n"
+            "• Ohanterade asynkrona fel — anpassa termen till språket: promise rejections (JS), "
+            "ofångade exceptions i trådar/futures (Python), ignorerade error-returer (Go)?\n"
+            "• Tysta fel — swallowas exceptions med tomma catch/except-block?\n"
             "• Stacktrace-läckage — skickas interna feldetaljer/stacktraces till klienten?\n"
             "• Användarmeddelanden — är felmeddelanden förståeliga utan teknisk jargong?\n"
             "• Timeout & retry — finns timeout på externa anrop och retry på transienta fel?\n"
@@ -1182,7 +1258,7 @@ SPECIALIST_AGENTS = [
         "emoji": "📋",
         "phase": "post", "layer": "specialist",
         "modes": [M_GRANSKA, M_BUGG],
-        "model": "google/gemini-2.5-flash-lite",
+        "model": "google/gemini-2.5-flash",
         "system": (
             "Du är senior kodkvalitets-granskare. Granska kodstil, läsbarhet och duplicering — inte logik eller säkerhet.\n"
             "Kontrollera specifikt:\n"
@@ -1630,6 +1706,8 @@ def build_project_context(profile: dict) -> str:
     if not profile:
         return ""
     lines = ["\n\n[PROJEKTKONTEXT]"]
+    if profile.get("name"):
+        lines.append(f"Projektnamn: {profile['name']} — använd detta namn i all text, hitta inte på produktnamn.")
     if profile.get("purpose"):
         lines.append(f"Syfte: {profile['purpose']}")
     stack = profile.get("stack", [])
@@ -1649,7 +1727,13 @@ def build_project_context(profile: dict) -> str:
     if len(lines) == 1:
         byggsatt = build_byggsatt_block(profile)
         return byggsatt if byggsatt else ""
-    lines.append("Beakta dessa constraints i din granskning.")
+    lines.append(
+        "VIKTIGT: Detta är BAKGRUND om projektet — INTE granskningsobjektet. "
+        "Granska ENDAST det inskickade materialet (IDÉ/KOD/BUGGRAPPORT). "
+        "Basera ALDRIG fynd, krav eller arkitekturkritik på denna profiltext. "
+        "Om det inskickade materialet uppenbart inte matchar profilens teknikstack: "
+        "flagga det som en oklarhet — granska inte profilen i stället."
+    )
     return "\n".join(lines) + build_byggsatt_block(profile)
 
 
@@ -1752,9 +1836,14 @@ def run_agent(agent: dict, user_input: str, model: str, client,
     agent_model = get_agent_model(agent["id"], agent.get("model", model))
     usage = []  # filled by _or_chat: tokens + cost per call (incl. retries)
 
+    # Modeller med mindre kontextfönster än fullrepo-input (450k tecken ≈ 110k+ tokens)
+    # får inputen klippt med markör — annars hård överflödskrasch → status FEL.
+    user_input = _clamp_for_model(agent_model, user_input)
+
     def _call(system_extra="") -> str:
-        # 2500 default — Gemini thinking tokens share this budget; too tight truncates the JSON
-        max_tok = agent.get("max_tokens", 2500)
+        # 4000 default — Gemini thinking-tokens delar denna budget; 2500 var för tight
+        # på fullrepo-input (flash-lite slog i taket på 4999 → trasig JSON)
+        max_tok = agent.get("max_tokens", 4000)
         system_text = agent["system"] + project_context + system_extra
 
         if _is_openrouter_model(agent_model):
@@ -1844,7 +1933,7 @@ def run_agent(agent: dict, user_input: str, model: str, client,
 
 
 def _call_model(model: str, system: str, user: str, max_tokens: int, client,
-                want_json: bool = True, usage_out: list = None) -> str:
+                want_json: bool = True, usage_out: list = None, timeout_s: float = None) -> str:
     """Unified model call — all provider/model strings go via OpenRouter."""
     if _is_openrouter_model(model):
         return _or_chat(
@@ -1856,6 +1945,7 @@ def _call_model(model: str, system: str, user: str, max_tokens: int, client,
             max_tokens,
             want_json=want_json,
             usage_out=usage_out,
+            timeout_s=timeout_s,
         )
     else:
         # Bare model name without provider prefix — direct Anthropic (legacy fallback)
@@ -1870,14 +1960,36 @@ def _call_model(model: str, system: str, user: str, max_tokens: int, client,
         return resp.content[0].text if resp.content else ""
 
 
+# Kravanalytikerns grundprompt är skriven för ny_funktion (idé → krav). I granskningslägena
+# ska den INTE hitta på funktionskrav ur koden — det gav K1–K6 om eval-skriptets interna
+# beteende när buggrapporten bara löd "iterera".
+_KRAV_MODE_DIRECTIVES = {
+    "granska_kod": (
+        "\n\nLÄGE: KODGRANSKNING. Det inskickade är befintlig kod, inte en funktionsidé. "
+        "tolkad_ide = en mening om vad koden gör och vad granskningen ska fokusera på. "
+        "krav = granskningskriterier (vad koden måste uppfylla för att vara korrekt/säker) — "
+        "hitta INTE på nya funktionskrav ur koden."
+    ),
+    "buggrapport": (
+        "\n\nLÄGE: BUGGRAPPORT. Det inskickade är ett felsymptom + kod, inte en funktionsidé. "
+        "tolkad_ide = en mening om vilket FEL som ska hittas och fixas. "
+        "krav = vad en korrekt fix måste uppfylla (symptomet borta, reproducerbart verifierbar, inga regressioner). "
+        "Hitta INTE på funktionskrav ur koden. "
+        "Är felbeskrivningen för vag för att förstå symptomet: lämna krav kort och fyll oklarheter "
+        "med de EXAKTA frågor beställaren måste svara på (vad hände? förväntat? vilka steg?)."
+    ),
+}
+
 def run_krav_agent(user_input: str, model: str, client, project_context: str = "",
-                   usage_out: list = None) -> dict:
+                   usage_out: list = None, mode: str = "ny_funktion") -> dict:
     """Run Kravanalytikern. Returns structured requirements dict."""
     FALLBACK = {"tolkad_ide": "", "krav": [], "oklarheter": [], "utanfor_scope": []}
     try:
         krav_model = get_agent_model("kravanalytikern", KRAV_AGENT["model"])
-        raw = _call_model(krav_model, KRAV_AGENT["system"] + project_context, user_input, 1000, client,
-                          usage_out=usage_out)
+        krav_system = KRAV_AGENT["system"] + _KRAV_MODE_DIRECTIVES.get(mode, "") + project_context
+        # 1600: Gemini-thinking delar budgeten — 1000 riskerar trunkerad JSON på fullrepo-input
+        raw = _call_model(krav_model, krav_system, _clamp_for_model(krav_model, user_input),
+                          1600, client, usage_out=usage_out)
         text = raw.strip()
         md = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', text)
         if md:
@@ -1946,8 +2058,11 @@ def run_prompt_smith(original_input: str, agent_results: list, model: str, clien
     passed = [r for r in agent_results if r.get("status") == "GODKÄND"]
     errors = [r for r in agent_results if r.get("status") == "FEL"]
     passed_names = ", ".join(f"{r['emoji']}{r['name']}" for r in passed) or "Inga"
-    summary_parts = [
-        f"IDÉ/KOD:\n{original_input[:1500]}",
+    proj_name = (profile or {}).get("name", "").strip()
+    summary_parts = ([f"PROJEKT: {proj_name} — använd detta namn, hitta inte på produktnamn."] if proj_name else []) + [
+        # 12k (inte 1.5k): för lite kontext fick smeden att fabulera produktnamn och hävda
+        # att kompletta filer var trunkerade när utdraget råkade sluta mitt i dem.
+        f"IDÉ/KOD (utdrag — dra INGA slutsatser om saknade/trunkerade filer av var utdraget slutar):\n{original_input[:12000]}",
         f"\nGODKÄND ({len(passed)}): {passed_names}",
         f"\nUNDERKÄND ({len(failed)}) — detaljerad feedback:",
     ]
@@ -1962,8 +2077,10 @@ def run_prompt_smith(original_input: str, agent_results: list, model: str, clien
         summary_parts.append(f"\nFEL ({len(errors)}): {', '.join(r['name'] for r in errors)}")
     combined = "\n".join(summary_parts)
     try:
-        # 5000 tokens — the ONE user-facing artifact must never truncate mid-spec
-        raw = _call_model(model, smith_system, combined, 5000, client, usage_out=usage_out)
+        # 5000 tokens — the ONE user-facing artifact must never truncate mid-spec.
+        # timeout_s=220: Sonnet som skriver 5k tokens på fullrepo-input hinner inte på 110s.
+        raw = _call_model(model, smith_system, combined, 5000, client, usage_out=usage_out,
+                          timeout_s=220.0)
         parsed = None
         try:
             parsed = json.loads(raw.strip())
@@ -2044,7 +2161,7 @@ def run_bestallare_agent(spec_content: str, agent_results: list, model: str, cli
         for f in (r.get("findings") or [])[:3]:
             finding_lines.append(f"({r['name']}) {f}")
     payload = (
-        f"TEKNISK SPECIFIKATION:\n{spec_content[:3000]}\n\n"
+        f"TEKNISK SPECIFIKATION:\n{spec_content[:8000]}\n\n"
         f"VIKTIGA FYND:\n" + "\n".join(finding_lines[:40])
     )
     try:
@@ -2184,7 +2301,21 @@ async def review(payload: dict):
     if not input_text:
         return JSONResponse({"error": "Ingen text angiven."}, status_code=400)
 
-    MAX_INPUT = 80_000
+    # Buggrapport utan symptom kan inte rotorsaksanalyseras — kräv felbeskrivning MED substans.
+    # ("iterera" som hela beskrivningen gav en körning där Kravanalytikern hittade på krav
+    #  och Rotorsaksanalytikern valde en godtycklig bugg.)
+    if mode == "buggrapport":
+        m = re.search(r"FELBESKRIVNING:\s*(.*?)(?:\n\s*(?:FELMEDDELANDE/LOGGAR|KOD):|\Z)",
+                      input_text, re.DOTALL)
+        bug_desc = (m.group(1).strip() if m else "")
+        if len(bug_desc) < 20 or len(bug_desc.split()) < 3:
+            return JSONResponse(
+                {"error": "Felbeskrivningen är för kort för att kunna analyseras. Beskriv: "
+                          "vad som händer, vad du förväntade dig, och vilka steg som leder till felet."},
+                status_code=400,
+            )
+
+    MAX_INPUT = 450_000  # rymmer hela repot (app.py 160k + index.html 175k) + felbeskrivning + marginal
     if len(input_text) > MAX_INPUT:
         return JSONResponse(
             {"error": f"Texten är för lång ({len(input_text):,} tecken). Max {MAX_INPUT:,} tecken. "
@@ -2230,6 +2361,14 @@ async def review(payload: dict):
         parts.append(f"{input_label}:\n{input_text}")
         full_input = "\n\n".join(parts)
 
+    # Validera HELHETEN — MAX_INPUT på enbart input_text lät context/manifest smyga förbi taket
+    if len(full_input) > MAX_INPUT + 30_000:
+        return JSONResponse(
+            {"error": f"Input + kontext + filmanifest är för stort ({len(full_input):,} tecken). "
+                      "Korta ner kontexten eller välj färre mappar."},
+            status_code=400,
+        )
+
     loop = asyncio.get_running_loop()
 
     synth_usage = []  # tokens/cost from krav + synthesis agents (specialists report their own)
@@ -2243,8 +2382,8 @@ async def review(payload: dict):
         try:
             return await asyncio.wait_for(
                 loop.run_in_executor(executor, run_krav_agent, full_input, model, client,
-                                     project_context, synth_usage),
-                timeout=90.0
+                                     project_context, synth_usage, mode),
+                timeout=120.0
             )
         except asyncio.TimeoutError:
             logger.warning("[kravanalytikern] timeout")
@@ -2276,7 +2415,8 @@ async def review(payload: dict):
     async def run_with_timeout(agent):
         wants_img = agent.get("needs_visual_input") or agent.get("accepts_images")
         agent_images = images if wants_img else None
-        agent_timeout = float(agent.get("timeout_s", 95))
+        # 130s: full-repo-input (~80k tokens) tar längre — 95s gav timeout-risk efter kapacitetshöjningen
+        agent_timeout = float(agent.get("timeout_s", 130))
         _progress_set(run_id, agent=(agent["id"], "kör"))
         try:
             r = await asyncio.wait_for(
@@ -2297,10 +2437,10 @@ async def review(payload: dict):
     try:
         results = list(await asyncio.wait_for(
             asyncio.gather(*[run_with_timeout(a) for a in agents]),
-            timeout=200.0
+            timeout=320.0
         ))
     except asyncio.TimeoutError:
-        return JSONResponse({"error": "Granskningen tog för lång tid (>200s). Försök med mindre kod eller färre agenter."}, status_code=504)
+        return JSONResponse({"error": "Granskningen tog för lång tid (>320s). Försök med mindre kod eller färre agenter."}, status_code=504)
 
     # Collect krav result if it ran concurrently (review modes)
     if krav_task is not None:
@@ -2319,7 +2459,7 @@ async def review(payload: dict):
             return await asyncio.wait_for(
                 loop.run_in_executor(executor, run_backlog_agent, results, model, client,
                                      project_id, synth_usage),
-                timeout=75.0
+                timeout=120.0  # måste vara > HTTP-timeouten (110s), annars kastas svaret men faktureras
             )
         except asyncio.TimeoutError:
             logger.warning("[backloghallaren] timeout")
@@ -2330,7 +2470,7 @@ async def review(payload: dict):
             return await asyncio.wait_for(
                 loop.run_in_executor(executor, run_prompt_smith, input_text, results,
                                      model, client, synth_usage, profile),
-                timeout=120.0
+                timeout=240.0
             )
         except asyncio.TimeoutError:
             logger.warning("[prompt_smith] timeout")
@@ -2348,7 +2488,7 @@ async def review(payload: dict):
                 return await asyncio.wait_for(
                     loop.run_in_executor(executor, run_completeness_agent, spec_content,
                                          model, client, synth_usage, profile),
-                    timeout=90.0
+                    timeout=120.0  # > HTTP-timeouten 110s
                 )
             except asyncio.TimeoutError:
                 logger.warning("[kompletthetsgranskaren] timeout")
@@ -2359,7 +2499,7 @@ async def review(payload: dict):
                 return await asyncio.wait_for(
                     loop.run_in_executor(executor, run_bestallare_agent, spec_content, results,
                                          model, client, synth_usage),
-                    timeout=90.0
+                    timeout=120.0  # > HTTP-timeouten 110s
                 )
             except asyncio.TimeoutError:
                 logger.warning("[bestallarsammanfattaren] timeout")
@@ -2388,7 +2528,9 @@ async def review(payload: dict):
 
     session_id = str(uuid.uuid4())
     session_name = auto_name(input_text)
-    stats_dict = {"total": len(results), "approved": approved, "rejected": rejected, "errors": errors}
+    skipped_count = sum(1 for r in results if r.get("skipped"))
+    stats_dict = {"total": len(results), "approved": approved, "rejected": rejected,
+                  "errors": errors, "skipped": skipped_count}
 
     # Persist backlog (review modes) — groomed items become the loop's work plan
     if is_review_mode and backlog_result.get("items"):
@@ -2406,7 +2548,7 @@ async def review(payload: dict):
 
     _progress_set(run_id, phase="klar")
 
-    return {
+    response_payload = {
         "session_id": session_id,
         "session_name": session_name,
         "mode": mode,
@@ -2422,6 +2564,33 @@ async def review(payload: dict):
         "cost_summary": cost_summary,
         "saved": save_result,
     }
+    # Resultatåterhämtning: webbläsare kapar fetch vid ~300s men en fullrepo-körning kan ta
+    # längre. Resultatet stashas per run_id så frontend kan hämta det när anslutningen dött.
+    _stash_run_result(run_id, response_payload)
+    return response_payload
+
+
+_RUN_RESULTS: dict = {}
+_run_results_lock = threading.Lock()
+
+def _stash_run_result(run_id: str, payload: dict):
+    if not run_id:
+        return
+    now = datetime.now().timestamp()
+    with _run_results_lock:
+        _RUN_RESULTS[run_id] = {"ts": now, "data": payload}
+        for k in [k for k, v in _RUN_RESULTS.items() if now - v["ts"] > 1800]:
+            del _RUN_RESULTS[k]
+
+
+@app.get("/api/review/result/{run_id}")
+async def get_review_result(run_id: str):
+    """Hämta ett färdigt granskningsresultat när webbläsarens fetch hann dö (>~300s)."""
+    with _run_results_lock:
+        entry = _RUN_RESULTS.get(run_id)
+    if not entry:
+        return JSONResponse({"ready": False}, status_code=404)
+    return {"ready": True, "data": entry["data"]}
 
 
 # ──────────────────────────────────────────────
@@ -2469,6 +2638,36 @@ async def update_backlog_item(item_id: str, payload: dict):
     return {"ok": True, "id": item_id, "status": new_status}
 
 
+@app.delete("/api/backlog/{item_id}")
+async def delete_backlog_item(item_id: str):
+    """Ta bort ett enskilt backlogfynd permanent (felaktiga körningar, dubbletter)."""
+    with _backlog_lock:
+        items = _backlog_load()
+        remaining = [i for i in items if i.get("id") != item_id]
+        if len(remaining) == len(items):
+            return JSONResponse({"error": "Item hittades inte."}, status_code=404)
+        tmp = BACKLOG_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(remaining, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(BACKLOG_FILE)
+    return {"ok": True, "id": item_id}
+
+
+@app.post("/api/backlog/clear")
+async def clear_backlog(payload: dict):
+    """Rensa alla backlogfynd för ett projekt — t.ex. efter en felaktig körning."""
+    project_id = payload.get("project_id", "")
+    if not project_id:
+        return JSONResponse({"error": "project_id krävs."}, status_code=400)
+    with _backlog_lock:
+        items = _backlog_load()
+        remaining = [i for i in items if i.get("project_id") != project_id]
+        removed = len(items) - len(remaining)
+        tmp = BACKLOG_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(remaining, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(BACKLOG_FILE)
+    return {"ok": True, "removed": removed}
+
+
 @app.post("/api/backlog/{item_id}/to-spec")
 async def backlog_to_spec(item_id: str, payload: dict):
     """Turn a single backlog item into a complete spec via Promptsmeden — closes the loop."""
@@ -2502,7 +2701,7 @@ async def backlog_to_spec(item_id: str, payload: dict):
         smith_result = await asyncio.wait_for(
             loop.run_in_executor(executor, run_prompt_smith, seed_input, seed_results,
                                  model, client, usage, profile),
-            timeout=120.0)
+            timeout=240.0)  # smithens interna HTTP-timeout är 220s — wrappern måste vara större
     except asyncio.TimeoutError:
         return JSONResponse({"error": "Promptsmeden svarade inte i tid — försök igen."}, status_code=504)
     spec_content = smith_result.get("content", "") if smith_result.get("type") == "prompt" else ""
@@ -2515,14 +2714,14 @@ async def backlog_to_spec(item_id: str, payload: dict):
             try:
                 return await asyncio.wait_for(
                     loop.run_in_executor(executor, run_completeness_agent, spec_content,
-                                         model, client, usage, profile), timeout=90.0)
+                                         model, client, usage, profile), timeout=120.0)
             except asyncio.TimeoutError:
                 return {}
         async def _best():
             try:
                 return await asyncio.wait_for(
                     loop.run_in_executor(executor, run_bestallare_agent, spec_content,
-                                         seed_results, model, client, usage), timeout=90.0)
+                                         seed_results, model, client, usage), timeout=120.0)
             except asyncio.TimeoutError:
                 return {}
         completeness_result, bestallare_result = await asyncio.gather(_comp(), _best())
@@ -2625,7 +2824,7 @@ async def backlog_verify_fix(item_id: str, payload: dict):
                      [{"type": "image_url", "image_url": {"url": img}} for img in images]
                  ) if images else user_text}],
                 1200, usage_out=usage)),
-            timeout=90.0)
+            timeout=120.0)  # > HTTP-timeouten 110s
     except asyncio.TimeoutError:
         return JSONResponse({"error": "Verifieringen tog för lång tid."}, status_code=504)
     except Exception as e:
@@ -2706,7 +2905,7 @@ async def build_queue_review(item_id: str, payload: dict):
     # Full team review of the built code — reuses the entire pipeline in-process.
     review_payload = {
         "mode": "granska_kod",
-        "input_text": built_code[:78_000],
+        "input_text": built_code[:440_000],  # samma kapacitet som /api/review (MAX_INPUT 450k)
         "context": f"Detta är ett bygge av specen: {item['title']}\n\nSPEC (utdrag):\n{item['spec_markdown'][:4000]}",
         "images": payload.get("images") or [],
         "project_id": item.get("project_id", ""),
@@ -2776,9 +2975,12 @@ EXCLUDE_DIRS = {
     "node_modules", ".git", "dist", "build", ".next", "__pycache__",
     "venv", ".venv", "coverage", ".cache", "vendor"
 }
-MAX_FILES = 60
-MAX_TOTAL_CHARS = 60_000
-MAX_FILE_CHARS = 8_000
+# Kapacitet kalibrerad mot Gemini 2.5 Flash (1M kontext): hela appen MÅSTE få plats —
+# 8k/fil klippte app.py (160k) och index.html (175k) till stumpar och agenterna
+# flaggade "trunkerad fil" som kodfel. ~400k tecken ≈ 100k tokens per agent.
+MAX_FILES = 80
+MAX_TOTAL_CHARS = 400_000
+MAX_FILE_CHARS = 200_000
 
 
 
@@ -2888,6 +3090,18 @@ async def github_fetch(payload: dict):
         raw_paths = [payload["path"]]
     path_filters = [p.strip().lstrip("/") for p in raw_paths if p and p.strip()]
 
+    # Granskningsundantag — t.ex. eval-fixturer med medvetet trasig kod (ai_eval.py:s
+    # SEEDED_CODE gav falska HIGH-fynd: "Stripe-nyckel", "SQL-injection", "personnummer").
+    raw_excl = payload.get("exclude_paths") or []
+    exclude_filters = [p.strip().lstrip("/") for p in raw_excl if isinstance(p, str) and p.strip()]
+
+    def _excluded(path: str) -> bool:
+        base = path.rsplit("/", 1)[-1]
+        return any(
+            path == e or base == e or path.startswith(e.rstrip("/") + "/")
+            for e in exclude_filters
+        )
+
     if not repo or "/" not in repo:
         return JSONResponse({"error": "Ogiltigt repo-format. Använd: owner/repo"}, status_code=400)
 
@@ -2927,7 +3141,8 @@ async def github_fetch(payload: dict):
         and any(item["path"].endswith(ext) for ext in INCLUDE_EXTENSIONS)
         and not any(excl in item["path"].split("/") for excl in EXCLUDE_DIRS)
         and _path_matches(item["path"])
-        and item.get("size", 0) < 100_000
+        and not _excluded(item["path"])
+        and item.get("size", 0) < 400_000
     ]
 
     # Sort: src/ first, then by size ascending
@@ -2947,12 +3162,20 @@ async def github_fetch(payload: dict):
             data = resp.json()
             import base64
             content = base64.b64decode(data.get("content", "")).decode("utf-8", errors="replace")
+            was_truncated = len(content) > MAX_FILE_CHARS
             truncated_content = content[:MAX_FILE_CHARS]
+            if was_truncated:
+                # Explicit markör — annars flaggar agenterna klippet som ett kodfel
+                truncated_content += (
+                    "\n\n// [OBS: FILEN KLIPPTES HÄR AV PROMPT TEAM pga storleksgräns — "
+                    "resten av filen finns men ingår inte i granskningen. "
+                    "Rapportera INTE detta som trunkerad/ofullständig kod.]"
+                )
             return {
                 "path": item["path"],
                 "content": truncated_content,
                 "size": len(content),
-                "truncated": len(content) > MAX_FILE_CHARS,
+                "truncated": was_truncated,
             }
         except Exception:
             return None
@@ -2979,6 +3202,11 @@ async def github_fetch(payload: dict):
                       for f in output_files]
     if skipped_files:
         manifest_lines.append(f"  [EJ INKLUDERADE: {', '.join(skipped_files[:10])}{'...' if len(skipped_files) > 10 else ''}]")
+    if exclude_filters:
+        manifest_lines.append(
+            f"  [MEDVETET EXKLUDERADE AV BESTÄLLAREN (granska ej, flagga ej som saknade): "
+            f"{', '.join(exclude_filters[:10])}]"
+        )
     file_manifest = (
         f"GRANSKADE FILER ({len(output_files)} av {len(all_files)} matchande, "
         f"{round(total_chars/1000, 1)}k tecken):\n" + "\n".join(manifest_lines)
@@ -3105,7 +3333,7 @@ async def health_check():
 
     # ── 3. Supabase ──
     import socket
-    sb_url = s.get("supabase_url", "").strip().rstrip("/")
+    sb_url = _sb_base()  # normalised — strips a trailing /rest/v1 if pasted
     sb_key = s.get("supabase_key", "").strip()
     if not sb_url or not sb_key:
         results["supabase"] = {"ok": False, "msg": "URL eller nyckel saknas"}
@@ -3135,7 +3363,13 @@ async def health_check():
             )
             if sb_resp.status_code == 200:
                 count = len(sb_resp.json())
-                results["supabase"] = {"ok": True, "msg": f"Ansluten · prompt_sessions finns ({count} rader synliga)"}
+                # Read the schema-migration ledger to surface drift (read-only, via REST)
+                schema = await loop.run_in_executor(executor, check_supabase_schema)
+                results["supabase"] = {
+                    "ok": schema["ok"],
+                    "msg": f"Ansluten · prompt_sessions finns ({count} rader) · {schema['msg']}",
+                    "schema": schema,
+                }
             elif sb_resp.status_code == 401:
                 results["supabase"] = {"ok": False, "msg": "Ogiltig nyckel — använd Legacy service_role (eyJ...) från API Keys-sidan"}
             elif sb_resp.status_code == 403:
@@ -3153,6 +3387,10 @@ async def health_check():
         except Exception as e:
             if "supabase" not in results:
                 results["supabase"] = {"ok": False, "msg": str(e)[:80]}
+
+    # Structured flag so the UI doesn't have to string-match the message
+    if "supabase" in results:
+        results["supabase"]["configured"] = bool(sb_url and sb_key)
 
     all_ok = all(v["ok"] for v in results.values())
     return {"ok": all_ok, "services": results}
