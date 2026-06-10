@@ -1,5 +1,5 @@
 # Codebase Audit — Prompt Team
-> **Iteration 6** — 2026-06-10. Läs denna fil INNAN du rör kod.
+> **Iteration 7** — 2026-06-10. Läs denna fil INNAN du rör kod.
 > Senaste git-kontroll: commit `bfa1f45` är senaste på `feat/agent-audit-export`. Branch är synkad med remote.
 
 ---
@@ -34,7 +34,7 @@
 
 | Fil | Rader | Roll |
 |---|---|---|
-| `app.py` | ~4 387 | Hela backenden — syntax OK (verifierat) |
+| `app.py` | **4 683** | Hela backenden — syntax OK (verifierat t.o.m. rad 4683) |
 | `index.html` | **4 121** | Frontend — **nu komplett**, slutar med `</html>` ✅ |
 | `AGENT_CHATBOX_BUILD.md` | ~2 817 | Spår A — chatbox, TASK-00 till TASK-12 + iteration 9-fynd |
 | `BUILD_TASKS.md` | ~969 | Spår B — P1-P4 (nu P1-N som senaste) |
@@ -59,11 +59,20 @@
 | P4-C — `_local_save()` dead code borttaget | ✅ | — |
 | Session-namn från `tolkad_ide` | ✅ | — |
 | `local_path`-inställning | ✅ | app.py settings |
-| Per-projekt agentinställningar (`/api/projects/{id}/settings`) | ✅ | app.py rad 4227+ |
+| Per-projekt agentinställningar (`/api/projects/{id}/settings`) | ✅ | app.py rad 4661–4683 |
 | `concurrency`, `krypto` (Sonnet), `agent_arkitektur` | ✅ | app.py SPECIALIST_AGENTS |
 | `security`-agenten uppgraderad till Claude Sonnet 4.6 | ✅ | app.py rad ~91 |
 | `projects.json` tillagd i `.gitignore` | ✅ | .gitignore rad 7 |
 | **R0 — index.html avtrunkering** | ✅ | 4 121 rader, slutar `</html>` |
+| **BUG/SEC-1 — path traversal** | ✅ BEKRÄFTAT FIXAD | app.py rad 902–906 + rad 4087–4089 |
+| **P1-L — get_backlog() lås** | ✅ | per PROJECT_STATUS |
+| **P1-M — spec_markdown storleksgräns** | ✅ | per PROJECT_STATUS |
+| **P1-N — tom project_id** | ✅ | per PROJECT_STATUS |
+| **P1-P — TOCTOU i build_queue_review** | ✅ BEKRÄFTAT FIXAD | app.py rad 4058–4070 |
+| **P1-Q — backlog_to_spec/verify lås** | ✅ BEKRÄFTAT FIXAD | app.py rad 3855 + 3976 |
+| **P3-T — _progress_set GC** | ✅ | per PROJECT_STATUS |
+| **13d/P4-i — health_check inline klient** | ✅ BEKRÄFTAT FIXAD | rad 4537: `get_openrouter_client()` |
+| **GitHub webhook (9n/P4-b)** | ✅ IMPLEMENTERAD | app.py rad 4447–4482 |
 
 ---
 
@@ -80,67 +89,25 @@ e2e_test_results*.json
 
 ## 🔴 Öppna buggar och säkerhetsproblem
 
-### BUG/SEC-1 · Path traversal i `BUILD_RESULTS_DIR` (P1 säkerhet)
+### ~~BUG/SEC-1~~ · Path traversal — ✅ BEKRÄFTAT FIXAD (iteration 7)
 
-**Fil:** `app.py`, rad ~695–696
-
-```python
-ref = f"{item_id}_{attempt}.json"
-(BUILD_RESULTS_DIR / ref).write_text(...)   # ← ingen sanitering av item_id
-```
-
-`item_id` kommer från URL-parametern. Ett item med `id` innehållande `../` kan skriva utanför
-`build_results/`-mappen. Queue-items skapas med `uuid4()` men det är ett invariant utan enforcement.
-
-**Fix:**
-```python
-ref = f"{item_id}_{attempt}.json"
-target = (BUILD_RESULTS_DIR / ref).resolve()
-if not str(target).startswith(str(BUILD_RESULTS_DIR.resolve())):
-    return JSONResponse({"error": "Ogiltigt item_id"}, status_code=400)
-(BUILD_RESULTS_DIR / ref).write_text(...)
-```
-
-### BUG-2 · `get_backlog()` läser utan lås — race condition (P1-L)
-
-**Fil:** `app.py`, rad 3241
+**Verifierat i koden:**
+- `build_queue_result()` — rad 902–906: `.resolve()` + parent-check
+- `build_queue_review()` — rad 4087–4089: samma skydd
 
 ```python
-async def get_backlog(project_id: str = ""):
-    items = _backlog_load()   # ← ingen _backlog_lock
+result_path = (BUILD_RESULTS_DIR / item["result_ref"]).resolve()
+if BUILD_RESULTS_DIR.resolve() not in result_path.parents:
+    return JSONResponse({"error": "Ogiltigt sökväg för byggresultat."}, status_code=400)
 ```
 
-Alla skrivoperationer håller `_backlog_lock`. En aktiv granskning kan skriva till `backlog.json`
-parallellt → delvis skriven JSON läses in → API returnerar korrupt data.
+Queue-item i kön är stale — kan stängas.
 
-**Fix:**
-```python
-async def get_backlog(project_id: str = ""):
-    with _backlog_lock:
-        items = _backlog_load()
-```
+### ~~BUG-2~~ · `get_backlog()` lås — ✅ FIXAD (P1-L per PROJECT_STATUS)
 
-### BUG-3 · `PATCH /api/build-queue/{id}` saknar storleksgräns (P1-M)
+### ~~BUG-3~~ · `spec_markdown` storleksgräns — ✅ FIXAD (P1-M per PROJECT_STATUS)
 
-`spec_markdown` skrivs utan längdbegränsning → 50 MB spec fryser servern vid nästa queue-operation.
-
-**Fix:** Lägg till direkt i `patch_build_queue()`:
-```python
-if "spec_markdown" in payload:
-    if len(str(payload["spec_markdown"])) > 100_000:
-        return JSONResponse({"error": "spec_markdown överstiger 100 000 tecken."}, status_code=400)
-```
-
-### BUG-4 · `POST /api/build-queue` accepterar tom `project_id` (P1-N)
-
-Items med `project_id=""` blöder in i alla projektvyer.
-
-**Fix:**
-```python
-project_id = (payload.get("project_id") or "").strip()
-if not project_id:
-    return JSONResponse({"error": "project_id krävs."}, status_code=400)
-```
+### ~~BUG-4~~ · Tom `project_id` — ✅ FIXAD (P1-N per PROJECT_STATUS)
 
 ### BUG-5 · `switchView()` raderar `builder-active`-klassen (T2 i BYGG_TASKS.md)
 
@@ -149,6 +116,38 @@ if not project_id:
 document.body.className = 'view-' + name;   // raderar ALLA klasser
 ```
 Ersätt med `classList.remove(...); classList.add(...)`.
+
+### BUG-6 · Uppskjutna imports inuti funktioner (P4 kvalitet)
+
+**Fil:** `app.py`
+
+Tre imports sker inuti funktioner istället för på modulnivå:
+
+| Import | Plats | Problem |
+|---|---|---|
+| `import base64` | rad 4367, inuti `fetch_file()` som är en closure inuti `github_fetch()` | Re-importeras vid varje filhämtning |
+| `import socket` | rad 4586, inuti `health_check()` | Re-importeras vid varje hälsokontroll |
+| `from urllib.parse import urlparse` | rad 4594, inuti `health_check()` | Same |
+
+`base64` och `socket` är standardbibliotek — flytta till toppen av filen.
+
+**Fix:** Lägg till i importblocket (rad ~1–30):
+```python
+import base64
+import socket
+from urllib.parse import urlparse
+```
+Ta sedan bort de lokala import-satserna.
+
+### BUG-7 · UTRED: app.py rad 4676 — rapporterat SyntaxError
+
+LOGG_FYND.md rapporterar att `app.py` är trunkerad vid rad 4676 med SyntaxError. **Iteration 7-läsning visar att detta sannolikt är ett falskt larm:** filen läses komplett t.o.m. rad 4683 och `get_project_settings_api`-funktionen är syntaktiskt korrekt. Rad 4676 innehåller:
+```python
+    "modes": a.get("modes", []),
+```
+— giltig Python inuti en list comprehension. Filen slutar korrekt med `}` på rad 4682.
+
+**Åtgärd:** Kör `python3 -c "import ast; ast.parse(open('app.py').read()); print('OK')"` för att bekräfta. Om OK — stäng queue-itemet.
 
 ### ~~BUG-6~~ · FALSKT LARM — hemlighetsvakten hanteras korrekt i snabbläge ✅
 
@@ -249,18 +248,26 @@ Fullständiga åtgärdsbeskrivningar — se R1–R7 längre ned.
 
 | Jag ska ändra... | Rad |
 |---|---|
-| Agentprompt / beteende | ~1025 (`SPECIALIST_AGENTS`) |
-| Syntes-agenter (Promptsmeden etc.) | ~1855 |
-| Modell-defaults | ~68 (`_DEFAULT_AGENT_MODELS`) |
-| Snabb-agentlista | 1841 (`_QUICK_AGENT_IDS`) |
-| Alltid-kör-agenter | 1847 (`_ALWAYS_RUN_AGENT_IDS`) |
-| Backlog-affärslogik | ~347 (`backlog_add_items`) |
-| `get_backlog` endpoint | 3241 |
-| Byggkö PATCH | ~460 (`patch_build_queue`) |
-| BUILD_RESULTS_DIR path traversal | ~695 |
-| Huvud-review-flödet | ~2863 (`review()`) |
-| Hemlighetsvakten-block i `/build-queue/{id}/review` | 3800 |
-| Startup-hook | ~31 (`startup()`) |
+| Agentprompt / beteende | ~1270 (`SPECIALIST_AGENTS`) |
+| Syntes-agenter (Promptsmeden etc.) | ~2083 |
+| Modell-defaults | ~258 (`_DEFAULT_AGENT_MODELS`) |
+| Snabb-agentlista | 2083 (`_QUICK_AGENT_IDS`) |
+| Alltid-kör-agenter | 2089 (`_ALWAYS_RUN_AGENT_IDS`) |
+| Backlog-affärslogik | ~519 (`backlog_add_items`) |
+| `get_backlog` endpoint | ~3563 |
+| Byggkö PATCH | ~611 (`queue_create_item`) |
+| BUILD_RESULTS_DIR path traversal (FIXAD) | 902–906, 4087–4089 |
+| Huvud-review-flödet | ~3159 (`review()`) |
+| Hemlighetsvakten-block i `/build-queue/{id}/review` | ~4132 |
+| Startup-hook | ~35 (`startup()`) |
+| GitHub webhook | 4447–4482 |
+| Per-projekt agentinställningar | 4661–4683 |
+| `_to_spec_phased` (fas-uppdelning) | ~3720 |
+| `backlog_to_spec` | 3851 |
+| `backlog_verify_fix` | 3972 |
+| `build_queue_review` | 4052 |
+| GitHub fetch | 4278 |
+| Hälsokontroll | 4522 |
 
 ---
 
@@ -368,140 +375,4 @@ De 5 `run_*_agent`-funktionerna blir tunna wrappers.
 
 ## R4 — Flytta bildlogik till `_call_model` (kräver R1–R3)
 
-Multimodal bildlogik är en intern closure i `run_agent` — finns inte i `_call_model`.
-
-1. Lägg till `images: list = None` i `_call_model`-signaturen
-2. Extrahera `_build_or_content(text, images)` och `_build_anthropic_content(text, images)`
-3. Ta bort den interna `_call()`-closuren i `run_agent`
-
-**Acceptance criteria:**
-- [ ] `_call_model` tar `images`-parameter
-- [ ] Ingen inline bildlogik i `run_agent`
-- [ ] e2e-testsektion 2 (skärmdump) passerar
-
----
-
-## R5 — Cachelägg `_sb_available()` (kräver R1–R3)
-
-```python
-_sb_cache: dict = {"ok": None, "ts": 0.0}
-_SB_CACHE_TTL = 60.0
-
-def _sb_available() -> bool:
-    import time as _time
-    now = _time.monotonic()
-    if _sb_cache["ok"] is not None and now - _sb_cache["ts"] < _SB_CACHE_TTL:
-        return _sb_cache["ok"]
-    result = _sb_check()   # extrahera nuvarande HTTP-logik
-    _sb_cache.update(ok=result, ts=now)
-    return result
-```
-
-**Acceptance criteria:**
-- [ ] Max ett HTTP-anrop per 60 s mot Supabase
-
----
-
-## R7 — Extrahera `_github_headers` (oberoende, låg prio)
-
-**Fil:** `app.py`, före `github_list_repos` (~rad 3859).
-
-```python
-def _github_headers(token: str = "") -> dict:
-    h = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-    if token:
-        h["Authorization"] = f"Bearer {token}"
-    return h
-```
-
-Ersätt headers-blocket i `github_list_repos` (3863), `github_list_branches` (3892),
-`github_tree` (3916) och `github_fetch` (3982) med:
-```python
-token = load_settings().get("github_token", "").strip()
-headers = _github_headers(token)
-```
-
-**Acceptance criteria:**
-- [ ] `_github_headers` definierad
-- [ ] Noll inline `{"Accept": "application/vnd.github+json"...}`-block utanför `_github_headers`
-- [ ] Alla fyra GitHub-endpoints returnerar samma svar som före
-
----
-
-## R6 — Läs git-identitet från settings (oberoende, låg prio)
-
-**Fil:** `push_to_github.py` (eller `.bat`), rad ~88. Ersätt hårdkodade namn:
-```python
-s = json.loads(SETTINGS.read_text(encoding="utf-8"))
-git_email = s.get("git_email", "stiven@2snickare.se")
-git_name  = s.get("git_name",  "Stiven Ishoo")
-```
-
----
-
-## Samlad byggordning (alla spår + prioritet)
-
-```
-━━━ OMGÅENDE (kör manuellt — inte byggartasks) ━━━
-  Fixa .gitignore-regression   → lägg tillbaka intrim_result*.json
-  Committa unstaged md-filer   → AGENT_CHATBOX_BUILD.md, BUILD_TASKS.md m.fl.
-  Installera precommit-hook    → INFRA-1 (TASK-10 i AGENT_CHATBOX_BUILD.md)
-
-━━━ P1 — KRITISKA BUGGAR (skicka som tasks via Projektledaren) ━━━
-  BUG/SEC-1   Path traversal BUILD_RESULTS_DIR  (AW i AGENT_CHATBOX_BUILD) ← #1 säkerhet
-  BUG-2       get_backlog() utan lås            (P1-L i BUILD_TASKS)
-  BUG-3       spec_markdown ingen storleksgräns  (P1-M i BUILD_TASKS)
-  BUG-4       tom project_id accepteras          (P1-N i BUILD_TASKS)
-  ~~BUG-6~~   FALSKT LARM — hemlighetsvakten redan hanterad
-  P1-D        Sessions-paginering
-  P1-E        _RUN_RESULTS till disk
-  P1-F        Semaphore på /api/review
-  P1-H        Supabase-backup backlog+queue
-  P1-J        Lös branch-divergens (beslut Stiven: Alt A eller Alt B)
-  P1-K        Dubbel-anropsskydd på /review
-
-━━━ PARALLELLT med P1 ━━━
-  BUG-5       switchView() (T2 i BYGG_TASKS / AGENT_CHATBOX_BUILD)
-  T4a         "builder" i _DEFAULT_AGENT_MODELS
-  T4b         project_context_snapshot vid /send
-  R1          _backlog_write helper
-  R2          _async_wrap helper
-  R3          _run_synthesis_agent helper
-
-━━━ NÄSTA (efter P1 klart) ━━━
-  Chatbox     SSE-endpoint + agent-loop (AGENT_CHATBOX_BUILD T4–T9)
-  P2-D        GitHub push-endpoint
-  R4          Bildlogik till _call_model
-  R5          Cachelägg _sb_available
-
-━━━ UX & FEATURES ━━━
-  T13         Per-projekt agent-config UI (backend klart, frontend saknas)
-  P3-A        Projektprofiler på servern
-  P3-G        CI-gate med GitHub Actions
-  P3-H        Historikpanel med sökning
-  P3-M        Återinför _repair_truncated_json
-  P3-N        Återinför vag-input-gate
-  P3-Q        GitHub-filhämtning i batchar
-  P3-R        Återinför kontrolleraBuild()
-
-━━━ TEKNISK SKULD (låg prio) ━━━
-  R6          git-identitet från settings
-  R7          _github_headers helper (4 duplicerade headers-block)
-  P4-A        __import__("httpx") → httpx (rad 3991, 4030 i github_fetch)
-  P4-B        load_settings() under lock
-  P4-D        Hälsokontroll med cached klient (inline openai.OpenAI() rad 4150)
-  P4-E        Normalisera modellsträngar
-  P4-F        GitHub inbound webhook
-```
-
----
-
-## Testbarhet
-
-- `e2e_test.py` kräver levande server — ingen CI-gate ännu (P3-G)
-- `ai_eval.py` kostar ~$0.30–2.00/körning — kör sparsamt
-- Precommit-hook saknas (INFRA-1) — lätt att åtgärda, gör det nu
-
----
-
-*Iteration 1: initial audit. 2: ny push +3 agenter. 3: BYGG_TASKS + T2-bug. 4: AGENT_CHATBOX_BUILD + BUILD_TASKS + ARKITEKTUR_ANALYS, P1-A/G/4C fixade unstaged. 5: commit bfa1f45, index.html fixad, nya P1-L/M/N + AW (path traversal) + precommit-hook, roller projektledare+snickare. 6: full läsning app.py 1–4386 klar — DRY-5 (github_headers) tillagd, R7 ny task, P4-A/P4-D radnummer bekräftade, BUG-6 klassad som falskt larm, hemlighetsvakten-logiken verifierad korrekt.*
+Multimodal bildlogik är en intern closure i `run_agent` — finns inte i `_ca

@@ -128,10 +128,4 @@ def main():
     if problems:
         print("BRISTER:")
         for p in problems:
-            print(f"  ✗ {p}")
-        sys.exit(1)
-    print("PERFEKT — alla kriterier uppfyllda.")
-
-
-if __name__ == "__main__":
-    main()
+            p

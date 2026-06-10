@@ -1103,26 +1103,4 @@ Standardisera `PROMPT_SMITH["model"]` till `"anthropic/claude-sonnet-4.6"`.
 async def github_webhook(request: Request):
     """Ta emot GitHub push-events och trigga automatisk kod-granskning."""
     sig = request.headers.get("X-Hub-Signature-256", "")
-    body = await request.body()
-    secret = load_settings().get("github_webhook_secret", "")
-    if secret:
-        import hmac, hashlib
-        expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, expected):
-            return JSONResponse({"error": "Ogiltig signatur"}, status_code=401)
-    payload = json.loads(body)
-    if payload.get("ref") != f"refs/heads/{load_settings().get('self_branch','main')}":
-        return {"ok": True, "skipped": "inte rätt branch"}
-    asyncio.ensure_future(review({
-        "mode": "granska_kod",
-        "input_text": f"Auto-granskning efter push av {payload.get('pusher',{}).get('name','okänd')}",
-        "project_id": load_settings().get("self_repo", ""),
-    }))
-    return {"ok": True, "triggered": True}
-```
-
-**Acceptanskriterier:**
-- POST till `/api/webhook/github` med korrekt signatur triggar en granska_kod-körning
-- Felaktig signatur returnerar HTTP 401
-
-*Dokumentet uppdateras automatiskt vid varje iteration. Skicka enskilda P1/P2/P3-block till din byggare som fristående specifikationer.*
+    body =

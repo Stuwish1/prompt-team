@@ -176,11 +176,4 @@ def main():
 
     # ── Sammanfattning ────────────────────────────────────────────────
     total = time.time() - t_start
-    print(f"\n{'='*54}\nRESULTAT: {len(PASS)} OK · {len(FAIL)} FEL · {total:.0f}s totalt")
-    if FAIL:
-        print("Misslyckade:", *[f"  - {f}" for f in FAIL], sep="\n")
-    return 1 if FAIL else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    print(f"\n{'='*54}\nRESULTAT: {len(PASS)} OK · {len(FAIL)} FEL · {tot

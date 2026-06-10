@@ -102,6 +102,8 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 PROJECT_DIR = Path("C:/innob-agent/prompt-team").resolve()
 _chat_sessions: dict[str, list] = {}
+_chat_sessions_last_used: dict[str, float] = {}
+_CHAT_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 _chat_lock = threading.Lock()
 
 
@@ -3149,6 +3151,15 @@ async def _progress_gc_loop():
                 _progress.pop(k, None)
         if stale:
             logger.debug("_progress GC: rensade %d stale entries", len(stale))
+        # GC chat sessions older than 60 minutes
+        chat_cutoff = datetime.now().timestamp() - 3600
+        with _chat_lock:
+            stale_chat = [k for k, v in _chat_sessions_last_used.items() if v < chat_cutoff]
+            for k in stale_chat:
+                _chat_sessions.pop(k, None)
+                _chat_sessions_last_used.pop(k, None)
+        if stale_chat:
+            logger.debug("_chat GC: rensade %d stale sessions", len(stale_chat))
 
 
 @app.get("/api/progress/{run_id}")
@@ -4472,18 +4483,28 @@ async def github_webhook(request: Request):
     logger.info("GitHub webhook: push till %s ref=%s av %s", repo, ref, pusher)
     # Trigga granskning om push är till main/master
     if ref in ("refs/heads/main", "refs/heads/master"):
+        after_sha = payload.get("after", "")
         with _queue_lock:
             items = _queue_load()
-        klara = [i for i in items if i.get("status") == "klar" and not i.get("deleted_at")]
-        if klara:
-            for item in klara:
-                asyncio.create_task(build_queue_review(item["id"], {}))
+        byggs_items = [i for i in items if i.get("status") == "byggs" and not i.get("deleted_at")]
+        if byggs_items:
+            # Prioritera item vars result_ref matchar push-SHA
+            sha_match = [i for i in byggs_items if i.get("result_ref") == after_sha and after_sha]
+            if sha_match:
+                chosen = sha_match[0]
+                reason = f"SHA-match ({after_sha[:8]})"
+            else:
+                # Fallback: senaste byggs-item (högst updated_at / sent_at)
+                chosen = max(byggs_items, key=lambda i: i.get("sent_at") or i.get("created_at") or "")
+                reason = "senaste byggs-item (ingen SHA-match)"
             logger.info(
-                "GitHub webhook: push till %s — triggar automatisk granskning för %d klart bygge(n)",
-                repo, len(klara),
+                "GitHub webhook: push till %s — triggar granskning av item %s, anledning: %s",
+                repo, chosen["id"], reason,
             )
+            asyncio.create_task(build_queue_review(chosen["id"], {}))
         else:
-            logger.info("GitHub webhook: push till %s mottagen — inga klara byggen att granska", repo)
+            logger.info("GitHub webhook: push till %s mottagen — inget aktivt bygge att granska", repo)
+            return JSONResponse({"ok": True, "skipped": "inget aktivt bygge"})
     return JSONResponse({"ok": True})
 
 

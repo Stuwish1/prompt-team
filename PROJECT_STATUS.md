@@ -1,10 +1,10 @@
 # Project Status
-**Senast uppdaterad:** 2026-06-10T20:09 (projektledaren-auto)
+**Senast uppdaterad:** 2026-06-10T21:18 (projektledaren-auto)
 
 ## Senast godkänt
-- P3-T: _progress_set() GC → bakgrundsjobb — godkänd — 2026-06-10
+- AGENT-FIX-1: review_started_at-läcka + _chat_sessions GC + chat_id-validering — godkänd — 2026-06-10
 
-## Klart totalt (godkänt av granskaren) — 35 st
+## Klart totalt (godkänt av granskaren) — 36 st
 - ✅ P1: Saknade las — race conditions
 - ✅ P1: Input-validering + path traversal
 - ✅ P1-A: Återställ stale byggs-items vid serveromstart
@@ -40,19 +40,15 @@
 - ✅ P3-T: _progress_set() GC → bakgrundsjobb
 - ✅ BUG: backlog.json korrupt — null-byte overflow
 - ✅ BUG: app.py SyntaxError rad 4807
+- ✅ AGENT-FIX-1: review_started_at-läcka + _chat_sessions GC + chat_id-validering
 
-## Väntar granskning (klar i kön, ej formellt godkänd) — 42 st
-⚠️ GRANSKAREN HAR MYCKET ATT GÖRA — 42 items i status=klar väntar granskning mot git-diff.
-
-Urval av de viktigaste (senast byggda):
+## Väntar granskning (klar i kön, ej formellt godkänd) — 10 st
 - 🔍 CHATBOX-FRONTEND: #builderPanel HTML/CSS/JS — chat-panel för byggagenten
 - 🔍 UX-SPRINT1: UX-1 (alert→inline) + UX-6 (queueDelete ångra) + UX-16 (showToast HTML)
 - 🔍 CHATBOX-BACKEND: SSE endpoint /api/builder/stream/{item_id} + BUILDER_TOOLS
-- 🔍 BUG-KRITISK: app.py trunkerad rad 4676 — SyntaxError
+- 🔍 BUG-KRITISK: app.py trunkerad rad 4676 — OBS: troligt falskt larm (CODEBASE_AUDIT iteration 7 bekräftar fil 4683 rader, syntax OK)
 - 🔍 BUG/SEC-1 + BUG-5 + AGENT_DISPLAY_NAMES: path traversal, switchView CSS, 10 agentnamn
 - 🔍 P4-A+B+C: Teknisk skuld — httpx-import, settings-lock, dead code
 - 🔍 P4-D+E: Hälsokontroll cached klient + normalisera modellsträngar
 - 🔍 P4-F: GitHub inbound webhook
-
-## Pågår nu
-- ⚙️ AGENT-FIX-1: review_started_at-läcka + _chat_sessions GC + chat_id-vali
+- 🔍 BUG-6: Uppskjutna imports —

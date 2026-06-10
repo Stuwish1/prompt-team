@@ -167,10 +167,3 @@ def main():
     total_fel = sum(r["stats"]["errors"] for rs in runs.values() for r in rs)
     print(f"\n{'='*56}")
     print(f"KLART: {ITERS} iterationer x 3 lagen pa {time.time()-t_start:.0f}s · "
-          f"totalt FEL-agenter: {total_fel} · kostnad ~${total_cost:.2f}")
-    print(f"Resultat: {out}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

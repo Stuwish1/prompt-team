@@ -16,15 +16,4 @@ model_list_cache.json
 .env
 start_background.vbs
 stop_app.bat
-interim_result*.json
-intrim_result*.json
-e2e_test_results*.json
-
-# Driftsfiler — ändras konstant, hör inte hemma i git
-BUILD_RESULT.md
-GRANSKARE_RESULT.md
-LOGG_STATUS.md
-LOGG_FYND.md
-PROJECT_STATUS.md
-IDEER.md
-
+interim_result*.jso.github/workflows/
