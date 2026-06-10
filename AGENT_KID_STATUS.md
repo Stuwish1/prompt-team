@@ -1,66 +1,73 @@
 # KID-agent Status
-**Senast analyserad:** 2026-06-10 · app.py rad 1–4683 · PROJECT_STATUS.md · AGENT_KID_STATUS.md (föregående)
+**Senast analyserad:** 2026-06-10 21:27 (automatisk körning)
+**Analyserade filer:** app.py (5245 rader) · index.html (4783 rader) · PROJECT_STATUS.md · AGENT_KID_STATUS.md
 
 ---
 
 ## Nya fynd sedan sist
 
-### Pipeline & affärslogik
+### 1. Chatt: Rå JavaScript-felmeddelanden visas för användaren (MEDIUM)
 
-**1. `review_started_at` läcker — permanent låsning av item (MEDIUM)**
-`build_queue_review()` sätter `review_started_at` under lock, men rensar det INTE i dessa early-exit paths:
-- **Rad ~4076**: inline result-save (koden i payload) returnerar JSONResponse → funktionen returnerar direkt utan att nolla `review_started_at`
-- **Rad ~4083**: `result_ref` saknas → returnerar 409 utan att nolla
-Konsekvens: itemet är permanent låst för framtida granskningar tills servern startas om. Startup-rensningen vid rad 54–63 fixar det, men inte under drift.
-**Fix:** Lägg till `item["review_started_at"] = None; _queue_write(items)` i båda early-exit paths (kräver att lock återtas).
+**Var:** index.html rad ~2245 och ~2282 (catch-block i `chatSend()` och `chatApprove()`)
+```js
+assistantBubble.textContent = 'Fel: ' + e.message;
+```
+**Problem:** Vid nätverksfel eller oväntat serverfel ser användaren t.ex. `Fel: Failed to fetch` eller `Fel: NetworkError when attempting to fetch resource`. Det är teknisk jargong som inte förklarar vad som faktiskt gick fel.
+**Fix:** Byt till generiskt klarspråk:
+```js
+assistantBubble.textContent = 'Något gick fel. Kontrollera din anslutning och försök igen.';
+```
 
-**2. GitHub webhook triggar fel status-filter (MEDIUM)**
-`/api/webhook/github` (rad 4472) söker efter items med `status == "klar"` att re-granska vid push. Items i "klar" är redan godkända och färdiga — det finns ingen logik för att hitta `"byggs"`-items med `result_ref` satt (dvs. byggaren har pushat och väntar på granskning). Push-triggern aktiverar alltså aldrig det avsedda automatiska granskningsflödet.
-**Fix:** Filtrera på `status == "byggs" AND result_ref is not None` för att triggra granskning på byggen som faktiskt väntar på det.
+### 2. Chatt: Interna verktygsnamn visas i realtid (LOW)
 
-**3. Parallella webhook-granskningar saknar throttling (LOW)**
-Om flera items är "klar" vid en push skapar webhooket `asyncio.create_task(build_queue_review(...))` för dem alla simultant. P1-F semaphore skyddar `/api/review`-endpoint-anrop, men `build_queue_review` anropar `review()` internt — det är oklart om semaphoren täcker interna anrop. Vid 5+ items kan detta orsaka resurspik.
-**Fix:** Bekräfta att `/api/review`-semaphore täcker interna anrop, alternativt lägg en global `asyncio.Semaphore(2)` runt webhook-tasks.
+**Var:** index.html rad ~2147 — `appendToolCall(name)` visar `🔧 <verktygsnamn>` direkt i chattbubblor
+**Problem:** Användaren ser interna funktionsnamn som `🔧 read_file`, `🔧 bash_execute`, `🔧 git_status`. Dessa är meningsfulla för utvecklare men förvirrande för icke-tekniska användare.
+**Fix (enkel):** Byt `name` mot en översättningstabel eller generisk text:
+```js
+const toolLabels = { 'read_file': 'Läser filer', 'bash_execute': 'Kör kommandon', 'git_status': 'Kontrollerar koden' };
+details.innerHTML = '<summary>⚙️ ' + (toolLabels[name] || 'Arbetar...') + '</summary><pre>...</pre>';
+```
 
-**4. `_chat_sessions` dict obegränsad (LOW)**
-Global dict `_chat_sessions` (rad 104) saknar maxstorlek och TTL. Varje chat-session läggs till men rensas aldrig automatiskt. Vid lång drift eller aggressiv användning kan detta växa obegränsat i minnet.
-**Fix:** Byt till `collections.OrderedDict` med max 200 sessioner och LRU-eviction, alternativt rensa sessions äldre än 24h i `_progress_gc_loop`.
+### 3. Chatt: Rubriken "Ändringar (git diff)" är teknisk jargong (LOW)
 
-**5. app.py trunkering-bug troligen åtgärdad (INFO)**
-PROJECT_STATUS anger "BUG-KRITISK: app.py trunkerad rad 4676" som öppen. Vid denna analys lästes app.py komplett till rad 4683 utan syntaxfel — filen verkar hel. Kontrollera mot senaste git att buggen faktiskt stängdes, annars ta bort från kö.
+**Var:** index.html rad 1119
+```html
+<h3>Ändringar (git diff)</h3>
+```
+**Problem:** "git diff" är ett kommandoradsverktyg som inte är känt för icke-tekniska användare.
+**Fix:** Byt till `<h3>Förhandsgranska ändringarna</h3>` eller `<h3>Vad som kommer att sparas</h3>`.
 
 ---
 
 ## Rekommendationer (prioriterade)
 
-1. **Fixa `review_started_at`-läckan** — lägst hängande frukt, konkret bug med tydlig fix (se fynd 1). Utan fix kan items permanent fastna och kräva serveromstart.
-2. **Fixa GitHub webhook-filter** — push-triggern fungerar inte alls för det avsedda flödet (se fynd 2). Antingen fixa filtret eller ta bort webhook-funktionen ur UI tills det fungerar.
-3. **Begränsa `_chat_sessions`** — riskerar minnesläcka vid långkörning (se fynd 4). Enkel fix.
-4. **Bekräfta/stäng app.py-trunkering** — verifiera i git om buggen är stängd och uppdatera PROJECT_STATUS.
+1. **Fixa chat-felmeddelanden** (fynd 1) — direkt synligt för alla användare, 2-raders fix, hög KID-impact.
+2. **Översätt verktygsnamn i chat** (fynd 2) — visar nu interna namn live under varje interaktion. Enkel mappning löser det.
+3. **Byt "git diff"-rubriken** (fynd 3) — kosmetisk men exponerar teknisk term, 1-raders fix.
+4. **KID_MODE-flagg (kvarstår)** — se nedan. Grundproblemet är fortfarande olöst.
 
 ---
 
 ## Tidigare flaggat (fortfarande relevant)
 
-Alla **TASK-01 till TASK-43** från föregående körning — inga KID_MODE-UX-ändringar är implementerade. Grundproblemet kvarstår: `KID_MODE`-flagg saknas helt i `settings.json`, `app.py` och `index.html`. Teknisk jargong, agentnamn, admin-UI och `push_to_github.bat`-text är fortfarande synliga för alla användare.
+**KID_MODE saknas helt** — `KID_MODE`-flagg finns inte i `settings.json`, `app.py` eller `index.html`. Admin-UI, agentnamn och teknisk jargong är synliga för alla användare oavsett roll. Alla TASK-01–43 från tidigare körningar kvarstår tills KID_MODE implementeras.
 
-**Byggordningen är fortfarande:**
+**Byggordning:**
 ```
-TASK-01 (KID_MODE-flagg) → alla övriga TASK-0x–43
+TASK-01 (KID_MODE-flagg) → TASK-02–43
 TASK-02 (.gitignore)       — oberoende
 ```
 
-Inget av detta blockerar backend-flödet, men det blockerar att systemet är användbart för målgruppen (barn/icke-tekniska).
+**GitHub webhook-filter (fynd 2 föregående körning)** — ej verifierat åtgärdat. Webhook filtrerar fortfarande på `status == "klar"` istället för `status == "byggs" AND result_ref is not None`. Aktiverar inte automatisk granskning vid push.
 
 ---
 
 ## Löst sedan sist
 
-- **P1-P: build_queue_review() TOCTOU** — `review_started_at`-guard under lock implementerad. OBS: Fix introducerar ny risk (läcka vid early-exit) — se Nytt fynd 1.
-- **P3-T: `_progress_set()` GC** — bakgrundsjobb, godkänd 2026-06-10.
-- **P1-A: Stale "byggs"-items** — återställs korrekt vid serveromstart (rad 42–52, verifierat).
-- **BUG: app.py SyntaxError rad 4807** — stängd (separat från ny trunkering-note).
+- **AGENT-FIX-2: `review_started_at` läcker** — åtgärdat (app.py rad 4098 + 4109, verifierat). Early-exit paths nollar nu korrekt.
+- **UX-SPRINT5: alert×7 → inline + confirm×5 → ångra/modal** — klar per PROJECT_STATUS.
+- **`_chat_sessions` obegränsad (fynd 4 föregående körning)** — åtgärdat. LRU-eviction vid 200 sessioner implementerad (app.py rad ~5224–5228).
 
 ---
 
-*Analyserat av: KID-agent (Claude Sonnet 4.6) · Körd automatiskt 2026-06-10*
+*Analyserat av: KID-agent (Claude Sonnet 4.6) · Körd automatiskt 2026-06-10 21:27*

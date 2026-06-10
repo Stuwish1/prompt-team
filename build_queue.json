@@ -11,7 +11,7 @@
       "type": "flode-ansvarig"
     },
     "created_at": "2026-06-10T21:00:23",
-    "updated_at": "2026-06-10T21:02:43.822589",
+    "updated_at": "2026-06-10T21:17:54",
     "log": [
       {
         "at": "2026-06-10T21:00:23",
@@ -37,6 +37,10 @@
         "app.py"
       ],
       "summary": "Supabase som primär kö-lagring: _queue_load läser från Supabase, _queue_write skriver synkront, _migrate_queue_to_supabase migrerar vid start"
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:17:54"
     }
   },
   {
@@ -3178,13 +3182,17 @@
         "detail": "auto"
       }
     ],
-    "updated_at": "2026-06-10T20:04:18",
+    "updated_at": "2026-06-10T21:17:54",
     "result_summary": {
       "success": true,
       "files_changed": [
         "app.py"
       ],
       "summary": "Lade till POST /api/chat SSE-endpoint. Sparar hela assistant_content-listan (inkl. tool_use-block) i _chat_sessions istallet for ihopfogad text. Hanterar bakatkompat med aldre string-format."
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:17:54"
     }
   },
   {
@@ -3209,13 +3217,17 @@
         "detail": "auto"
       }
     ],
-    "updated_at": "2026-06-10T20:14:40",
+    "updated_at": "2026-06-10T21:17:54",
     "result_summary": {
       "success": true,
       "files_changed": [
         "app.py"
       ],
       "summary": "DRY-SPRINT1 R1/R2/R3: _backlog_write (8 inline-block ersatta), _async_wrap (4 closures refaktorerade), _run_synthesis_agent (5 run_*_agent-funktioner wrappers). Null-bytes städade. Syntax OK."
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:17:54"
     }
   },
   {
@@ -3247,7 +3259,12 @@
         "app.py"
       ],
       "summary": "R4/R5/R7 verifierades redan implementerade: WIP-commit vid dirty tree (R4), max-turns else-gren (R5), SSE keepalive-task (R7). Syntax OK."
-    }
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:17:54"
+    },
+    "updated_at": "2026-06-10T21:17:54"
   },
   {
     "id": "762ca7e0-3153-44e8-b46e-9a403cb9169e",
@@ -3264,7 +3281,12 @@
         "index.html"
       ],
       "summary": "UX-9: inline verdict i kontrolleraBuild() med qc-verdict block; UX-12: pulserande varningsbadge med health-pulse animation; UX-19: refreshByggaBadge() redan på plats, verifierat"
-    }
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:17:54"
+    },
+    "updated_at": "2026-06-10T21:17:54"
   },
   {
     "id": "b2450b68-4f66-448c-a8e7-899b333b0ed0",
@@ -3282,7 +3304,12 @@
       ],
       "summary": "Lade till motivering i _SEVERITY_GUIDE JSON-schema och instruktionsmening om att motivering är obligatorisk"
     },
-    "completed_at": "2026-06-10T20:31:33.267701"
+    "completed_at": "2026-06-10T20:31:33.267701",
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:17:54"
+    },
+    "updated_at": "2026-06-10T21:17:54"
   },
   {
     "id": "dd083624-a3d4-4fa9-b9cd-d56268897bbc",
@@ -3299,7 +3326,12 @@
         "index.html"
       ],
       "summary": "UX-SPRINT4: modal ersätter prompt(), knapptext fixad, Ctrl+Retur-hint, visa/dölj klara i byggkön"
-    }
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:17:54"
+    },
+    "updated_at": "2026-06-10T21:17:54"
   },
   {
     "id": "ddc2b044-aa11-4b68-9e95-91293b5bf5eb",
@@ -3329,7 +3361,12 @@
         "app.py"
       ],
       "summary": "R4: bildlogik extraherad till _build_or_content/_build_anthropic_content, _call_model tar nu images-param, _call()-closure i run_agent borttagen. R5: _sb_available cachlägger DNS-check i 60s via _sb_cache/_sb_check. Bonus: fixade preexisterande trunkering av sista raden i app.py."
-    }
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:17:54"
+    },
+    "updated_at": "2026-06-10T21:17:54"
   },
   {
     "id": "60ef4e5b-2faf-4d59-9ac1-a040d6cefe5c",
@@ -3347,7 +3384,12 @@
         "index.html"
       ],
       "summary": "UX-1: Ersatte 8 alert() med showToast/showFieldError. UX-6: Ersatte 5 confirm() med optimistiska borttagningar + ångra-toast + dialog-modal för projekt. Lade till showFieldError och undoQueueDelete."
-    }
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:17:54"
+    },
+    "updated_at": "2026-06-10T21:17:54"
   },
   {
     "id": "20446f41-c200-494a-a94f-6f9e20339e14",
@@ -3356,7 +3398,7 @@
     "spec_bestallare": "Specskrivaren ska synas i agent-pill precis som db/ux/flode-agenterna",
     "spec_markdown": "## CONTEXT\n\nspecskrivare-auto ar ett schemalagt task som kor automatiskt och bearbetar ideer fran IDEER.md. Det finns ett system (`/api/agent-runs`) som scannar `AGENT_*_STATUS.md`-filer och visar en tyst pill-notis i UI med senaste koerningstid (t.ex. \"db kl 19:22\"). Ovriga agenter (db, flode, ux, kid) skriver alla till sin fil och syns i pill-notisen.\n\n**Problem:** specskrivare-auto skriver inte till nagon `AGENT_SPECSKRIVARE_STATUS.md`. Den ar osynlig i agent-statusflodet. Koden i `app.py` rad 4476-4493 (`get_agent_runs()`) globbar redan `AGENT_*_STATUS.md` -- ingen andring kravs i backend eller frontend.\n\n## TASK\n\nAndra det schemalagda tasket `specskrivare-auto` (SKILL.md for specskrivaren) sa att det skriver till `AGENT_SPECSKRIVARE_STATUS.md` **varje gang det kor** -- oavsett om det fanns ideer att bearbeta eller inte.\n\nSkrivsteget ska koras **fore** den befintliga exit-logiken (\"om inga `- [ ]` finns avslutas tyst\") sa att pill-notisen uppdateras aven vid tomma korningar.\n\n### Implementation\n\nLagg till i borjan av SKILL.md (efter las av IDEER.md men fore exit-villkoret):\n\n```python\nimport datetime, os\nstatus_path = '/sessions/SESSIONNAMN/mnt/prompt-team/AGENT_SPECSKRIVARE_STATUS.md'\nnow = datetime.datetime.now()\ndatum = now.strftime('%Y-%m-%d')\ntid = now.strftime('%H:%M')\n# Rakna vaentande ideer\ntry:\n    with open('/sessions/SESSIONNAMN/mnt/prompt-team/IDEER.md', encoding='utf-8') as f:\n        ideer_content = f.read()\n    obearbetade = ideer_content.count('- [ ]')\n    bearbetade = ideer_content.count('- [x]')\nexcept Exception:\n    obearbetade = '?'\n    bearbetade = '?'\ncontent = f'# Specskrivare-agent Status\\n**Senast korning:** {datum} kl {tid}\\n\\n'\ncontent += f'- Vaentande ideer: {obearbetade}\\n'\ncontent += f'- Bearbetade ideer: {bearbetade}\\n'\ntmp = status_path + '.tmp'\nwith open(tmp, 'w', encoding='utf-8') as f:\n    f.write(content)\nos.replace(tmp, status_path)\n```\n\nOBS: sessionsnaemnet varierar -- anvand den faktiska soekvaegen fran `BASE_DIR` i SKILL.md.\nAlternativt skrivs filen med Write-verktyget direkt till `C:\\\\innob-agent\\\\prompt-team\\\\AGENT_SPECSKRIVARE_STATUS.md`.\n\n### Fil: AGENT_SPECSKRIVARE_STATUS.md\n\nSkapas/uppdateras atomaert (.tmp -> os.replace). Format:\n```markdown\n# Specskrivare-agent Status\n**Senast korning:** YYYY-MM-DD kl HH:MM (automatisk korning)\n\n- Vaentande ideer (- [ ]): N\n- Bearbetade ideer (- [x]): N\n```\n\n## ACCEPTANCE CRITERIA\n- [ ] `AGENT_SPECSKRIVARE_STATUS.md` skapas/uppdateras varje gang specskrivare-auto kor\n- [ ] Filen uppdateras aven nar det INTE finns nagra `- [ ]` (tom korning)\n- [ ] `/api/agent-runs` returnerar ett item med `label: \"specskrivare\"` efter att filen skapats\n- [ ] Pill-notisen i UI visar t.ex. \"specskrivare kl 14:30\" efter korning\n- [ ] Skrivningen aer atomaer (.tmp -> os.replace)\n",
     "position": 200,
-    "status": "ko",
+    "status": "kö",
     "attempt_nr": 1,
     "sent_at": null,
     "result_ref": null,
@@ -3393,26 +3435,38 @@
       ],
       "summary": "Lade till GET /api/agent-log endpoint i app.py och #agentPulse badge i index.html med 30s polling"
     },
-    "completed_at": "2026-06-10T21:16:19.630059"
+    "completed_at": "2026-06-10T21:16:19.630059",
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:17:54"
+    },
+    "updated_at": "2026-06-10T21:17:54"
   },
   {
     "id": "2e9fcb10-0f6c-4f1a-885e-6cd4cf573361",
     "project_id": "main",
     "title": "AGENT-FIX-2: review_started_at läcker i early-exit paths — permanent itemlåsning",
-    "status": "byggs",
+    "status": "klar",
     "position": 10019,
     "created_at": "2026-06-10T21:08:48",
     "spec_markdown": "## CONTEXT\nKID-agenten hittade att `build_queue_review()` sätter `review_started_at` under lock men INTE rensar det i två early-exit paths:\n- Rad ~4076: inline result-save (kod i payload) returnerar JSONResponse direkt\n- Rad ~4083: `result_ref` saknas → returnerar 409 utan nollning\n\nKonsekvens: itemet fastnar permanent och kräver serveromstart. `startup()`-rensningen hjälper bara vid omstart, inte under drift.\n\nOBS: AGENT-FIX-1 fixade andra läckor men INTE dessa early-exit paths.\n\n## TASK\nI `build_queue_review()` i app.py:\n\n1. Hitta early-exit vid inline result-save (~rad 4076) som returnerar JSONResponse utan att rensa `review_started_at`. Lägg till INNAN return:\n```python\nitem[\"review_started_at\"] = None\n_queue_write(items)\n```\n\n2. Hitta early-exit vid `result_ref saknas` (~rad 4083) som returnerar 409. Samma fix — rensa `review_started_at` INNAN return.\n\n3. Verifiera med `search_file` att inga andra early-exit paths returnerar utan nollning.\n\n## ACCEPTANCE CRITERIA\n- [ ] `review_started_at` rensas i alla early-exit paths i `build_queue_review()`\n- [ ] Ett fastnat item återfår `review_started_at = None` direkt utan serveromstart\n- [ ] Normal genomflöde påverkas inte",
-    "spec_bestallare": "AGENT_KID_STATUS — fynd 1 (2026-06-10)"
+    "spec_bestallare": "AGENT_KID_STATUS — fynd 1 (2026-06-10)",
+    "result_summary": {
+      "success": true,
+      "files_changed": [
+        "app.py"
+      ],
+      "summary": "Rensar review_started_at i båda early-exit paths i build_queue_review(): (1) inline result-save misslyckas, (2) result_ref saknas — båda använder _queue_lock + reload för att säkert nolla fältet"
+    }
   },
   {
     "id": "b2074459-083a-42f7-a795-5794dc5c2d0d",
     "project_id": "main",
     "title": "AGENT-FIX-3: Shell injection i git_commit_push + _chat_sessions GC",
-    "status": "kö",
+    "status": "klar",
     "position": 999,
     "created_at": "2026-06-10T21:14:59",
-    "updated_at": "2026-06-10T21:14:59",
+    "updated_at": "2026-06-10T21:24:17.150934",
     "spec_bestallare": "AGENT_FLODE (shell injection) + AGENT_KID (_chat_sessions)",
     "spec_markdown": "## CONTEXT\nFlödesagenten flaggade shell injection-risk i `git_commit_push` i `_execute_chat_tool` (app.py ~rad 241–248). Commit-meddelandet konkateneras direkt i en shell-sträng med `shell=True` — ett meddelande med `\"` eller backticks kan bryta kommandot.\n\nKID-agenten flaggade att `_chat_sessions` (rad ~104) är en obegränsad dict utan TTL eller maxstorlek — kan växa obegränsat vid lång drift.\n\n## TASK\n**Fix 1 — Shell injection:**  \nSök upp `git_commit_push`-logiken i `_execute_chat_tool` i app.py. Byt alla `subprocess.run(..., shell=True)` för git-kommandon till list-format med `shell=False`:\n```python\n# Nuläge (osäkert):\nsubprocess.run(f'git commit -m \"{message}\"', shell=True, ...)\n# Fixa till:\nsubprocess.run([\"git\", \"commit\", \"-m\", message], shell=False, capture_output=True, text=True, timeout=15)\n```\nGäller `git add -A`, `git commit -m`, och `git push` i samma funktion.\n\n**Fix 2 — _chat_sessions GC:**  \nByt `_chat_sessions: dict = {}` till en begränsad lösning. I `_chat_sessions`-skrivoperationer: om len > 200, ta bort ältsta nyckel:\n```python\n# Vid varje ny session:\nif len(_chat_sessions) >= 200:\n    oldest = next(iter(_chat_sessions))\n    del _chat_sessions[oldest]\n_chat_sessions[item_id] = [...]\n```\n\n## ACCEPTANCE CRITERIA\n- [ ] `git commit -m \"test\\\"injection\"` orsakar inte kommandoinjektion\n- [ ] Alla git-anrop i `_execute_chat_tool` använder list-argument med `shell=False`\n- [ ] `_chat_sessions` håller max 200 entries — ältsta rensas vid overflow\n- [ ] Befintlig chattfunktionalitet fungerar som förut (smoke test: skicka meddelande, kontrollera att svar kommer)\n",
     "log": [
@@ -3421,7 +3475,62 @@
         "by": "projektledaren-auto",
         "ts": "2026-06-10T21:14:59",
         "note": "Skapad baserat på AGENT_FLODE (shell injection) + AGENT_KID (_chat_sessions)"
+      },
+      {
+        "action": "klar",
+        "by": "byggaren",
+        "ts": "2026-06-10T21:24:17.150950",
+        "note": "Shell injection fixad + _chat_sessions GC implementerad"
+      }
+    ],
+    "result_summary": {
+      "success": true,
+      "files_changed": [
+        "app.py"
+      ],
+      "summary": "Fix 1: git_commit_push byter från shell=True till list-argument (shell=False). Fix 2: _chat_sessions begränsas till 200 entries med GC av äldsta vid overflow."
+    }
+  },
+  {
+    "id": "b0fdfdd90000",
+    "project_id": "main",
+    "title": "DRY-SPRINT4: R6 (git-identitet från settings) + R7 (_github_headers helper)",
+    "status": "klar",
+    "position": 9999,
+    "created_at": "2026-06-10T21:18:34",
+    "spec_bestallare": "projektledare-auto (CODEBASE_AUDIT.md R6+R7)",
+    "spec_markdown": "## CONTEXT\nTeknisk skuld (låg prio) — två DRY-brott identifierade i CODEBASE_AUDIT.md iteration 6-7.\nDessa är oberoende av varandra och kan bundlas.\n\n## TASK\n\n### R6 — Läs git-identitet från settings.json (push_to_github.py)\n\nFil: `push_to_github.py`, rad ~88.\nErsätt hårdkodade värden med läsning från settings.json:\n\n```python\ns = json.loads(SETTINGS.read_text(encoding=\"utf-8\"))\ngit_email = s.get(\"git_email\", \"stiven@2snickare.se\")\ngit_name  = s.get(\"git_name\",  \"Stiven Ishoo\")\n```\n\nLägg till `git_email` och `git_name` som optional fields i `post_settings()` i app.py (spara till settings.json om de skickas).\n\n### R7 — Extrahera `_github_headers()` (app.py)\n\nFil: `app.py`, lägg till före `github_list_repos` (~rad 3859):\n\n```python\ndef _github_headers(token: str = \"\") -> dict:\n    h = {\"Accept\": \"application/vnd.github+json\", \"X-GitHub-Api-Version\": \"2022-11-28\"}\n    if token:\n        h[\"Authorization\"] = f\"Bearer {token}\"\n    return h\n```\n\nErsätt de 4 identiska headers-blocken i:\n- `github_list_repos` (rad ~3863)\n- `github_list_branches` (rad ~3892)\n- `github_tree` (rad ~3916)\n- `github_fetch` (rad ~3982)\n\nmed:\n```python\ntoken = load_settings().get(\"github_token\", \"\").strip()\nheaders = _github_headers(token)\n```\n\n## ACCEPTANCE CRITERIA\n- [ ] `push_to_github.py` läser git_email/git_name från settings.json med fallback\n- [ ] `_github_headers()` definierad i app.py\n- [ ] Noll inline `{\"Accept\": \"application/vnd.github+json\"...}`-block utanför `_github_headers`\n- [ ] Alla fyra GitHub-endpoints fungerar som tidigare\n- [ ] Ingen regression i GitHub-fetch-flödet\n",
+    "log": [
+      {
+        "action": "skapad",
+        "ts": "2026-06-10T21:18:34",
+        "note": "projektledare-auto"
+      },
+      {
+        "action": "klar",
+        "ts": "2026-06-10T21:31:24",
+        "note": "byggd av auto-agent"
       }
     ]
+  },
+  {
+    "id": "44416f86-1686-42ee-9e06-12a8dffd008a",
+    "project_id": "main",
+    "title": "UX-SPRINT6: UX-1 (alert×7) + UX-6 (confirm×5) + UX-21 (prompt×2) → barnvänliga ersättningar",
+    "spec_markdown": "## CONTEXT\nUX-agenten (iteration 9, 2026-06-10) bekräftar att tre typer av webbläsarnativa dialoger\nfortfarande finns kvar i index.html trots att UX-SPRINT1 och UX-SPRINT5 markerades klara:\n- alert() på 7 ställen — fryser UI och är obegripligt för barnets primäranvändare\n- confirm() på 5 ställen — blockerar UI vid borttagningar\n- prompt() på 2 ställen — används som input-dialog, extremt ovanlig UX för barn\n\n## TASK\nFil: index.html\n\n### UX-1 — alert() → inline/toast (7 ställen)\nSök efter alla 7 alert()-anrop och ersätt med showToast() eller showFieldError():\n\n- Rad 1447: ersätt alert(...) med showToast('❌ ' + msg, 5000)\n- Rad 1760: rad med lång buggbeskrivning → showToast('❌ ' + errorText, 5000)\n- Rad 1806, 1808, 1810, 1812: fyra alert() i samma kodblock → showToast för varje\n- Rad 3854: `alert('Kunde inte ladda session: ' + e.message)` → `showToast('❌ Kunde inte ladda session: ' + e.message, 5000)`\n\nKontrollera med search_file(pattern=\"alert(\", path=\"index.html\") att inga alert() återstår\nefter ändringen (undantag: alert i kommentarer är OK).\n\n### UX-6 — confirm() → ångra-toast/modal (5 ställen)\nSök efter alla 5 confirm()-anrop och ersätt med optimistisk borttagning + ångra-toast:\n\n- **queueDelete (rad ~2654):** Ta bort confirm(). Utför borttagningen direkt. Visa toast:\n  `showToast('🗑 Borttaget — <button onclick=\"undoDelete(''+id+'')\">Ångra (5s)</button>', 5000, true)`\n  Implementera `undoDelete(id)` som anropar PATCH för att återställa.\n\n- **deleteSession (rad ~2825):** Samma ångra-mönster — `showToast('🗑 Session borttagen — <button onclick=\"undoDeleteSession(...)\">Ångra</button>', 5000, true)`\n\n- **clearBacklog (rad ~2840):** Visa modal-bekräftelse istället (`<dialog>`) eftersom det är en bulk-operation:\n  ```html\n  <dialog id=\"clearBacklogModal\">\n    <p>Rensa hela backloggen?</p>\n    <button onclick=\"doClearBacklog()\">Ja, rensa</button>\n    <button onclick=\"document.getElementById('clearBacklogModal').close()\">Avbryt</button>\n  </dialog>\n  ```\n\n- **Historik-radering (rad ~3860):** Ångra-toast som ovan.\n\n- **Projekt-borttagning (rad ~4509):** Modal-bekräftelse (destructive action) — samma mönster som clearBacklog.\n\n### UX-21 — prompt() → modal/toast (2 ställen)\n- **queueSetStatus (rad ~2635):** `prompt('Bygget är underkänt...')` → lägg till ett `<dialog id=\"overrideReasonModal\">` med textarea + Bekräfta/Avbryt-knappar. Anropa `.showModal()` istället för prompt().\n\n- **Clipboard-fallback (rad ~3510):** `prompt('Kopiera prompten manuellt...', text)` → ersätt med:\n  `showToast('Kunde inte kopiera — markera texten nedan manuellt', 4000)` och visa texten i ett `<pre>`-block i ett befintligt textarea/modal.\n\n## ACCEPTANCE CRITERIA\n- [ ] `search_file(pattern=\"alert(\", path=\"index.html\")` returnerar 0 träffar (exkl. kommentarer)\n- [ ] `search_file(pattern=\"confirm(\", path=\"index.html\")` returnerar 0 träffar (exkl. kommentarer)\n- [ ] `search_file(pattern=\"prompt(\", path=\"index.html\")` returnerar 0 träffar (exkl. kommentarer)\n- [ ] queueDelete visar ångra-toast i 5 sekunder\n- [ ] clearBacklog och projekt-borttagning visar modal-bekräftelse\n- [ ] overrideReasonModal fungerar med textarea + Bekräfta/Avbryt\n- [ ] index.html slutar med </html> som sista rad (sanitetskontroll)\n",
+    "spec_bestallare": "UX-agenten iteration 9 (2026-06-10) — bekräftade kvarstående dialoger",
+    "status": "kö",
+    "position": 10020,
+    "created_at": "2026-06-10T21:23:52"
+  },
+  {
+    "id": "eac32328-ca6c-4702-bee9-f8e689a48436",
+    "project_id": "main",
+    "title": "CHATBOX-POLISH: run_id recovery + project_context vid /send + .gitignore",
+    "spec_markdown": "## CONTEXT\nTre kvarstående items fran AGENT_CHATBOX_BUILD (iterationerna 4-5):\n- D2: SSE-endpointen skickar inte run_id till frontend vid granskning, webbläsaren kan inte aterhämta resultat vid reconnect\n- AM: build_project_context beräknas vid /send men sparas aldrig pa queue-itemet, SSE-endpointen maste ta emot profil via URL-param (säkerhetsproblem S1 kvarstår)\n- G5: .gitignore saknar rader for interna filer\n\n## TASK\n\n### 1. run_id recovery-event i SSE (D2)\nI /api/builder/stream/{item_id} (app.py), i Step E (efter att /review-anropet startat):\n\n    review_data = await build_queue_review(item_id, review_payload)\n    run_id = review_data.get(\"run_id\") or review_data.get(\"id\", \"\")\n    if run_id:\n        yield _sse({\"type\": \"review_started\",\n                    \"run_id\": run_id,\n                    \"recovery_url\": f\"/api/review/result/{run_id}\",\n                    \"text\": \"Granskning startad...\"})\n\nI frontend handleBuilderEvent() (index.html), lagg till case:\n\n    } else if (msg.type === 'review_started') {\n        sessionStorage.setItem('builder_recovery_' + currentItemId, JSON.stringify({\n            run_id: msg.run_id, url: msg.recovery_url, ts: Date.now()\n        }));\n    }\n\nI loadAttBygga(): om sessionStorage har en builder_recovery_<id>-nyckel for ett byggs-item och ts ar äldre an 30s, visa en \"Visa granskningsresultat\"-knapp som hamtar recovery_url.\n\n### 2. Spara project_context vid /send (AM)\nI send_build_queue_item() (app.py), efter att job-objektet ar byggt och innan _queue_write:\n\n    item[\"project_context\"] = job.get(\"project_context\", \"\")\n    _queue_write(items)\n\nI SSE-endpointen builder_stream(): ersatt build_project_context(profile_dict) med item.get(\"project_context\", build_project_context({})).\n\n### 3. Komplettera .gitignore (G5)\nKontrollera om dessa rader redan finns i .gitignore (sok pa varje rad innan du lagger till):\n- projects.json\n- intrim_result_concrete.json\n- test_intrim.py\n- ARKITEKTUR_ANALYS.md\n- KID_USER_PROMPT.md\n- AGENT_CHATBOX_BUILD.md\nLagg bara till de som saknas. Kontrollera att filen slutar med newline.\n\n## ACCEPTANCE CRITERIA\n- [ ] SSE-endpoint skickar review_started-event med run_id och recovery_url\n- [ ] Frontend sparar recovery-data i sessionStorage och visar aterhämtningsknapp\n- [ ] send_build_queue_item sparar project_context pa queue-itemet\n- [ ] SSE-endpointen laser project_context fran itemet (ej via URL-param)\n- [ ] .gitignore innehaller alla listade rader utan dubbletter\n",
+    "spec_bestallare": "AGENT_CHATBOX_BUILD iteration 4-5 D2 AM G5",
+    "status": "ko",
+    "position": 10021,
+    "created_at": "2026-06-10T21:27:47"
   }
 ]

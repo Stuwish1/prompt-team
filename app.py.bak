@@ -241,11 +241,11 @@ def _execute_chat_tool(name: str, input_data: dict) -> str:
     elif name == "git_commit_push":
         message = input_data.get("message", "auto commit")
         try:
-            r1 = subprocess.run("git add -A", shell=True, capture_output=True, text=True,
+            r1 = subprocess.run(["git", "add", "-A"], shell=False, capture_output=True, text=True,
                                 timeout=15, cwd=str(PROJECT_DIR))
-            r2 = subprocess.run(f'git commit -m "{message}"', shell=True, capture_output=True,
+            r2 = subprocess.run(["git", "commit", "-m", message], shell=False, capture_output=True,
                                 text=True, timeout=15, cwd=str(PROJECT_DIR))
-            r3 = subprocess.run("git push", shell=True, capture_output=True, text=True,
+            r3 = subprocess.run(["git", "push"], shell=False, capture_output=True, text=True,
                                 timeout=30, cwd=str(PROJECT_DIR))
             return "\n".join([r1.stdout + r1.stderr, r2.stdout + r2.stderr, r3.stdout + r3.stderr])
         except Exception as e:
@@ -4095,11 +4095,23 @@ async def build_queue_review(item_id: str, payload: dict):
         r = await build_queue_result(item_id, {"attempt_nr": item.get("attempt_nr"), "code": code,
                                                "status": "byggd"})
         if isinstance(r, JSONResponse):
+            with _queue_lock:
+                items = _queue_load()
+                _it = next((i for i in items if i.get("id") == item_id), None)
+                if _it:
+                    _it["review_started_at"] = None
+                    _queue_write(items)
             return r
         items = _queue_load()
         item = next((i for i in items if i.get("id") == item_id), None)
 
     if not item.get("result_ref"):
+        with _queue_lock:
+            items = _queue_load()
+            _it = next((i for i in items if i.get("id") == item_id), None)
+            if _it:
+                _it["review_started_at"] = None
+                _queue_write(items)
         return JSONResponse({"error": "Inget byggresultat att granska — klistra in koden eller skicka /result först."}, status_code=409)
 
     # Load the built code from the side file
@@ -5213,6 +5225,10 @@ async def api_chat_post(item_id: str, payload: dict):
         return JSONResponse({"error": "Tomt innehåll."}, status_code=400)
     now = datetime.now().timestamp()
     with _chat_lock:
+        if item_id not in _chat_sessions and len(_chat_sessions) >= 200:
+            oldest = next(iter(_chat_sessions))
+            del _chat_sessions[oldest]
+            _chat_sessions_last_used.pop(oldest, None)
         _chat_sessions.setdefault(item_id, []).append({"role": role, "content": content_val})
         _chat_sessions_last_used[item_id] = now
     return {"ok": True}

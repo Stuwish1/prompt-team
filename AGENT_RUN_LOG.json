@@ -30,5 +30,39 @@
     ],
     "queue_size": 3,
     "note": "UX-SPRINT4 nu KLAR (ej uppdaterat i förra STATUS). Kö: AGENT-PULSE (byggs, Stiven vill ta bort) + AGENT-FIX-2 (kö) + AGENT-FIX-3 (ny, lagd in). PROJECT_STATUS uppdaterad."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:19",
+    "added": [
+      "DRY-SPRINT4: R6 (git-identitet) + R7 (_github_headers)"
+    ],
+    "queue_size": 3,
+    "note": "API nere — skriver direkt till JSON. AGENT-PULSE nu KLAR (ej BYGGS). Kö: AGENT-FIX-2 + AGENT-FIX-3 + DRY-SPRINT4 (ny). KID_MODE kräver Stivens beslut. Kön full (3) — väntar."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:21",
+    "added": [],
+    "queue_size": 3,
+    "note": "Kön full (3 aktiva: AGENT-FIX-2 byggs, AGENT-FIX-3 + DRY-SPRINT4 kö) — inga nya tasks inlagda. PROJECT_STATUS uppdaterad."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:24",
+    "added": [
+      "UX-SPRINT6: UX-1 (alert×7) + UX-6 (confirm×5) + UX-21 (prompt×2)"
+    ],
+    "queue_size": 3,
+    "note": "AGENT-FIX-2 nu KLAR (PROJECT_STATUS uppdaterad). Kö: AGENT-FIX-3 + DRY-SPRINT4 + UX-SPRINT6 (ny). Kön full (3) — väntar."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:28",
+    "added": [
+      "CHATBOX-POLISH: run_id recovery + project_context vid /send + .gitignore"
+    ],
+    "queue_size": 3,
+    "note": "AGENT-FIX-3 nu KLAR (uppdaterat i PROJECT_STATUS). Kön: DRY-SPRINT4 + UX-SPRINT6 + CHATBOX-POLISH (ny). Kön full (3) — väntar."
   }
 ]

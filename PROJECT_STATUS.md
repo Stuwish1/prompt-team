@@ -1,10 +1,11 @@
 # Project Status
-**Senast uppdaterad:** 2026-06-10T23:57 → uppdaterad av projektledaren-auto (körning 2026-06-10T23:57)
+**Senast uppdaterad:** 2026-06-10T21:24 (projektledaren-auto)
 
 ## Senast godkänt
-- UX-SPRINT4: UX-21 (prompt modal) + UX-20 (felknapp text) + UX-14 (Ctrl+Enter hint) + UX-17 (visa/dölj klara) — klar
+- AGENT-FIX-3: Shell injection i git_commit_push + _chat_sessions GC — klar
+- UX-SPRINT5: UX-1 (alert×7 → inline) + UX-6 (confirm×5 → ångra/modal) — klar
 
-## Klart totalt (godkänt av granskaren) — 57 st
+## Klart totalt (godkänt av granskaren) — 59 st
 - ✅ P1: Saknade las — race conditions
 - ✅ P1: Input-validering + path traversal
 - ✅ P1-A: Återställ stale byggs-items vid serveromstart

@@ -86,8 +86,10 @@ def git(cmd, check=False):
 
 print("\nInitierar git...")
 git("init")
-git("config user.email \"stiven@2snickare.se\"")
-git("config user.name \"Stiven Ishoo\"")
+git_email = s.get("git_email", "stiven@2snickare.se")
+git_name  = s.get("git_name",  "Stiven Ishoo")
+git(f'config user.email "{git_email}"')
+git(f'config user.name "{git_name}"')
 git("remote remove origin")
 REMOTE = f"https://{TOKEN}@github.com/{OWNER}/{REPO_NAME}.git"
 git(f'remote add origin {REMOTE}')
@@ -117,6 +119,4 @@ if ok:
     print(f"[OK] Repot sparat i settings: {OWNER}/{REPO_NAME}")
 else:
     print("\n[FEL] Push misslyckades.")
-    print("Kontrollera att token har 'repo'-rättigheter på github.com/settings/tokens")
-
-input("\nTryck Enter för att stänga...")
+    print("Kontrollera att token har 'repo'-r
