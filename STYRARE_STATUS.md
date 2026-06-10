@@ -1,27 +1,11 @@
-# Pipeline-status
-**Senast kontrollerad:** 2026-06-10T20:14 UTC (styrare-auto)
-**Läge:** 🟢 AKTIV
+# Styrare Status
+**Uppdaterad:** 2026-06-10T22:04:22
 
-## Jobbhälsa
-| Jobb | Status | Senast kört | Hälsa |
-|------|--------|-------------|-------|
-| snickare-auto-bygg | enabled | ~9 min sedan | 🚨 KRITISKT — bounce utfört |
-| granskare-auto | enabled | ~2 min sedan | ✅ OK |
-| projektledare-auto | enabled | ~1 min sedan | ✅ OK |
-| specskrivare-auto | enabled | ~3 min sedan | ✅ OK |
-| loggagent-auto | enabled | ~12 min sedan | ✅ OK |
+## Köläge
+- Byggs: 1 | Kö: 6 | Klar: 67
 
-## Kö-läge
-- Aktiva tasks (kö/byggs): 3
-- Väntar granskning: 9
-- Idéer väntande: 1
-- LOGG_FYND: JA
+## Åtgärd
+Arbete finns (byggs:1 kö:6 klar:67) — builders aktiva
 
-## Åtgärder
-- 🔄 **snickare-auto-bygg bounced** (disable → enable): inte kört på ~9 min trots every-minute-schema (kritisk gräns = 6 min)
-
-## P1-status
-- P1-A ✅ P1-B ✅ P1-C ✅ P1-D ✅ P1-E ✅
-- P1-F ✅ P1-G ✅ P1-H ✅ P1-I ✅ P1-K ✅
-
-🎉 P1-KLAR: Alla kritiska P1-tasks godkända. Dags att be agenterna iterera.
+## HALT
+✅ Nej

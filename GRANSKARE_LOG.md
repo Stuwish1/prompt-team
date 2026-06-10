@@ -13,3 +13,5 @@
 2026-06-10T22:00:43 — Granskare körde. Status: FEL — index.html trunkerad (saknar </html>). Hittade 3 klar-items (KID-SPRINT1, INFRA-KRITISK, APP-TRUNKERING-5252) men commit avbröts.
 2026-06-10 22:03:41 — Granskare körde. Status: AVBRUTEN — index.html saknar </html> (filen är trunkerad). Ingen commit.
 2026-06-10 22:09:15 — Granskare körde. Status: GODKÄND 5 items. Commit: fc1e12d
+2026-06-10 22:10:21 — Granskare körde. Status: INGET ATT GRANSKA
+2026-06-10 22:10:25 — Granskare körde. Status: INGET ATT GRANSKA

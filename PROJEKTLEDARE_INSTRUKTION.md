@@ -43,43 +43,27 @@ Läs dem med Read-verktyget. Identifiera vad som är nytt sedan sist.
 
 Lägg aldrig in fler tasks om kön redan har 2+ aktiva items.
 
-Skicka **max 2 tasks åt gången** till kön:
+> ⚠️ **STORLEK PER SPEC — kritisk regel:**
+> - Max ~50 rader kod ändrat per queue-item
+> - Max en funktion eller endpoint per item
+> - Om en feature kräver mer → dela upp i STEG-1, STEG-2, STEG-3 som köas i ordning
+> - En stor spec → snickaren skriver hela filen → filen trunkeras → SyntaxError
+> - Hellre 5 små items som alla lyckas än 1 stort som kraschar
+
+Skicka **max 2 tasks åt gången** till kön — skriv direkt till `build_queue.json`, använd ALDRIG curl/Railway API:
 
 ```bash
-curl -s -X POST https://prompt-team-production.up.railway.app/api/build-queue \
-  -H "Content-Type: application/json" \
-  -d '{
-    "project_id": "main",
-    "title": "Kort titel",
-    "spec_markdown": "## CONTEXT\n...\n## TASK\n...\n## ACCEPTANCE CRITERIA\n...",
-    "spec_bestallare": "Varför detta behövs"
-  }'
-```
-
----
-
-## STEG 2 — Kolla kön
-
-```bash
-curl -s https://prompt-team-production.up.railway.app/api/build-queue | python3 -c "
-import json,sys
-items = json.load(sys.stdin).get('items', [])
-for it in [i for i in items if not i.get('deleted_at')]:
-    print(it['status'].upper(), '|', it['title'])
-"
-```
-
----
-
-## STEG 3 — När snickaren är klar, läs resultatet
-
-Läs `BUILD_RESULT.md`.
-
-- **Status: klar** → gå till steg 4, lägg sedan in nästa task
-- **Status: behover_dig** → läs blockerarna, skriv tydligare spec, posta om
-
----
-
-## STEG 4 — Skriv tillbaka till agenterna (PROJECT_STATUS.md)
-
-**Detta är obliga
+python3 << 'EOF'
+import json, uuid, os, datetime
+BASE = r'C:\innob-agent\prompt-team'
+path = os.path.join(BASE, 'build_queue.json')
+with open(path, encoding='utf-8') as f:
+    items = json.load(f)
+if isinstance(items, dict): items = items.get('items', [])
+items.append({
+    'id': str(uuid.uuid4()),
+    'title': 'Kort titel',
+    'spec_markdown': '## CONTEXT\n...\n## TASK\n...\n## ACCEPTANCE CRITERIA\n...',
+    'spec_bestallare': 'Varför detta behövs',
+    'status': 'kö',
+    'created_at': datetime.

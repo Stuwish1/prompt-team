@@ -31,26 +31,35 @@ Viktiga filer:
 
 ### Steg 1 — Kolla kön
 ```bash
-curl -s https://prompt-team-production.up.railway.app/api/build-queue | python3 -c "
-import json,sys
-items = json.load(sys.stdin).get('items', [])
-active = [it for it in items if it.get('status') == 'byggs' and not it.get('deleted_at')]
-queued = [it for it in items if it.get('status') == 'kö' and not it.get('deleted_at')]
+python3 << 'EOF'
+import json, os, datetime
+BASE = r'C:\innob-agent\prompt-team'
+path = os.path.join(BASE, 'build_queue.json')
+with open(path, encoding='utf-8') as f:
+    items = json.load(f)
+if isinstance(items, dict): items = items.get('items', [])
+active  = [it for it in items if it.get('status') == 'byggs' and not it.get('deleted_at')]
+queued  = [it for it in items if it.get('status') == 'kö'    and not it.get('deleted_at')]
 if active:
     print('BYGGS:', json.dumps(active[0], ensure_ascii=False, indent=2))
 elif queued:
-    print('KÖ:', json.dumps(queued[0], ensure_ascii=False, indent=2))
+    # Aktivera nästa item direkt i filen
+    target = queued[0]
+    for it in items:
+        if it.get('id') == target['id']:
+            it['status'] = 'byggs'
+            it['sent_at'] = datetime.datetime.now().isoformat()
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(items, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+    print('BYGGS:', json.dumps(target, ensure_ascii=False, indent=2))
 else:
     print('INGEN TASK')
-"
+EOF
 ```
 
 - Om `BYGGS` → gå direkt till steg 2
-- Om `KÖ` → aktivera itemet först, sedan steg 2:
-```bash
-curl -s -X POST https://prompt-team-production.up.railway.app/api/build-queue/{ITEM_ID}/send \
-  -H "Content-Type: application/json" -d '{}'
-```
 - Om `INGEN TASK` → **avsluta, gör ingenting**.
 
 ### Steg 2 — Läs spec:en
@@ -63,67 +72,45 @@ Plocka ut `spec_markdown` från item:et och läs den noggrant. Identifiera:
 Läs alltid de faktiska filerna innan du ändrar dem. Gör inte antaganden om vad som finns.
 
 ### Steg 4 — Implementera
+
+> ⚠️ **KRITISK REGEL — läs detta innan du rör app.py:**
+> - Använd **ALLTID Edit-verktyget** för app.py och index.html — aldrig Write
+> - Write skriver hela filen och kan trunkera vid 5000+ rader → SyntaxError
+> - Edit gör kirurgiska ändringar och är alltid säkert
+
 - Gör **minimala, kirurgiska ändringar** — ändra bara det spec:en kräver
 - Kod på **engelska** (identifiers, kommentarer)
 - UI-strängar på **svenska**
 - Om spec:en innehåller exakta kodexempel — använd dem ordagrant
-- Kör tester om spec:en beskriver det
+
+### Steg 4b — Verifiera syntax (OBLIGATORISKT efter varje ändring av app.py)
+```bash
+python3 -c "
+import py_compile, sys
+try:
+    py_compile.compile(r'C:\innob-agent\prompt-team\app.py', doraise=True)
+    print('app.py OK')
+except py_compile.PyCompileError as e:
+    print('SYNTAXFEL:', e)
+    sys.exit(1)
+"
+```
+Om syntaxfel → återställ från git innan du sätter status:
+```bash
+git -C C:\innob-agent\prompt-team show HEAD:app.py > C:\innob-agent\prompt-team\app.py
+```
 
 ### Steg 5 — Uppdatera kön
-Uppdatera item:ets status via API:
+Skriv direkt till `build_queue.json` — använd ALDRIG curl/Railway API.
 
 **Om klart:**
 ```bash
-curl -s -X PATCH https://prompt-team-production.up.railway.app/api/build-queue/{ITEM_ID} \
-  -H "Content-Type: application/json" \
-  -d '{
-    "status": "klar",
-    "result_summary": {
-      "success": true,
-      "files_changed": ["app.py", "index.html"],
-      "summary": "Kort beskrivning av vad som byggdes"
-    }
-  }'
-```
-
-**Om blockerat:**
-```bash
-curl -s -X PATCH https://prompt-team-production.up.railway.app/api/build-queue/{ITEM_ID} \
-  -H "Content-Type: application/json" \
-  -d '{
-    "status": "behover_dig",
-    "result_summary": {
-      "success": false,
-      "files_changed": [],
-      "summary": "Vad som gjordes",
-      "blockers": ["Exakt vad som blockerar och varför"]
-    }
-  }'
-```
-
-### Steg 6 — Skriv BUILD_RESULT.md
-
-```markdown
-# Senaste byggresultat
-**Uppdaterad:** 2026-06-10 14:30
-**Task:** [Taskens titel]
-**Status:** ✅ Klar  (eller ⚠️ Behöver genomgång)
-
-## Vad byggdes
-[Kort sammanfattning]
-
-## Ändrade filer
-- app.py (rad X–Y: beskrivning)
-- index.html (beskrivning)
-
-## Eventuella blockerare
-[Lämna tom om status är klar]
-```
-
----
-
-## Regler
-
-- **Läs alltid filen innan du ändrar den** — använd Read-verktyget, inte antaganden
-- **En task åt gången** — bygg klart det som är `byggs` innan du tar nästa
-- **Ändra inte det som spec:en inte nämner** — håll dig
+python3 << 'EOF'
+import json, os, datetime
+BASE = r'C:\innob-agent\prompt-team'
+ITEM_ID = 'ERSÄTT_MED_FAKTISKT_ID'
+path = os.path.join(BASE, 'build_queue.json')
+with open(path, encoding='utf-8') as f:
+    items = json.load(f)
+if isinstance(items, dict): items = items.get('items', [])
+f

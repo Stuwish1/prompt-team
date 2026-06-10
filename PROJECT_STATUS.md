@@ -1,11 +1,10 @@
 # Project Status
-**Senast uppdaterad:** 2026-06-10T21:43 (projektledaren-auto)
+**Senast uppdaterad:** 2026-06-11T07:18 (projektledaren-auto)
 
 ## Senast godkänt
-- UX-SPRINT6: UX-1 (alert×7) + UX-6 (confirm×5) + UX-21 (prompt×2) — klar
-- DRY-SPRINT4: R6 (git-identitet från settings) + R7 (_github_headers helper) — klar
+- KID-SPRINT1: Barnvänliga felmeddelanden + verktygsnamn + git-rubrik i chat — klar
 
-## Klart totalt (godkänt av granskaren) — 61 st
+## Klart totalt (godkänt av granskaren) — 65 st
 - ✅ P1: Saknade las — race conditions
 - ✅ P1: Input-validering + path traversal
 - ✅ P1-A: Återställ stale byggs-items vid serveromstart
@@ -52,4 +51,4 @@
 - ✅ P4-F: GitHub inbound webhook
 - ✅ BUG-6: Uppskjutna imports — flytta till modulnivå
 - ✅ WEBHOOK-FIX: GitHub webhook triggar aldrig auto-granskning
-- ✅ UX-SPRINT2: UX-AL
+- ✅ UX-SPRINT2: UX-AL (local_path UI) + UX-4 (tom kö CTA) + UX-10 (modeHelp per läge) + UX-2 (barnv

@@ -3685,18 +3685,38 @@
     "id": "bcd17ff6-d1b3-483d-8315-d824d8b97581",
     "title": "DB: Saknar fsync + atomisk write (DB-01, DB-NEW-1)",
     "spec_markdown": "**Källa:** loggagent-auto\n\nAGENT_DB_STATUS rapporterar 🔴 KRITISK: 20+ skrivfunktioner saknar fsync, och chat-verktygens file_write/file_edit skriver utan lås och utan atomisk write. Risk för datakorrumpering vid krasch. Åtgärd: Lägg till tmp-fil + os.replace() + fsync på alla kritiska skrivoperationer.",
-    "status": "byggs",
+    "status": "behover_dig",
     "created_at": "2026-06-10T21:58:31.954729",
     "priority": "high",
-    "sent_at": "2026-06-10T22:07:17.208598"
+    "sent_at": "2026-06-10T22:07:17.208598",
+    "result_summary": {
+      "success": false,
+      "files_changed": [
+        "app.py"
+      ],
+      "summary": "fsync + atomic write tillagt i 6 skrivfunktioner. Däremot: pre-existerande syntaxfel (trunkerad fil) vid rad 5316 blockerar kompilering. Felet är INTE orsakat av dessa ändringar — chat-endpoint-funktioner var redan avskurna innan tasken kördes. Restore from git är ej säkert eftersom app.py är untracked.",
+      "blockers": [
+        "Pre-existerande syntaxfel: app.py trunkeras vid rad 5316 (mitt i api_chat_get chat-endpoint). Filen slutar med \"messages = list(\" utan avslutande parentes eller resten av funktionskroppen. Behöver manuell fix av den saknade koden i slutet av filen."
+      ]
+    },
+    "completed_at": "2026-06-10T22:10:01.798638"
   },
   {
     "id": "44b75ed5-d8bd-4054-95f3-8996f92c6edc",
     "title": "sessions.json korrupt (DB-03)",
     "spec_markdown": "**Källa:** loggagent-auto\n\nAGENT_DB_STATUS: sessions.json har JSON-fel vid char ~395 000. Alla aktiva sessioner kan vara otillgängliga. Åtgärd: Kör reparationsskript för att isolera och ta bort korrupt post, verifiera att inga aktiva sessioner förloras.",
-    "status": "kö",
+    "status": "klar",
     "created_at": "2026-06-10T21:58:31.954741",
-    "priority": "high"
+    "priority": "high",
+    "sent_at": "2026-06-10T22:11:17.660218",
+    "result_summary": {
+      "success": true,
+      "files_changed": [
+        "sessions.json"
+      ],
+      "summary": "Repaired truncated sessions.json: removed trailing comma and added missing closing brace. All 38 sessions verified intact."
+    },
+    "completed_at": "2026-06-10T22:11:53.939673"
   },
   {
     "id": "d2dd2a4e-3b6b-4257-aa86-1641fb90fbd9",

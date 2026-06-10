@@ -1,140 +1,21 @@
-# UX-agent Status
-**Senast analyserad:** 2026-06-10 (automatisk körning, iteration 9)
-**Metod:** Statisk kodanalys av index.html (4643 rader), app.py, PROJECT_STATUS.md
-**Primär persona:** 10-åring utan teknisk bakgrund (KID_USER_PROMPT.md)
+# UX Agent Status
+**Uppdaterad:** 2026-06-10T22:06:31
 
----
+## Körning 2026-06-10
 
-## SNABBSAMMANFATTNING
+### 5 UX-fynd tillagda i kön
 
-| Svårighetsgrad | Antal | Blockar kärnflöde? |
-|---|---|---|
-| 🔴 Kritisk | 0 | — |
-| 🟡 Medel | 3 | Delvis |
-| 🟢 Liten | 4 | Nej |
+1. **Byggarchatten saknar Enter-tangent för att skicka** — `#chatInput` i Att Bygga-panelen har ingen keyboard-shortcut, olikt `#chat-input` som stödjer Ctrl+Enter.
 
----
+2. **Byggarchatten backend ej implementerad (P2-B)** — `sendChatMessage()` returnerar hårdkodat felmeddelande, chat-panelen är synlig men icke-funktionell.
 
-## 🟡 MEDEL UX-PROBLEM
+3. **Inga aria-labels på ikoner och ikon-knappar** — Noll `aria-label`-attribut i hela filen. Knappar som ↺ och ✕ är otillgängliga för skärmläsare.
 
----
+4. **Appen saknar mobilresponsivitet helt** — Inga `@media (max-width:...)` queries. Left-panel är hårdkodad 420px bred utan breakpoints.
 
-### UX-1 — `alert()` används på 7 ställen (EJ FULLT LÖST)
+5. **Kritiska felmeddelanden är flyktiga toasts** — Blockerande fel (API-nyckel saknas etc.) visas 5 sek och försvinner, utan persistent inline-feedback.
 
-**Fil:** `index.html`
-**Rader:** 1447, 1760, 1806, 1808, 1810, 1812, 3854
-
-PROJECT_STATUS säger UX-SPRINT1 är klar men `alert()` finns fortfarande på 7 ställen i koden. Rad 1760 är den längsta (buggbeskrivning). Rad 3854 är `alert('Kunde inte ladda session: ' + e.message)` — syns vid sessionsladdning.
-
-Alla browser-native `alert()` fryser UI och är skrämmande för barn.
-
-**Fix:** Ersätt med `showFieldError(elementId, msg)` + `@keyframes shake`. Se iteration 6 för komplett implementation. Rad 3854 kan ersättas med `showToast('❌ Kunde inte ladda session: ' + e.message, 5000)`.
-
----
-
-### UX-6 — `confirm()` används på 5 ställen (EJ FULLT LÖST)
-
-**Fil:** `index.html`
-**Rader:** 2654 (`queueDelete`), 2825 (`deleteSession`), 2840 (`clearBacklog`), 3860 (historik-radering), 4509 (projekt-borttagning)
-
-Trots att UX-SPRINT1 markerades klar finns `confirm()` fortfarande på alla 5 ställen. Undo-pattern implementerades aldrig.
-
-**Fix per ställe:**
-- `queueDelete` (2654): Byt till optimistisk borttagning + ångra-toast i 5 sek
-- `deleteSession` (2825), `clearBacklog` (2840), historik-radering (3860): Samma ångra-pattern
-- Projekt-borttagning (4509): Modal-bekräftelse istället (destructive action)
-
----
-
-### UX-21 — `prompt()` används på 2 ställen (NYTT)
-
-**Fil:** `index.html`
-**Rader:** 2635, 3510
-
-Rad 2635 — `queueSetStatus()`: `prompt('Bygget är underkänt. Varför ska det ändå markeras klart?...')` — blockerar UI och är svårt att förstå för barn.
-
-Rad 3510 — `prompt('Kopiera prompten manuellt (Ctrl+A, Ctrl+C):', text)` — används som fallback när clipboard saknas, men missbrukad som input-dialog.
-
-**Fix rad 2635:** Lägg till ett inline-fält `<textarea id="overrideReasonInput">` i ett modal-dialog (`<dialog>`-element) som visas med `.showModal()`.
-
-**Fix rad 3510:** Byt till `showToast('Kunde inte kopiera automatiskt — markera texten manuellt')` + visa texten i ett `<pre>`-block i ett readonly-fält.
-
----
-
-## 🟢 LITEN UX-POLISH
-
----
-
-### UX-12 — Health-badge saknar visuell signal vid fel (EJ LÖST)
-
-**Fil:** `index.html`, `updateHealthBadges()` (~rad 1674)
-
-Badge visar `✅` eller `❌` som liten emoji i inställningsknappen — ingen pulsering eller synlig varning vid problem. Barn som saknar API-nyckel märker det inte.
-
-**Fix:** Lägg till CSS-animation `@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }` och applicera `.healthBadge-error { animation: pulse 1.5s infinite; color: var(--red); }` när badge = `❌`.
-
----
-
-### UX-20 — `startBuild()` återställer felknapp till "▶ Bygg nästa" (NYTT)
-
-**Fil:** `index.html`, `startBuild()` rad 2551
-
-Vid fel återställs knappen till `'▶ Bygg nästa'` — men standardtexten är `'▶ Bygg det här!'`. Inkonsekvent text kan förvirra.
-
-**Fix:** Ändra rad 2551 till: `btn.textContent = isRetry ? '🔄 Försök igen' : '▶ Bygg det här!';`
-
----
-
-### UX-14 — Ctrl+Enter-hint saknas bredvid skicka-knappen
-
-**Fil:** `index.html`, knapprad ~rad 846
-
-Lyssnaren finns nu (återställd med KRIT-1-fix), men synlig hint saknas fortfarande.
-
-**Fix:** Lägg till bredvid "Skicka till teamet"-knappen:
-```html
-<span style="font-size:10px;color:var(--text3);margin-left:4px;">Ctrl+↩</span>
-```
-
----
-
-### UX-17 — Avklarade items täpper igen byggkön
-
-**Fil:** `index.html`, `renderQueueBox()`
-
-`status: 'klar'`-items visas alltid utan filter. Kön kan bli lång och svår att läsa.
-
-**Fix:** Lägg till toggle `<button onclick="toggleKlara()">Visa/dölj klara</button>` + `let _showKlara = false;` som filtrerar renderingen.
-
----
-
-## Löst sedan iteration 8
-
-| Fynd | Åtgärd |
-|---|---|
-| UX-KRIT-1 — index.html avhuggen | Återställd av projektledaren-auto 2026-06-10T21:51 — 4643 rader, slutar med `</html>` ✅ |
-| UX-AL — local_path saknas i settings | `localPathInput` implementerat rad 1172 ✅ |
-| UX-4 — Tom kö saknar CTA | "→ Gå till Beställ"-knapp implementerad rad 2329 ✅ |
-| UX-10 — modeHelp-text samma för alla lägen | `_MODE_HELP`-objekt per läge implementerat rad 1384 ✅ |
-| UX-2 — barnvänliga knappar | "▶ Bygg det här!" implementerat rad 2360 ✅ |
-| UX-9 — inline verdict saknas | `verdictHtml` visar kvarstående i kö-kort via `loadAttBygga()` ✅ |
-| UX-16 — showToast definieras inte | Återställd med KRIT-1, innerHTML-stöd på rad 4551 ✅ |
-| UX-19 — badge reset efter kontrollera | `refreshByggaBadge()` anropas i `kontrolleraBuild()` rad 2582 ✅ |
-
----
-
-## Prioriterad åtgärdsordning
-
-| Sprint | Task | Fil | Est. |
-|---|---|---|---|
-| 1 | UX-1 — alert() → inline errors | index.html | 30 min |
-| 1 | UX-6 — confirm() → ångra-pattern | index.html | 20 min |
-| 1 | UX-21 — prompt() → modal/toast | index.html | 20 min |
-| 2 | UX-12 — health-badge pulsering | index.html | 10 min |
-| 2 | UX-20 — felknapp fel text | index.html | 2 min |
-| 3 | UX-14 — Ctrl+Enter hint | index.html | 5 min |
-| 3 | UX-17 — visa/dölj klar-items | index.html | 15 min |
-
----
-
-**PRINCIPREGEL:** Systemet pushar ALDRIG automatiskt till git. Push är alltid en manuell användaråtgärd.
+### Statistik
+- Analyserade: index.html (4781 rader, 224 439 tecken)
+- Nya items i kön: 5
+- Dubbletter filtrerade: 0
