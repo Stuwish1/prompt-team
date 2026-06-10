@@ -1026,6 +1026,8 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
   <div class="modal">
     <h3>⚙️ Inställningar</h3>
     <style>#settingsModal .modal{max-height:90vh;overflow-y:auto;width:500px;}</style>
+    <!-- form-wrapper: tystar Chromes "password field is not contained in a form"-varning -->
+    <form onsubmit="return false" autocomplete="off">
     <div class="form-group">
       <label>OpenRouter API-nyckel</label>
       <input type="password" id="openrouterKeyInput" placeholder="sk-or-v1-...">
@@ -1060,10 +1062,11 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
       <div id="healthRows" style="display:flex;flex-direction:column;gap:6px;font-size:13px;"></div>
     </div>
     <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
-      <button class="btn btn-ghost" onclick="closeSettings()">Avbryt</button>
-      <button class="btn btn-ghost" id="testConnBtn" onclick="testConnections()" style="margin-right:auto;">🔌 Testa anslutning</button>
-      <button class="btn btn-primary" onclick="saveSettings()">Spara</button>
+      <button class="btn btn-ghost" type="button" onclick="closeSettings()">Avbryt</button>
+      <button class="btn btn-ghost" type="button" id="testConnBtn" onclick="testConnections()" style="margin-right:auto;">🔌 Testa anslutning</button>
+      <button class="btn btn-primary" type="button" onclick="saveSettings()">Spara</button>
     </div>
+    </form>
   </div>
 </div>
 
