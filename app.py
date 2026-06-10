@@ -5150,3 +5150,50 @@ async def builder_followup(item_id: str, payload: dict):
 
     history.append({"role": "user", "content": message})
     return {"ok": True}
+# ──────────────────────────────────────────────
+# CHAT ENDPOINTS — per-item meddelande-historik
+# ──────────────────────────────────────────────
+
+@app.get("/api/chat/{item_id}")
+async def api_chat_get(item_id: str):
+    """Return stored chat messages for a build queue item."""
+    if not _CHAT_ID_RE.match(item_id):
+        return JSONResponse({"error": "Ogiltigt item_id-format."}, status_code=400)
+    with _chat_lock:
+        messages = list(_chat_sessions.get(item_id, []))
+    return {"messages": messages}
+
+
+@app.post("/api/chat/{item_id}")
+async def api_chat_post(item_id: str, payload: dict):
+    """Append a chat message for a build queue item."""
+    if not _CHAT_ID_RE.match(item_id):
+        return JSONResponse({"error": "Ogiltigt item_id-format."}, status_code=400)
+    role = payload.get("role", "user")
+    content_val = payload.get("content") or payload.get("message", "")
+    if not content_val:
+        return JSONResponse({"error": "Tomt innehåll."}, status_code=400)
+    now = datetime.now().timestamp()
+    with _chat_lock:
+        _chat_sessions.setdefault(item_id, []).append({"role": role, "content": content_val})
+        _chat_sessions_last_used[item_id] = now
+    return {"ok": True}
+
+
+@app.delete("/api/chat/{item_id}")
+async def api_chat_delete(item_id: str):
+    """Clear chat history for a build queue item."""
+    if not _CHAT_ID_RE.match(item_id):
+        return JSONResponse({"error": "Ogiltigt item_id-format."}, status_code=400)
+    with _chat_lock:
+        _chat_sessions.pop(item_id, None)
+        _chat_sessions_last_used.pop(item_id, None)
+    return {"ok": True}
+
+
+if __name__ == "__main__":
+    import sys
+    dev_mode = "--dev" in sys.argv
+    port = int(os.environ.get("PORT", 8001))
+    host = "0.0.0.0" if os.environ.get("RAILWAY_ENVIRONMENT") else "127.0.0.1"
+    uvicorn.run("app:app", host=host, port=port, reload=dev_mode)
