@@ -5140,37 +5140,13 @@ async def builder_followup(item_id: str, payload: dict):
     if not it:
         return JSONResponse({"error": "Item hittades inte."}, status_code=404)
 
-    hist = _builder_histories.get(item_id, [])
-    hist.append({"role": "user", "content": message})
-    _builder_histories[item_id] = hist
+    if it.get("status") != "byggs":
+        return JSONResponse({"error": "Bygget är inte aktivt."}, status_code=409)
+
+    item_id_safe = item_id.replace("..", "").replace("/", "")
+    history = _builder_histories.get(item_id_safe)
+    if not history:
+        return JSONResponse({"error": "Ingen aktiv bygghistorik."}, status_code=404)
+
+    history.append({"role": "user", "content": message})
     return {"ok": True}
-
-
-@app.get("/api/builder/history/{item_id}")
-async def builder_history(item_id: str):
-    """Return in-memory message history for a build session (used for reconnect)."""
-    hist = _builder_histories.get(item_id, [])
-    return {"item_id": item_id, "messages": hist}
- mid-build use only (status = byggs). Post-reject retries use /send instead."""
-    message = payload.get("message", "").strip()
-    if not message:
-        return JSONResponse({"error": "Tomt meddelande."}, status_code=400)
-
-    with _queue_lock:
-        items = _queue_load()
-        it = next((i for i in items if i.get("id") == item_id and not i.get("deleted_at")), None)
-    if not it:
-        return JSONResponse({"error": "Item hittades inte."}, status_code=404)
-
-    # Append to history so it is injected in the next tool-loop iteration
-    hist = _builder_histories.get(item_id, [])
-    hist.append({"role": "user", "content": message})
-    _builder_histories[item_id] = hist
-    return {"ok": True}
-
-
-@app.get("/api/builder/history/{item_id}")
-async def builder_history(item_id: str):
-    """Return the in-memory message history for a build session (for reconnect)."""
-    hist = _builder_histories.get(item_id, [])
-    return {"item_id": item_id, "messages": hist}
