@@ -31,7 +31,7 @@ Viktiga filer:
 
 ### Steg 1 — Kolla kön
 ```bash
-curl -s http://localhost:8001/api/build-queue | python3 -c "
+curl -s https://prompt-team-production.up.railway.app/api/build-queue | python3 -c "
 import json,sys
 items = json.load(sys.stdin).get('items', [])
 active = [it for it in items if it.get('status') == 'byggs' and not it.get('deleted_at')]
@@ -48,7 +48,7 @@ else:
 - Om `BYGGS` → gå direkt till steg 2
 - Om `KÖ` → aktivera itemet först, sedan steg 2:
 ```bash
-curl -s -X POST http://localhost:8001/api/build-queue/{ITEM_ID}/send \
+curl -s -X POST https://prompt-team-production.up.railway.app/api/build-queue/{ITEM_ID}/send \
   -H "Content-Type: application/json" -d '{}'
 ```
 - Om `INGEN TASK` → **avsluta, gör ingenting**.
@@ -74,7 +74,7 @@ Uppdatera item:ets status via API:
 
 **Om klart:**
 ```bash
-curl -s -X PATCH http://localhost:8001/api/build-queue/{ITEM_ID} \
+curl -s -X PATCH https://prompt-team-production.up.railway.app/api/build-queue/{ITEM_ID} \
   -H "Content-Type: application/json" \
   -d '{
     "status": "klar",
@@ -88,7 +88,7 @@ curl -s -X PATCH http://localhost:8001/api/build-queue/{ITEM_ID} \
 
 **Om blockerat:**
 ```bash
-curl -s -X PATCH http://localhost:8001/api/build-queue/{ITEM_ID} \
+curl -s -X PATCH https://prompt-team-production.up.railway.app/api/build-queue/{ITEM_ID} \
   -H "Content-Type: application/json" \
   -d '{
     "status": "behover_dig",
@@ -126,15 +126,4 @@ curl -s -X PATCH http://localhost:8001/api/build-queue/{ITEM_ID} \
 
 - **Läs alltid filen innan du ändrar den** — använd Read-verktyget, inte antaganden
 - **En task åt gången** — bygg klart det som är `byggs` innan du tar nästa
-- **Ändra inte det som spec:en inte nämner** — håll dig till uppdraget
-- **Om du är osäker på ett krav** — implementera det konservativaste alternativet och notera det i `BUILD_RESULT.md`
-- **Pusha inte till GitHub** automatiskt — om spec:en kräver push, gör det, annars låt bli
-
----
-
-## Kodkonventioner i detta projekt
-
-- Python: snake_case, FastAPI-mönster, threading locks runt all filskrivning
-- JavaScript: vanilla JS, inga frameworks, `async/await` för API-anrop
-- JSON-filer läses/skrivs alltid med `ensure_ascii=False, indent=2`
-- Logga alltid med `logger.info()` / `logger.warning()` i app.py
+- **Ändra inte det som spec:en inte nämner** — håll dig

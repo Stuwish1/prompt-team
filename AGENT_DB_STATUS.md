@@ -1,399 +1,173 @@
-# AGENT_DB_STATUS — Databasgranskningsrapport
-_Genererad: 2026-06-10 | Granskat: app.py (4386 rader), supabase_setup.sql_
+# DB-agent Status
+**Senast analyserad:** 2026-06-10 (automatisk körning)
+_Granskat: app.py (4683 rader), supabase_setup.sql, sessions.json, build_queue.json, backlog.json_
 
 ---
 
-## SAMMANFATTNING
+## Sammanfattning
 
 | # | Allvarlighetsgrad | Problem | Status |
 |---|---|---|---|
-| DB-01 | 🔴 KRITISK | Saknar `fsync` i alla skrivfunktioner | Ej fixat |
-| DB-02 | 🔴 KRITISK | CRLF-endings på Windows (`newline=''` saknas) | Ej fixat |
-| DB-03 | 🔴 KRITISK | `sessions.json` korrupt — JSON-fel vid char 3,969,046 | Ej fixat |
-| DB-04 | 🔴 KRITISK | `build_queue.json` korrupt — avhuggen mitt i skrivning | Ej fixat |
-| DB-05 | 🔠 HÖG | RLS-policy tillåter anon-åtkomst till alla sessioner | Ej fixat |
-| DB-06 | 🟠 HÖG | `sessions.json` (4 MB) laddas i sin helhet vid varje läsning | Ej fixat |
-| DB-07 | 🟡 MEDIUM | Ingen backup-rotation innan överskrivning | Ej fixat |
-| DB-08 | 🟡 MEDIUM | `created_at` skickas som naiv lokal tid till Supabase (`timestamptz`) | Ej fixat |
-| DB-09 | 🟢 BRA | Ingen polling mot Supabase — on-demand only | OK |
-| DB-10 | 🟢 BRA | DNS-check `_sb_available()` innan varje Supabase-anrop | OK |
-| DB-11 | 🟢 BRA | Idempotenta migreringar i supabase_setup.sql | OK |
-| DB-12 | 🟢 BRA | schema_migrations-ledger + versionscheck i `/api/health` | OK |
+| DB-01 | 🔴 KRITISK | Saknar `fsync` i alla skrivfunktioner (20+ ställen) | **Ej fixat** |
+| DB-02 | 🔴 KRITISK | CRLF-endings på Windows (`newline=''` saknas) | **Ej fixat** |
+| DB-03 | 🔴 KRITISK | `sessions.json` korrupt — ny JSON-fel vid char 395xxx | **Fortfarande korrupt** |
+| DB-04 | ✅ LÖST | `build_queue.json` korrupt — trunkerad | **Fixat** |
+| DB-05 | 🟠 HÖG | RLS-policy tillåter anon-åtkomst på alla 4 tabeller | **Ej fixat** |
+| DB-06 | 🟠 HÖG | `sessions.json` laddas i sin helhet vid varje läsning | **Ej fixat** |
+| DB-07 | 🟡 MEDIUM | Ingen backup-rotation innan överskrivning | **Ej fixat** |
+| DB-08 | 🟡 MEDIUM | `created_at` skickas som naiv lokal tid till Supabase | **Ej fixat** |
+| DB-NEW-1 | 🔴 KRITISK | Chat-verktyg `file_write`/`file_edit` skriver utan lås och utan atomisk write | **Nytt fynd** |
+| DB-NEW-2 | 🟠 HÖG | Nya tabeller `backlog_items` + `build_queue_items` har också `using (true)` RLS | **Nytt fynd** |
+| DB-NEW-3 | 🟢 BRA | `SUPABASE_SCHEMA_VERSION = 3` + Migration 3 tillagd | **Ny förbättring** |
+| DB-NEW-4 | 🟢 BRA | `_sync_to_supabase_async` täcker nu backlog + byggkö | **Ny förbättring** |
 
 ---
 
-## LOKALT JSON-LAGRING
+## Nya fynd sedan sist
 
-### DB-01 🔴 KRITISK — Saknar `fsync` i alla atomiska skrivfunktioner
+### DB-NEW-1 🔴 KRITISK — Chat-verktyg skriver utan lås och utan atomisk write
 
-**Rotorsak:** Mönstret `tmp.write_text() → tmp.replace()` skyddar mot halvskrivna filer MEN inte mot OS-buffrar som aldrig spolats. På Windows skriver `write_text()` till OS-buffert; om processen kraschar eller strömmen stängs av innan bufferten spolats skrivs en tom eller trunkerad fil.
-
-**Bevis:** `build_queue.json` avhuggen mitt i JSON-objekt. `backlog.json` avslutades med 9 367 noll-bytes (`\x00`) — klassiskt symptom på avbruten skrivning.
-
-**Alla berörda skrivfunktioner (8 st):**
+`_execute_chat_tool()` i chattboxen låter AI-agenten skriva direkt till filer utan varken lås eller `.tmp → .replace()`-mönster:
 
 ```python
-# app.py rad 153 — settings
-tmp.write_text(json.dumps(s, ...), encoding="utf-8")
-tmp.replace(SETTINGS_FILE)
+# app.py rad 206–210 (file_write)
+elif name == "file_write":
+    p = _safe_path(input_data["path"])
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(input_data["content"], encoding="utf-8")  # ← direkt write, ingen atomicitet
 
-# rad 390 — backlog
-tmp.write_text(json.dumps(items, ...), encoding="utf-8")
-tmp.replace(BACKLOG_FILE)
-
-# rad 425 — build queue
-tmp.write_text(json.dumps(items, ...), encoding="utf-8")
-tmp.replace(BUILD_QUEUE_FILE)
-
-# rad 762 — sessions (_atomic_write)
-tmp.write_text(json.dumps(data, ...), encoding="utf-8")
-tmp.replace(LOCAL_SESSIONS_FILE)
-
-# rad 2100 — projects
-tmp.write_text(json.dumps(data, ...), encoding="utf-8")
-tmp.replace(PROJECTS_FILE)
-
-# rad 3275, 3291, 3307, 3388, 3518, 3619 — inline queue-skriv
+# app.py rad 212–223 (file_edit)
+elif name == "file_edit":
+    p = _safe_path(input_data["path"])
+    content = p.read_text(encoding="utf-8")
+    ...
+    p.write_text(content.replace(old_s, new_s, 1), encoding="utf-8")  # ← direkt write
 ```
 
-**Fix — extrahera en hjälpfunktion och använd den överallt:**
+**Risk:** AI-agenten kan skriva `sessions.json`, `build_queue.json` eller `backlog.json` mitt i att serverns egna write-lock håller filen. Dessutom: om servern kraschar under `file_write` av en stor fil (t.ex. `app.py`) → trunkerad fil.
 
-```python
-import os
-
-def _safe_write(path: Path, data: dict) -> None:
-    """Atomisk skrivning med fsync — garanterar att data nått disk innan replace."""
-    tmp = path.with_suffix(".tmp")
-    content = json.dumps(data, ensure_ascii=False, indent=2)
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:  # newline="\n" fixar DB-02
-        f.write(content)
-        f.flush()
-        os.fsync(f.fileno())
-    tmp.replace(path)
-```
-
-Ersätt alla `tmp.write_text(...) / tmp.replace(...)` med `_safe_write(path, data)`.
+**Fix:** Använd `_safe_write()` (när den implementeras per DB-01), och kräv att `file_write` skriver till `.tmp` + `os.replace()`. För att förhindra att AI:n skriver till kärndata-filer direkt kan man lägga till en blocklist: `sessions.json`, `build_queue.json`, `backlog.json` bör aldrig skrivas via chat-verktyget.
 
 ---
 
-### DB-02 🔴 KRITISK — CRLF-endings på Windows
+### DB-NEW-2 🟠 HÖG — Nya tabeller saknar service_role-only RLS
 
-**Rotorsak:** `Path.write_text(encoding='utf-8')` utan `newline=''` aktiverar Pythons universella nyrads-läge. På Windows → varje `\n` skrivs som `\r\n`.
-
-**Bevis:** `sessions.json` innehåller 12 009 `\r\n`-par. Filen är 4 060 219 bytes — uppblåst med ~12 KB jämfört med Unix-version.
-
-**Effekt:**
-- Filer klarar sig i Python (som tolkar båda), men externa verktyg (`git diff`, `jq`, `grep`) beter sig konstigt
-- Varje git-commit visar hundratals "changed lines" trots att innehållet är oförändrat
-- Potentiella parsingproblem i verktyg som kräver LF
-
-**Fix:** Ingår i `_safe_write()` ovan via `newline="\n"`.
-
----
-
-### DB-03 🔴 KRITISK — `sessions.json` korrupt
-
-**Status:** `json.JSONDecodeError` vid char 3,969,046 (av totalt 4,060,219 chars). Filen saknar avslutande `}`.
-
-**Konsekvens:** Alla 38 sessioner (4 MB data) är otillgängliga tills filen repareras. `_local_load()` returnerar `{}` på undantag → inga sessioner visas i UI.
-
-**Återställningsscript:**
-
-```python
-# Kör en gång för att reparera
-from pathlib import Path
-import json
-
-f = Path("sessions.json")
-raw = f.read_bytes().rstrip(b'\x00\r\n ')
-
-# Hitta sista fullständiga entry
-decoder = json.JSONDecoder()
-fixed = None
-for end in range(len(raw), len(raw) - 10000, -1):
-    try:
-        obj, _ = decoder.raw_decode(raw[:end].decode('utf-8') + '}')
-        fixed = obj
-        break
-    except:
-        pass
-
-if fixed:
-    import shutil
-    shutil.copy(f, f.with_suffix('.json.bak'))
-    f.write_text(json.dumps(fixed, ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
-    print(f"Reparerat: {len(fixed)} sessioner")
-```
-
----
-
-### DB-04 🔴 KRITISK — `build_queue.json` korrupt
-
-**Status:** Trunkerad mitt i JSON-objekt. Slutar med `"detail": "försök 1"\r\n    ` — 2 obundna klamrar.
-
-**Konsekvens:** Alla items i kön försvinner vid nästa serverstart (filen går ej att parse). Pågående byggen markeras inte som `behover_dig`.
-
-**Återställningsscript:**
-
-```python
-from pathlib import Path
-import json
-
-f = Path("build_queue.json")
-raw = f.read_bytes().rstrip(b'\x00\r\n ')
-
-# Försök reparera genom att stänga öppna arrays/objekt
-text = raw.decode('utf-8')
-# Räkna obalanserade klamrar
-opens = text.count('{') - text.count('}')
-closes = text.count('[') - text.count(']')
-repaired = text + '}' * opens + ']' * closes
-
-try:
-    data = json.loads(repaired)
-    import shutil
-    shutil.copy(f, f.with_suffix('.json.bak'))
-    f.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
-    print(f"Reparerat: {len(data)} items")
-except Exception as e:
-    print(f"Manuell inspektion krävs: {e}")
-```
-
----
-
-### DB-05 → DB-06 → DB-07 (Lokal lagring — fortsättning)
-
-### DB-06 🟠 HÖG — `sessions.json` laddas i sin helhet vid varje läsning
-
-**Rotorsak:** `_local_load()` och `_local_update()` läser hela filen vid varje anrop. `list_sessions()`, `get_session()`, `delete_session()`, `_migrate_sessions()` — alla kallar `_local_load()`.
-
-**Nuläge:** 4 MB / ~38 sessioner = ~104 KB/session i snitt. Vid 100 sessioner → 10+ MB per API-anrop.
-
-**Rekommendation (kortsiktig):** Lägg till en in-memory-cache med TTL:
-
-```python
-_sessions_cache: dict = {}
-_sessions_cache_ts: float = 0.0
-_SESSIONS_CACHE_TTL = 5.0  # sekunder
-
-def _local_load() -> dict:
-    global _sessions_cache, _sessions_cache_ts
-    with _sessions_lock:
-        now = time.monotonic()
-        if _sessions_cache and (now - _sessions_cache_ts) < _SESSIONS_CACHE_TTL:
-            return _sessions_cache
-        try:
-            data = json.loads(LOCAL_SESSIONS_FILE.read_text(encoding="utf-8"))
-            _sessions_cache = data
-            _sessions_cache_ts = now
-            return data
-        except Exception:
-            return _sessions_cache or {}
-```
-
-**Rekommendation (långsiktig):** Migrera till SQLite (`sqlite3` stdlib) — en fil, indexerade queries, ingen O(n)-last.
-
----
-
-### DB-07 🟡 MEDIUM — Ingen backup-rotation
-
-`_safe_write()` skriver `.tmp` → `.replace()`. Om `.replace()` kraschar (disk full, Windows-fillock) försvinner den tidigare versionen.
-
-**Fix:** Spara `.bak` innan replace:
-
-```python
-def _safe_write(path: Path, data: dict) -> None:
-    tmp = path.with_suffix(".tmp")
-    bak = path.with_suffix(".bak")
-    content = json.dumps(data, ensure_ascii=False, indent=2)
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        f.write(content)
-        f.flush()
-        os.fsync(f.fileno())
-    if path.exists():
-        shutil.copy2(path, bak)  # backup innan atomisk replace
-    tmp.replace(path)
-```
-
----
-
-## SUPABASE-SCHEMA (`supabase_setup.sql`)
-
-### DB-05 🔠 HÖG — RLS-policy tillåter alla (inklusive anon)
-
-**Rotorsak:** Båda tabellerna (`prompt_sessions`, `schema_migrations`) har:
+Migration 3 i `supabase_setup.sql` skapar `backlog_items` och `build_queue_items` med:
 
 ```sql
-create policy "Allow all via service role"
-  on prompt_sessions for all using (true) with check (true);
+CREATE POLICY "Allow all via service role"
+  ON backlog_items FOR ALL USING (true) WITH CHECK (true);
 ```
 
-`using (true)` = alla rader synliga för **alla roller** inklusive `anon`. Intentionen är uppenbart service_role-only (API-nyckeln är en service_role-nyckel) men policyn enforcar inte detta.
+`USING (true)` = anon-åtkomst tillåts. Samma RLS-problem som de befintliga tabellerna. Alla fynd och byggkö-items är läsbara för vem som helst med projektets URL.
 
-**Risk:** En användare med bara Supabase projektets URL + anon-nyckel kan läsa/skriva/radera alla sessioner via Supabase REST-API direkt.
+---
 
-**Fix:**
+## Fortfarande relevanta fynd (ej åtgärdade)
+
+### DB-01 🔴 — Saknar `fsync` (alla 20+ skrivfunktioner)
+
+`_safe_write()` är **inte implementerad**. Alla skrivfunktioner använder fortfarande `write_text()` utan fsync:
+
+```
+rad 344  — save_settings()
+rad 585  — backlog_add_items()
+rad 623  — _queue_write()
+rad 975  — _atomic_write() / sessions
+rad 2342 — _projects_write()
+rad 3599, 3615, 3631, 3712, 3842, 3944, 4043 — inline backlog-skriv (7 st)
+```
+
+Totalt: **20+ `write_text`-anrop** utan fsync. `_safe_write()` måste implementeras och ersätta samtliga.
+
+---
+
+### DB-02 🔴 — CRLF-endings
+
+Ingen `newline="\n"` på något enda `write_text`-anrop. Alla JSON-filer skrivs med `\r\n` på Windows. Ingår i DB-01-fix via `_safe_write()`.
+
+---
+
+### DB-03 🔴 — `sessions.json` fortfarande korrupt
+
+Verifierat med `json.loads()` — filen är korrupt vid **char 395xxx** (ny position, troligen ny korruption efter förra rapporten). Tidigare session-data kan ha gått förlorad.
+
+Kör återställningsscriptet från föregående rapport för att reparera filen. Permanent fix kräver DB-01 (`fsync`).
+
+---
+
+### DB-05 🟠 — RLS tillåter anon-åtkomst (alla 4 tabeller)
+
+`prompt_sessions`, `schema_migrations`, `backlog_items`, `build_queue_items` har alla `USING (true)`. Behöver migreras till `TO service_role`.
+
+**Migration 4** att lägga till i `supabase_setup.sql`:
 
 ```sql
--- Ersätt befintliga policies
-drop policy if exists "Allow all via service role" on prompt_sessions;
-create policy "service_role only"
-  on prompt_sessions for all
-  to service_role
-  using (true) with check (true);
-
-drop policy if exists "Allow all via service role" on schema_migrations;
-create policy "service_role only"
-  on schema_migrations for all
-  to service_role
-  using (true) with check (true);
-```
-
-Lägg till som **Migration 3** i `supabase_setup.sql` och höj `SUPABASE_SCHEMA_VERSION = 3`.
-
----
-
-### DB-08 🟡 MEDIUM — `created_at` skickas som naiv lokal tid
-
-**Rotorsak:**
-
-```python
-now = datetime.now().isoformat()  # → "2026-06-10T14:23:11.234567" (ingen TZ-info)
-payload = {"created_at": now, ...}
-httpx.post(_sb_url("prompt_sessions"), json=payload, ...)
-```
-
-`prompt_sessions.created_at` är `timestamptz`. Postgres tolkar en naiv timestamp som Supabase-serverns lokala tid (vanligtvis UTC), men det är inte garanterat och kan orsaka felaktig sortering om server och klient är i olika tidszoner.
-
-**Fix:**
-
-```python
-from datetime import datetime, timezone
-now = datetime.now(timezone.utc).isoformat()  # → "2026-06-10T14:23:11.234567+00:00"
-```
-
----
-
-## POSITIVA FYND
-
-### DB-09 🟢 Ingen Supabase-polling
-
-`_sb_available()` anropas endast när en session sparas/hämtas/raderas. Inget bakgrundsloop, ingen periodisk sync. Korrekt arkitektur.
-
-### DB-10 🟢 DNS-check innan Supabase-anrop
-
-`_sb_available()` gör `socket.getaddrinfo()` med 3 sekunders timeout innan varje Supabase-anrop. Förhindrar att appen hänger om Supabase är nere.
-
-### DB-11 🟢 Idempotenta migreringar
-
-Hela `supabase_setup.sql` är säker att köra om:
-- `CREATE TABLE IF NOT EXISTS`
-- `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
-- `INSERT ... ON CONFLICT (version) DO NOTHING`
-- `DROP POLICY IF EXISTS` + `CREATE POLICY`
-
-### DB-12 🟢 schema_migrations-ledger
-
-`check_supabase_schema()` läser ledger-tabellen och jämför med `SUPABASE_SCHEMA_VERSION` i app.py. `/api/health` returnerar varning om schemat ligger efter koden. Bra operationellt mönster.
-
----
-
-## PRIORITERAD ÅTGÄRDSORDNING
-
-### OMEDELBART (innan nästa deploy)
-
-1. **Reparera korrupta filer** — kör återställningsscripten för `sessions.json` och `build_queue.json` lokalt
-2. **Implementera `_safe_write()`** — ersätter alla 8+ `write_text/replace`-mönster med fsync + CRLF-fix
-3. **Fixa RLS-policy i Supabase** — lägg till Migration 3, höj SUPABASE_SCHEMA_VERSION till 3
-
-### SNART (inom 1-2 sprints)
-
-4. **Fixa `created_at` timezone** — `datetime.now(timezone.utc)`
-5. **Sessionsfilcache** — in-memory TTL-cache i `_local_load()`
-6. **Backup-rotation** — `.bak` i `_safe_write()`
-
-### LÅNGSIKTIGT
-
-7. **SQLite-migration** — ersätt `sessions.json` med SQLite-databas
-8. **Överväg sessions-sharding** — en fil per project_id om SQLite inte är aktuellt
-
----
-
-## BUILDER-TASKS FÖR ÅTGÄRD
-
-### TASK-DB-01: Lägg till `_safe_write()` och ersätt alla skrivanrop
-
-**Fil:** `app.py`
-**Prioritet:** 🔴 KRITISK
-
-**Kod att lägga till** (direkt efter imports, före `_sessions_lock`):
-
-```python
-import os, shutil
-
-def _safe_write(path: Path, data: dict) -> None:
-    """Atomisk skrivning med fsync och LF-endings. Caller ansvarar för lock."""
-    tmp = path.with_suffix(".tmp")
-    bak = path.with_suffix(".bak")
-    content = json.dumps(data, ensure_ascii=False, indent=2)
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        f.write(content)
-        f.flush()
-        os.fsync(f.fileno())
-    if path.exists():
-        shutil.copy2(path, bak)
-    tmp.replace(path)
-```
-
-**Sök-och-ersätt** (alla förekomster):
-```python
-# GAMMALT
-tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-tmp.replace(TARGET_FILE)
-
-# NYTT
-_safe_write(TARGET_FILE, data)
-```
-
-**Acceptanskriterier:**
-- `grep -n "write_text" app.py` returnerar NOLL rader (utom eventuell kommentar)
-- `python3 -c "import app"` fungerar utan fel
-- Skriv en session, kör `file sessions.json` → ska visa LF (inte CRLF)
-
----
-
-### TASK-DB-02: Migration 3 — Fixa RLS-policy i Supabase
-
-**Fil:** `supabase_setup.sql` + `app.py` (rad `SUPABASE_SCHEMA_VERSION = 2`)
-
-**Kod att lägga till** i `supabase_setup.sql`:
-
-```sql
--- ── Migration 3 — begränsa RLS till service_role only ───────────────────────
-drop policy if exists "Allow all via service role" on prompt_sessions;
-create policy "service_role only"
-  on prompt_sessions for all
-  to service_role
-  using (true) with check (true);
-
-drop policy if exists "Allow all via service role" on schema_migrations;
-create policy "service_role only"
-  on schema_migrations for all
-  to service_role
-  using (true) with check (true);
-
+-- ── Migration 4 — begränsa RLS till service_role only ───────────────────
+do $$ begin
+  drop policy if exists "Allow all via service role" on prompt_sessions;
+  drop policy if exists "Allow all via service role" on schema_migrations;
+  drop policy if exists "Allow all via service role" on backlog_items;
+  drop policy if exists "Allow all via service role" on build_queue_items;
+  create policy "service_role only" on prompt_sessions for all to service_role using (true) with check (true);
+  create policy "service_role only" on schema_migrations for all to service_role using (true) with check (true);
+  create policy "service_role only" on backlog_items for all to service_role using (true) with check (true);
+  create policy "service_role only" on build_queue_items for all to service_role using (true) with check (true);
+end $$;
 insert into schema_migrations (version, name)
-  values (3, 'RLS begränsad till service_role')
+  values (4, 'RLS begränsad till service_role on all tables')
   on conflict (version) do nothing;
 ```
 
-**I `app.py`:** ändra rad `SUPABASE_SCHEMA_VERSION = 2` → `SUPABASE_SCHEMA_VERSION = 3`
-
-**Acceptanskriterier:**
-- Kör `supabase_setup.sql` i Supabase SQL Editor utan fel
-- `/api/health` visar `"schema": {"ok": true, "current": 3}`
-- Direkt anrop med anon-nyckel mot `prompt_sessions` returnerar 403
+Höj `SUPABASE_SCHEMA_VERSION = 4` i `app.py`.
 
 ---
 
-_Rapport slut. Nästa iteration: kontrollera om ny push finns och uppdatera AGENT_CHATBOX_BUILD.md med TASK-DB-01 och TASK-DB-02._
+### DB-06 🟠 — `sessions.json` laddas i sin helhet vid varje läsning
+
+Inga ändringar sedan sist. In-memory TTL-cache saknas fortfarande.
+
+---
+
+### DB-07 🟡 — Ingen backup-rotation
+
+`.bak`-fil sparas inte innan atomic replace. Ingår i DB-01-fix via utökad `_safe_write()`.
+
+---
+
+### DB-08 🟡 — Naiv lokal tid till Supabase
+
+`datetime.now().isoformat()` används på rad 1145 och 1106 (och många fler) utan timezone-info. Fix: `datetime.now(timezone.utc).isoformat()`.
+
+---
+
+## Löst sedan sist
+
+### DB-04 ✅ — `build_queue.json` reparerad
+`build_queue.json` parsar nu korrekt (list, 50 items). Troligen manuellt reparerat eller överskrevet.
+
+### DB-NEW-3 ✅ — Migration 3 + SUPABASE_SCHEMA_VERSION = 3
+`supabase_setup.sql` har nu Migration 3 som skapar `backlog_items` och `build_queue_items`. `SUPABASE_SCHEMA_VERSION` är höjt till 3 i `app.py`. Schema-check i `/api/health` stämmer nu.
+
+### DB-NEW-4 ✅ — Supabase-sync för backlog och byggkö
+`_sync_to_supabase_async()` anropas nu från `backlog_add_items()` (rad 589) och `_queue_write()` (rad 626) för fire-and-forget backup till de nya tabellerna. Korrekt arkitektur.
+
+---
+
+## Prioriterad åtgärdsordning
+
+### OMEDELBART
+
+1. **Reparera `sessions.json`** — kör återställningsscript (se förra rapporten). Data förlorad om ej gjort.
+2. **Implementera `_safe_write()`** — ersätt alla 20+ `write_text`-anrop. Stoppar ny korruption.
+3. **Blockera chat-verktyget från kärndata** — `file_write`/`file_edit` ska inte kunna skriva `sessions.json`, `build_queue.json`, `backlog.json`.
+
+### SNART
+
+4. **Migration 4 — fixa RLS på alla 4 tabeller**
+5. **Fixa `created_at` timezone** — `datetime.now(timezone.utc)`
+6. **Sessionsfilcache** — in-memory TTL-cache i `_local_load()`
+
+### LÅNGSIKTIGT
+
+7. **SQLite-migration** — ersätt `sessions.json` med SQLite
