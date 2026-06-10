@@ -1,27 +1,24 @@
 __pycache__/
 *.pyc
-*.bak
-*.tmp
-
-# Känsliga filer
 settings.json
-.env
-
-# Stora datafiler som inte ska versionshanteras
 sessions.json
 backlog.json
 projects.json
-model_list_cache.json
+build_results/
 ai_eval_results.json
-
-# Genererade dashboard/runtime-filer
-dashboard_data.json
-intrim_result*.json
-interim_result*.json
-audit_run_log.json
+_blueprint.md
+*.tmp
+_final_design.md
+_audit_plan.md
+model_list_cache.json
+.claude/settings.local.json
+.env
+start_background.vbs
+stop_app.bat
+interim_result*.jso.github/workflows/
+.github/
 intrim_result_concrete.json
-
-# Engångsskript
-fix_cors.py
-fix_agents_no_railway.py
-p
+test_intrim.py
+ARKITEKTUR_ANALYS.md
+KID_USER_PROMPT.md
+AGENT_CHATBOX_BUILD.md

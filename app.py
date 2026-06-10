@@ -4629,6 +4629,17 @@ async def get_available_models():
     }
 
 
+
+@app.get("/api/version")
+async def api_version():
+    """Return server file mtime — used by frontend for hot-reload detection."""
+    try:
+        mtime = os.path.getmtime(__file__)
+    except Exception:
+        mtime = 0
+    return {"version": "1.0", "mtime": mtime}
+
+
 @app.get("/api/health")
 async def health_check():
     """Test all service connections and return status."""
@@ -4774,6 +4785,48 @@ async def get_agent_log():
 # PER-PROJECT SETTINGS ENDPOINTS
 # ──────────────────────────────────────────────
 
+
+@app.get("/api/sessions")
+async def list_sessions(project_id: str = "", offset: int = 0, limit: int = 50):
+    """List stored sessions, optionally filtered by project_id."""
+    with _sessions_lock:
+        data = _local_load()
+    sessions = list(data.values())
+    if project_id:
+        sessions = [s for s in sessions if s.get("project_id") == project_id]
+    sessions.sort(key=lambda s: s.get("created_at", ""), reverse=True)
+    return {"sessions": sessions[offset:offset + limit], "total": len(sessions)}
+
+
+@app.post("/api/sessions")
+async def create_session(payload: dict):
+    """Create a new session entry."""
+    sid = str(uuid.uuid4())
+    session = {"id": sid, "created_at": datetime.now().isoformat(), **payload}
+    _local_update(sid, session)
+    return session
+
+
+@app.get("/api/sessions/{session_id}")
+async def get_session(session_id: str):
+    """Return a single session by ID."""
+    with _sessions_lock:
+        data = _local_load()
+    s = data.get(session_id)
+    if not s:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    return s
+
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """Delete a session by ID."""
+    ok = _local_delete(session_id)
+    if not ok:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    return {"ok": True}
+
+
 @app.get("/api/projects")
 async def list_all_projects():
     """List all configured projects and their stored settings."""
@@ -4804,6 +4857,143 @@ async def get_project_settings_api(project_id: str):
             for a in SPECIALIST_AGENTS
         ],
     }
+
+
+
+# ──────────────────────────────────────────────
+# PROJECTS CRUD — POST / PATCH / DELETE
+# ──────────────────────────────────────────────
+
+@app.post("/api/projects")
+async def create_project(payload: dict):
+    """Upsert a project. Uses project id as key."""
+    pid = payload.get("id", "").strip()
+    if not pid:
+        return JSONResponse({"error": "id required"}, status_code=400)
+    with _projects_lock:
+        data = _projects_load()
+        existing = dict(data.get(pid, {}))
+        existing.update(payload)
+        existing["id"] = pid
+        data[pid] = existing
+        _projects_write(data)
+    return existing
+
+
+@app.patch("/api/projects/{project_id}")
+async def update_project(project_id: str, payload: dict):
+    """Partial update of a project."""
+    with _projects_lock:
+        data = _projects_load()
+        existing = dict(data.get(project_id, {}))
+        existing.update(payload)
+        existing["id"] = project_id
+        data[project_id] = existing
+        _projects_write(data)
+    return existing
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: str):
+    """Delete a project (cannot delete 'main')."""
+    if project_id == "main":
+        return JSONResponse({"error": "Cannot delete main project"}, status_code=400)
+    with _projects_lock:
+        data = _projects_load()
+        if project_id not in data:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        del data[project_id]
+        _projects_write(data)
+    return {"ok": True}
+
+
+# ──────────────────────────────────────────────
+# GENERAL CHAT — SSE streaming chatt med historik
+# ──────────────────────────────────────────────
+
+_chat_histories: dict = {}
+_chat_histories_lock = threading.Lock()
+
+
+@app.post("/api/chat")
+async def general_chat(payload: dict, request: Request):
+    """Streaming chat endpoint. Sends SSE events: {type:text,content:...} / {type:done}."""
+    chat_id = str(payload.get("chat_id", "default"))
+    message = str(payload.get("message", "")).strip()
+
+    if not message:
+        return JSONResponse({"error": "message required"}, status_code=400)
+
+    # Special command: commit + push current changes
+    if message == "__commit_push__":
+        async def _commit_stream():
+            try:
+                loop = asyncio.get_event_loop()
+                def _do():
+                    import subprocess
+                    cwd = str(BASE_DIR)
+                    subprocess.run(["git", "-C", cwd, "add", "-A"], capture_output=True)
+                    r = subprocess.run(
+                        ["git", "-C", cwd, "commit", "-m", "auto: chat commit"],
+                        capture_output=True, text=True, encoding="utf-8"
+                    )
+                    if "nothing to commit" in (r.stdout + r.stderr):
+                        return "Inga ändringar att committa."
+                    r2 = subprocess.run(
+                        ["git", "-C", cwd, "push"],
+                        capture_output=True, text=True, encoding="utf-8"
+                    )
+                    return (r.stdout + r2.stdout + r2.stderr).strip() or "✅ Pushat"
+                out = await loop.run_in_executor(None, _do)
+                yield _sse({"type": "text", "content": out})
+                yield _sse({"type": "done"})
+            except Exception as e:
+                yield _sse_err(str(e))
+        return StreamingResponse(_commit_stream(), media_type="text/event-stream",
+                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    # Build message history
+    with _chat_histories_lock:
+        history = list(_chat_histories.get(chat_id, []))
+
+    history.append({"role": "user", "content": message})
+
+    async def _chat_stream():
+        try:
+            loop = asyncio.get_event_loop()
+            settings = load_settings()
+            model = (settings.get("model_chat") or
+                     settings.get("model") or
+                     "anthropic/claude-sonnet-4.6")
+
+            def _call():
+                return _or_chat(model, history, max_tokens=4096, want_json=False)
+
+            reply = await loop.run_in_executor(None, _call)
+
+            # Persist history (cap at 40 messages)
+            new_hist = history + [{"role": "assistant", "content": reply}]
+            with _chat_histories_lock:
+                _chat_histories[chat_id] = new_hist[-40:]
+
+            # Stream in chunks for live feel
+            chunk_size = 6
+            words = reply.split(" ")
+            for i in range(0, len(words), chunk_size):
+                chunk = " ".join(words[i:i + chunk_size])
+                if i + chunk_size < len(words):
+                    chunk += " "
+                yield _sse({"type": "text", "content": chunk})
+                await asyncio.sleep(0)
+
+            yield _sse({"type": "done"})
+
+        except Exception as e:
+            logger.exception("general_chat error")
+            yield _sse_err(str(e))
+
+    return StreamingResponse(_chat_stream(), media_type="text/event-stream",
+                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 # ──────────────────────────────────────────────
@@ -5229,4 +5419,9 @@ async def builder_stream(item_id: str, request: Request):
 
         finally:
             _active_builders.pop(item_id, None)
-            _cancel_flags.p
+            _cancel_flags.pop(item_id, None)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
