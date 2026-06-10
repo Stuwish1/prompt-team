@@ -536,6 +536,16 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
   border: 1px solid var(--border); border-radius: 8px;
   padding: 12px 14px; background: var(--bg); margin-bottom: 4px;
 }
+/* Avancerat-sektion — döljer det tekniska tills man behöver det */
+.advanced-section > summary {
+  font-size: 11px; color: var(--text3); cursor: pointer; user-select: none;
+  padding: 6px 2px; list-style: none; display: flex; align-items: center; gap: 6px;
+  transition: color var(--t) var(--ease);
+}
+.advanced-section > summary:hover { color: var(--text2); }
+.advanced-section > summary::-webkit-details-marker { display: none; }
+.advanced-section > summary::before { content: '▸'; font-size: 10px; transition: transform .15s; }
+.advanced-section[open] > summary::before { transform: rotate(90deg); }
 .github-header {
   display: flex; align-items: center; gap: 8px;
   font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 10px;
@@ -749,6 +759,7 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
           🐛 Buggrapport<br><small style="font-weight:400;font-size:11px">Fel → fix-spec</small>
         </button>
       </div>
+      <div id="modeHelp" style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.5;"></div>
     </div>
 
     <div class="panel-section" style="flex:1;display:flex;flex-direction:column;">
@@ -758,14 +769,17 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
           <textarea id="ideaInput" rows="10"
             placeholder="Beskriv vad du vill uppnå — inte hur. T.ex: Jag vill att användare ska kunna logga in med email och lösenord, återställa lösenord via email, och se en dashboard med sina senaste ordrar."></textarea>
         </div>
-        <div>
-          <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">
-            <span>Extra kontext <span style="font-weight:400;color:var(--text3)">(valfritt)</span></span>
-            <span style="font-size:10px;color:var(--text3);font-weight:400;">Projektprofil injiceras automatiskt</span>
+        <details class="advanced-section" id="advancedPre">
+          <summary>Avancerat</summary>
+          <div style="margin-top:10px;">
+            <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">
+              <span>Extra kontext <span style="font-weight:400;color:var(--text3)">(valfritt)</span></span>
+              <span style="font-size:10px;color:var(--text3);font-weight:400;">Projektprofil injiceras automatiskt</span>
+            </div>
+            <textarea id="preContextInput" rows="2" style="min-height:56px;"
+              placeholder="T.ex: Det här gäller specifikt checkout-flödet. Befintlig auth finns i /lib/auth.ts..."></textarea>
           </div>
-          <textarea id="preContextInput" rows="2" style="min-height:56px;"
-            placeholder="T.ex: Det här gäller specifikt checkout-flödet. Befintlig auth finns i /lib/auth.ts..."></textarea>
-        </div>
+        </details>
       </div>
 
       <div id="post-input" style="flex:1;flex-direction:column;gap:12px;display:none;">
@@ -781,6 +795,18 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
               placeholder="Klistra in stacktrace, konsol-fel eller serverlogg. T.ex: TypeError: Cannot read properties of undefined (reading 'id') at SaveButton.tsx:42"></textarea>
           </div>
         </div>
+
+        <!-- KÄLLRAD: en lugn mening om varifrån koden kommer — detaljerna bor i Avancerat -->
+        <div id="sourceStatusLine" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);line-height:1.4;">
+          <span id="sourceStatusText" style="flex:1;">Laddar källa...</span>
+          <span id="sourceStatusAction" style="color:var(--accent2);cursor:pointer;white-space:nowrap;font-size:11px;" onclick="openAdvanced()">Detaljer ▾</span>
+        </div>
+
+        <!-- AVANCERAT — källa, kod & styrning (hopfällt: vanliga användare behöver aldrig öppna).
+             order:10 lägger den sist i flexkolumnen, efter skärmdumpszonen. -->
+        <details class="advanced-section" id="advancedPost" style="order:10;">
+          <summary>Avancerat — källa, kod &amp; styrning</summary>
+          <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px;">
 
         <!-- KÄLLA: en box — projektläge (auto-sync) eller manuellt läge -->
         <div class="github-section" id="githubSection">
@@ -829,12 +855,24 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
             <button id="codeToggleBtn" onclick="toggleCodeBox()" style="display:none;background:none;border:none;color:var(--accent2);font-size:11px;cursor:pointer;padding:0;font-family:inherit;">Visa ▾</button>
           </div>
           <textarea id="codeInput" rows="8" style="font-family:'SF Mono',Consolas,monospace;font-size:12px;"
-            oninput="updateCodeSourceHint()"
+            oninput="updateCodeSourceHint();updateSourceStatusLine()"
             placeholder="// Klistra in din kod här, eller hämta från GitHub ovan..."></textarea>
         </div>
-        <!-- Screenshot dropzone — feeds the Visuell QA-granskaren -->
+        <div>
+          <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">
+            <span>Extra kontext <span style="font-weight:400;color:var(--text3)">(valfritt)</span></span>
+            <span style="font-size:10px;color:var(--text3);font-weight:400;">Projektprofil injiceras automatiskt</span>
+          </div>
+          <textarea id="postContextInput" rows="2"
+            placeholder="T.ex: Fokusera granskningen på checkout-flödet. Den nya koden ligger i /components/Checkout..."></textarea>
+        </div>
+
+          </div>
+        </details>
+
+        <!-- Screenshot dropzone — synlig: det mest nybörjarvänliga sättet att visa ett fel -->
         <div id="screenshotWrap">
-          <div class="section-label">📸 Skärmdump av byggd UI <span style="font-weight:400;color:var(--text3)">(valfritt — aktiverar visuell granskning)</span></div>
+          <div class="section-label">📸 Skärmdump <span style="font-weight:400;color:var(--text3)">(valfritt — aktiverar visuell granskning)</span></div>
           <div id="dropzone" onclick="document.getElementById('shotFile').click()"
             ondragover="event.preventDefault();this.classList.add('drag')"
             ondragleave="this.classList.remove('drag')"
@@ -844,15 +882,6 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
           </div>
           <input type="file" id="shotFile" accept="image/*" multiple style="display:none;" onchange="handleFilePick(event)">
           <div id="shotThumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;"></div>
-        </div>
-
-        <div>
-          <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">
-            <span>Extra kontext <span style="font-weight:400;color:var(--text3)">(valfritt)</span></span>
-            <span style="font-size:10px;color:var(--text3);font-weight:400;">Projektprofil injiceras automatiskt</span>
-          </div>
-          <textarea id="postContextInput" rows="2"
-            placeholder="T.ex: Fokusera granskningen på checkout-flödet. Den nya koden ligger i /components/Checkout..."></textarea>
         </div>
       </div>
     </div>
@@ -1219,6 +1248,12 @@ function setDepth(d) {
 // Legacy mode names → new (for restoring old saved sessions)
 const _MODE_MIGRATE = { pre: 'ny_funktion', post: 'granska_kod', both: 'granska_kod' };
 
+const _MODE_HELP = {
+  ny_funktion: 'Beskriv vad du vill — teamet analyserar, granskar och skriver en färdig beställning till din byggare.',
+  granska_kod: 'Teamet läser senaste koden i ditt projekt och listar vad som behöver fixas, sorterat efter hur allvarligt det är.',
+  buggrapport: 'Beskriv vad som blir fel — teamet hittar orsaken i koden och skriver en färdig fix-beställning.',
+};
+
 function setMode(mode) {
   mode = _MODE_MIGRATE[mode] || mode;
   currentMode = mode;
@@ -1230,6 +1265,8 @@ function setMode(mode) {
   const usesCode = mode === 'granska_kod' || mode === 'buggrapport';
   document.getElementById('pre-input').style.display = isNy ? 'flex' : 'none';
   document.getElementById('post-input').style.display = usesCode ? 'flex' : 'none';
+  const help = document.getElementById('modeHelp');
+  if (help) help.textContent = _MODE_HELP[mode] || '';
   // Bug description only in buggrapport
   const bugWrap = document.getElementById('bugDescWrap');
   if (bugWrap) bugWrap.style.display = (mode === 'buggrapport') ? 'block' : 'none';
@@ -1237,6 +1274,38 @@ function setMode(mode) {
   const shotWrap = document.getElementById('screenshotWrap');
   if (shotWrap) shotWrap.style.display = usesCode ? 'block' : 'none';
   if (usesCode) updateGithubSection();
+}
+
+function openAdvanced() {
+  const d = document.getElementById('advancedPost');
+  if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+}
+
+// Källraden — den enda källinfo en vanlig användare ser. Måste ALLTID vara sann:
+// inklistrad kod som åsidosätter auto-hämtningen får aldrig döljas i Avancerat.
+function updateSourceStatusLine() {
+  const textEl = document.getElementById('sourceStatusText');
+  const actionEl = document.getElementById('sourceStatusAction');
+  if (!textEl) return;
+  const p = getActiveProject();
+  const hasRepo = !!(p && p.repo);
+  const codeVal = (document.getElementById('codeInput')?.value || '').trim();
+  const isFetched = codeVal && typeof _githubCode === 'string' && codeVal === _githubCode.trim();
+  if (hasRepo && codeVal && isFetched) {
+    textEl.innerHTML = `<span style="color:var(--accent);">✓</span> Förhandsgranskad kod från <b>${escHtml(p.repo)}</b> används <span style="text-decoration:underline;cursor:pointer;color:var(--text3);" onclick="clearManualCode()">Rensa</span>`;
+    if (actionEl) actionEl.textContent = 'Detaljer ▾';
+  } else if (hasRepo && codeVal) {
+    textEl.innerHTML = `<span style="color:var(--orange,#f59e0b);">⚠️ Inklistrad kod används — INTE senaste från GitHub.</span> <span style="text-decoration:underline;cursor:pointer;" onclick="clearManualCode()">Rensa</span>`;
+    if (actionEl) actionEl.textContent = 'Detaljer ▾';
+  } else if (hasRepo) {
+    textEl.innerHTML = `<span style="color:var(--accent);">✓</span> Senaste koden hämtas automatiskt från <b>${escHtml(p.repo)}</b> när du skickar`;
+    if (actionEl) actionEl.textContent = 'Detaljer ▾';
+  } else {
+    textEl.textContent = '📋 Inget GitHub-repo kopplat — klistra in kod under Avancerat, eller koppla ett repo i projektinställningarna';
+    if (actionEl) actionEl.textContent = 'Öppna ▾';
+    const d = document.getElementById('advancedPost');
+    if (d && !manual) d.open = true; // utan repo MÅSTE man dit — öppna direkt
+  }
 }
 
 // ── SCREENSHOT HANDLING (→ base64 for Visuell QA-granskaren) ──
@@ -2848,6 +2917,7 @@ function updateGithubSection() {
     _setCodeBoxCollapsed(false);
   }
   updateCodeSourceHint();
+  updateSourceStatusLine();
 }
 
 // Etiketten på kodrutan måste alltid spegla VAD som faktiskt skickas till teamet:
@@ -2869,7 +2939,7 @@ function updateCodeSourceHint() {
 function clearManualCode() {
   document.getElementById('codeInput').value = '';
   _githubManifest = '';
-  updateGithubSection();
+  updateGithubSection();  // uppdaterar även källraden
   showToast('Rensat — senaste koden hämtas från GitHub vid körning');
 }
 
@@ -2979,6 +3049,7 @@ async function fetchGithub() {
     _githubManifest = data.file_manifest || '';
     document.getElementById('codeInput').value = _githubCode;
     _setCodeBoxCollapsed(false); // visa det som hämtades
+    updateSourceStatusLine();
 
     const folderNote = _selectedFolders.length > 0 ? ` · 📁 ${_selectedFolders.join(', ')}` : '';
     const skippedNote = data.skipped_files?.length
@@ -3083,6 +3154,7 @@ async function loadSession(id) {
       document.getElementById('postContextInput').value = s.context || '';
       _setCodeBoxCollapsed(false); // visa det återställda innehållet
     }
+    updateSourceStatusLine(); // källraden ska spegla det återställda innehållet
     // Show results
     if (s.results && s.results.length > 0) {
       renderResults({ results: s.results, smith: s.smith, stats: s.stats });
