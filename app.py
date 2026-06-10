@@ -607,12 +607,31 @@ async def send_build_queue_item(item_id: str, payload: dict):
     elif spec_rewritten:
         feedback = "Specen är OMSKRIVEN efter underkänt bygge — kvarstående problem är nu inarbetade som krav."
 
+    # Avslutande instruktion till byggaren — specen ska aldrig lämna systemet utan
+    # tydligt slutkommando: bygg exakt detta, pusha till GitHub, granskning sker där.
+    repo_name = profile.get("repo", "")
+    branch = profile.get("branch", "main")
+    push_line = (f"2. Committa och pusha ALLT till GitHub: {repo_name} (branch: {branch})."
+                 if repo_name else
+                 "2. Leverera den kompletta koden tillbaka till beställaren.")
+    builder_instruktion = (
+        "\n\n---\n## INSTRUKTION TILL BYGGAREN (obligatorisk)\n"
+        "1. Bygg EXAKT enligt specen ovan — lägg inte till funktioner utanför scope, "
+        "ändra inte filer som inte berörs.\n"
+        f"{push_line}\n"
+        "3. Svara kort: vad som byggdes, vilka filer som ändrades, samt eventuella "
+        "avvikelser från specen och varför.\n"
+        "4. Beställaren kör därefter en automatisk granskning av koden — bygget "
+        "godkänns bara om specens acceptanskriterier är uppfyllda, så verifiera dem innan du svarar."
+    )
+
     job = {
         "queue_item_id": item["id"],
         "attempt_nr": item["attempt_nr"],
         "project_id": item["project_id"],
         "title": item["title"],
         "spec_markdown": item["spec_markdown"],
+        "builder_instruktion": builder_instruktion,
         "spec_rewritten": spec_rewritten,
         "feedback": feedback,
         "byggsatt": item.get("byggsatt_used") or {},
@@ -2698,8 +2717,10 @@ async def review(payload: dict):
     stats_dict = {"total": len(results), "approved": approved, "rejected": rejected,
                   "errors": errors, "skipped": skipped_count}
 
-    # Persist backlog (review modes) — groomed items become the loop's work plan
-    if is_review_mode and backlog_result.get("items"):
+    # Persist backlog (review modes) — groomed items become the loop's work plan.
+    # defer_backlog: beställaren VÄLJER först vilka fynd som hör till ärendet i UI:t,
+    # och skickar sedan urvalet till POST /api/backlog/add (dedup sker där också).
+    if is_review_mode and backlog_result.get("items") and not payload.get("defer_backlog"):
         try:
             backlog_items = await loop.run_in_executor(
                 executor, backlog_add_items, backlog_result["items"], project_id, session_id
@@ -2833,6 +2854,31 @@ async def clear_backlog(payload: dict):
         tmp.write_text(json.dumps(remaining, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(BACKLOG_FILE)
     return {"ok": True, "removed": removed}
+
+
+@app.post("/api/backlog/add")
+async def add_backlog_items(payload: dict):
+    """Beställarens URVAL av fynd → Att bygga. Dedup + regressionsdetektering
+    sker i backlog_add_items, så dubbletter kan aldrig uppstå även om man
+    skickar samma fynd två gånger."""
+    project_id = payload.get("project_id", "")
+    new_items = payload.get("items") or []
+    if not project_id:
+        return JSONResponse({"error": "project_id krävs."}, status_code=400)
+    if not isinstance(new_items, list) or not new_items:
+        return JSONResponse({"error": "Inga fynd valda."}, status_code=400)
+    loop = asyncio.get_running_loop()
+    with _backlog_lock:
+        before = sum(1 for i in _backlog_load() if i.get("project_id") == project_id)
+    try:
+        proj_items = await loop.run_in_executor(
+            executor, backlog_add_items, new_items[:40], project_id,
+            payload.get("session_id", ""))
+    except Exception as e:
+        logger.error("backlog add failed: %s", e)
+        return JSONResponse({"error": f"Kunde inte spara fynden: {str(e)[:150]}"}, status_code=500)
+    added = len(proj_items) - before  # dedup kan ha hoppat över dubbletter
+    return {"ok": True, "added": added, "skipped_duplicates": len(new_items[:40]) - added}
 
 
 @app.post("/api/backlog/plan")

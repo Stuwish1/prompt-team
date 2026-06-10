@@ -970,6 +970,14 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
       </div>
 
       <!-- Backlog-chip — fynden bor i Att bygga-vyn -->
+      <!-- URVALSSTEG: beställaren väljer vilka fynd som hör till ärendet innan de blir arbete -->
+      <div id="fyndSelectWrap" style="display:none;background:var(--bg2);border:1px solid var(--border-accent);border-radius:var(--r-lg);padding:16px 18px;">
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">🗂️ Vad hör till ärendet?</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Bocka i de fynd som ska byggas — resten slängs. Dubbletter mot befintliga ärenden filtreras bort automatiskt, och Planeraren sätter byggordningen direkt.</div>
+        <div id="fyndSelectList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
+        <button class="btn btn-primary" id="fyndSelectBtn" onclick="sendSelectedFynd(this)">→ Skicka valda till Att bygga</button>
+      </div>
+
       <div id="backlogChipWrap" style="display:none;">
         <span class="backlog-chip" onclick="switchView('bygga')" id="backlogChip">
           🗂️ <span id="backlogChipText">0 fynd sparade</span> → Visa i Att bygga
@@ -1688,6 +1696,7 @@ async function runReview() {
         run_id: runId, depth: _reviewDepth,
         project_id: reviewProjectId,
         file_manifest: currentMode === 'ny_funktion' ? '' : _githubManifest,
+        defer_backlog: true,  // beställaren VÄLJER fynd i urvalssteget innan de blir arbete
         profile: { ...(getActiveProject()?.profile || {}), name: getActiveProject()?.name || '' }
       })
     });
@@ -1702,8 +1711,7 @@ async function runReview() {
       const banner = document.getElementById('dbWarningBanner');
       if (banner) banner.style.display = 'block';
     }
-    // Nya fynd i backloggen → låt Planeraren sätta byggordning direkt (tyst, i bakgrunden)
-    if ((data.backlog_items || []).length >= 1) planBacklog(null, true);
+    // (Planeraren körs efter urvalssteget — sendSelectedFynd — inte här)
   } catch (e) {
     // Webbläsaren kapar fetch vid ~300s men servern kan jobba klart ändå —
     // resultatet stashas per run_id på servern. Nätverksfel ⇒ poll:a hem det.
@@ -1875,18 +1883,74 @@ function renderResults(data) {
     setSpecView(hasBestallare ? 'bestallare' : 'teknisk');
   }
 
-  // ── Backlog → chip (fynden bor i Att bygga-vyn) ──
+  // ── Backlog: URVALSSTEG eller chip ──
+  // defer_backlog ⇒ fynden är INTE sparade än — beställaren väljer vad som hör
+  // till ärendet. Annars (t.ex. byggkö-granskning) visas chip som förut.
   const chipWrap = document.getElementById('backlogChipWrap');
-  if (backlogItems && backlogItems.length) {
+  const selWrap = document.getElementById('fyndSelectWrap');
+  const pending = (data.backlog_result?.items || []);
+  if (pending.length && !backlogItems.length) {
+    _pendingFynd = pending;
+    _pendingFyndSession = data.session_id || '';
+    document.getElementById('fyndSelectList').innerHTML = pending.map((it, i) => `
+      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);">
+        <input type="checkbox" checked data-fynd-idx="${i}" onchange="updateFyndSelectBtn()" style="margin-top:3px;accent-color:var(--accent);">
+        <span style="flex:1;">
+          <span style="font-weight:600;font-size:13px;">${escHtml(it.title || '')}</span>
+          <span style="font-size:11px;color:var(--text3);margin-left:6px;">[${it.priority || 'P2'} · ${it.effort || 'M'}]${it.regression ? ' · ↩ återkommit' : ''}</span>
+          ${it.finding ? `<div style="font-size:12px;color:var(--text2);margin-top:2px;">${escHtml(String(it.finding).slice(0, 160))}</div>` : ''}
+        </span>
+      </label>`).join('');
+    updateFyndSelectBtn();
+    selWrap.style.display = 'block';
+    chipWrap.style.display = 'none';
+  } else if (backlogItems && backlogItems.length) {
+    selWrap.style.display = 'none';
     renderBacklogBox(backlogItems);
     document.getElementById('backlogChipText').textContent = `${backlogItems.length} fynd sparade`;
     chipWrap.style.display = 'block';
     refreshByggaBadge();
   } else {
+    selWrap.style.display = 'none';
     chipWrap.style.display = 'none';
   }
 
   document.getElementById('resultsView').style.display = 'flex';
+}
+
+// ── URVALSSTEGET: valda fynd → Att bygga (dedup i backend, Planeraren auto-körs) ──
+let _pendingFynd = [];
+let _pendingFyndSession = '';
+
+function updateFyndSelectBtn() {
+  const n = document.querySelectorAll('#fyndSelectList input:checked').length;
+  const btn = document.getElementById('fyndSelectBtn');
+  if (btn) { btn.textContent = `→ Skicka valda till Att bygga (${n})`; btn.disabled = n === 0; }
+}
+
+async function sendSelectedFynd(btn) {
+  const chosen = [...document.querySelectorAll('#fyndSelectList input:checked')]
+    .map(cb => _pendingFynd[Number(cb.dataset.fyndIdx)]).filter(Boolean);
+  if (!chosen.length) return;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sparar...'; }
+  try {
+    const res = await fetch('/api/backlog/add', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ project_id: getActiveProject()?.id || '',
+                             session_id: _pendingFyndSession, items: chosen })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
+    document.getElementById('fyndSelectWrap').style.display = 'none';
+    document.getElementById('backlogChipText').textContent = `${d.added} fynd sparade`;
+    document.getElementById('backlogChipWrap').style.display = 'block';
+    showToast(`🗂️ ${d.added} fynd till Att bygga${d.skipped_duplicates ? ` · ${d.skipped_duplicates} dubbletter filtrerades bort` : ''} — Planeraren sätter ordningen...`, 5000);
+    refreshByggaBadge();
+    planBacklog(null, true);  // AI-ordningen sätts direkt när nya saker ramlar in
+  } catch (e) {
+    showToast('❌ ' + e.message);
+    if (btn) { btn.disabled = false; updateFyndSelectBtn(); }
+  }
 }
 
 // ── VIEW ROUTER ─────────────────────────────────────────────────
@@ -1973,8 +2037,12 @@ function renderQueueBox() {
         actions = `<button class="btn btn-primary" onclick="startBuild('${it.id}', this)">▶ Bygg nästa</button>
                    <span style="font-size:11px;color:var(--text3);">Specen kopieras — klistra in i din byggare</span>`;
       } else if (it.status === 'byggs') {
-        actions = `<button class="btn btn-primary" onclick="openBuildResult('${it.id}')">✅ Klar? Klistra in resultatet</button>
-                   <button class="btn btn-ghost" onclick="queueSetStatus('${it.id}','kö')">↩ Tillbaka till kö</button>`;
+        const hasRepo = !!(getActiveProject()?.repo);
+        actions = (hasRepo
+          ? `<button class="btn btn-primary" onclick="kontrolleraBuild('${it.id}', this)" title="Hämtar senaste koden från GitHub och låter teamet granska + verifiera mot specen">🔍 Kontrollera</button>
+             <button class="btn btn-ghost" onclick="openBuildResult('${it.id}')" style="font-size:11px;">📋 ...eller klistra in koden själv</button>`
+          : `<button class="btn btn-primary" onclick="openBuildResult('${it.id}')">✅ Klar? Klistra in resultatet</button>`)
+          + `<button class="btn btn-ghost" onclick="queueSetStatus('${it.id}','kö')">↩ Tillbaka till kö</button>`;
       } else if (it.status === 'behover_dig') {
         actions = `<button class="btn btn-primary" onclick="startBuild('${it.id}', this)">🔄 Skicka igen (specen skrivs om med kvarståendena)</button>
                    <button class="btn btn-ghost" onclick="queueSetStatus('${it.id}','klar')" title="Kräver motivering — loggas i ärendehistoriken">Markera klar ändå</button>`;
@@ -2052,7 +2120,10 @@ async function startBuild(id, btn) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
-    const spec = (data.job?.feedback ? data.job.feedback + '\n\n' : '') + (data.job?.spec_markdown || '');
+    // Komplett byggprompt: ev. feedback + spec + obligatorisk slutinstruktion till byggaren
+    const spec = (data.job?.feedback ? data.job.feedback + '\n\n' : '')
+               + (data.job?.spec_markdown || '')
+               + (data.job?.builder_instruktion || '');
     await navigator.clipboard.writeText(spec).catch(() => {});
     showToast(data.job?.spec_rewritten
       ? '✍️ Spec OMSKRIVEN med kvarståendena inarbetade och kopierad — klistra in i din byggare!'
@@ -2061,6 +2132,40 @@ async function startBuild(id, btn) {
   } catch (e) {
     showToast('❌ ' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = '▶ Bygg nästa'; }
+  }
+}
+
+// KONTROLLERA: byggaren har pushat till GitHub → hämta senaste koden därifrån,
+// låt hela teamet granska + Fixverifieraren verifiera mot specen → klar | behover_dig.
+async function kontrolleraBuild(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '⬇️ Hämtar senaste från GitHub...'; }
+  try {
+    const fetched = await fetchActiveProjectCode();
+    if (!fetched || !fetched.code?.trim()) {
+      throw new Error('Kunde inte hämta koden från GitHub — har byggaren pushat? Kontrollera repo/branch.');
+    }
+    if (btn) btn.textContent = `🔍 Teamet granskar (${fetched.stats})...`;
+    const res = await fetch('/api/build-queue/' + id + '/review', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        code: fetched.code,
+        images: _screenshots.slice(),
+        profile: { ...(getActiveProject()?.profile || {}), name: getActiveProject()?.name || '' }
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+    if (data.new_status === 'klar') {
+      showToast('🟢 GODKÄNT — bygget verifierat mot specen och sparat i historiken!', 6000);
+    } else {
+      const kv = (data.verdict?.kvarstaende || []).length;
+      showToast(`🔴 UNDERKÄNT — ${kv || 'flera'} kvarstående problem. Tryck "Skicka igen" så skrivs specen om.`, 7000);
+    }
+    await loadAttBygga();
+    refreshByggaBadge();
+  } catch (e) {
+    showToast('❌ ' + e.message, 6000);
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 Kontrollera'; }
   }
 }
 
@@ -2577,6 +2682,7 @@ async function runWithAnswers() {
         run_id: runId, depth: _reviewDepth,
         project_id: rerunProjectId,
         file_manifest: currentMode === 'ny_funktion' ? '' : _githubManifest,
+        defer_backlog: true,  // urvalssteget gäller även efter besvarade frågor
         profile: { ...(getActiveProject()?.profile || {}), name: getActiveProject()?.name || '' }
       })
     });
