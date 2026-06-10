@@ -3731,7 +3731,7 @@
     "spec_bestallare": "CODEBASE_AUDIT 2026-06-10 — HÖG prioritet",
     "status": "klar",
     "created_at": "2026-06-10T22:00:50",
-    "updated_at": "2026-06-10T22:00:50",
+    "updated_at": "2026-06-10T22:15:43",
     "position": 10023,
     "sent_at": "2026-06-10T22:13:17.997692",
     "result_summary": {
@@ -3741,15 +3741,20 @@
       ],
       "summary": "Extraherade 4 hjälpfunktioner: _delete_local_files, _delete_supabase_session, _delete_github_session (stub), _cleanup_temp_files (stub). delete_session() är nu 29 rader och refererar inte längre direkt till Supabase- eller GitHub-API."
     },
-    "completed_at": "2026-06-10T22:15:17.146539"
+    "completed_at": "2026-06-10T22:15:17.146539",
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T22:15:43"
+    }
   },
   {
     "id": "874fab72-3e99-4865-90bf-5865652fa147",
     "title": "app.py trunkerad — SyntaxError rad 5252",
     "spec_markdown": "**Källa:** loggagent-auto\n\nGRANSKARE_LOG och CODEBASE_AUDIT rapporterar att app.py är avskuren på rad 5252. `if __name__ == '__main__'` blocket är ofullständigt. SyntaxError verifierat. Appen kan inte starta. Kräver omedelbar fix.",
-    "status": "kö",
+    "status": "byggs",
     "created_at": "2026-06-10T22:02:33.217410",
-    "priority": "high"
+    "priority": "high",
+    "sent_at": "2026-06-10T22:16:17.451845"
   },
   {
     "id": "6135a298-8f24-4003-9b68-ba2655d93d76",
