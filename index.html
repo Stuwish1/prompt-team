@@ -8,21 +8,23 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* LJUST TEMA — hög kontrast för läsbarhet (mörka temat upplevdes svårläst) */
 :root {
-  --bg: #0b0c10;  --bg2: #13141b;  --bg3: #1a1c26;  --bg-elev: #1e2030;
-  --border: rgba(255,255,255,.07);  --border-strong: rgba(255,255,255,.14);
-  --border-accent: rgba(110,121,244,.40);
-  --text1: #ececf1;  --text2: #9da3b4;  --text3: #62687c;
-  --accent: #6e79f4;  --accent2: #98a2fb;  --accent-soft: rgba(110,121,244,.12);
-  --green: #3dd68c;  --green-soft: rgba(61,214,140,.10);
-  --red: #f2555a;    --red-soft: rgba(242,85,90,.10);
-  --yellow: #f5b944; --yellow-soft: rgba(245,185,68,.10);
-  --blue: #58a6ff;   --purple: #a78bfa;
+  --bg: #f4f5f7;  --bg2: #ffffff;  --bg3: #eceef2;  --bg-elev: #ffffff;
+  --border: rgba(15,23,42,.10);  --border-strong: rgba(15,23,42,.20);
+  --border-accent: rgba(79,70,229,.45);
+  --text1: #111827;  --text2: #374151;  --text3: #6b7280;
+  --accent: #4f46e5;  --accent2: #4338ca;  --accent-soft: rgba(79,70,229,.10);
+  --green: #15803d;  --green-soft: rgba(21,128,61,.10);
+  --red: #dc2626;    --red-soft: rgba(220,38,38,.08);
+  --yellow: #b45309; --yellow-soft: rgba(180,83,9,.10);
+  --blue: #1d4ed8;   --purple: #6d28d9;
+  --orange: #c2410c;
   --r-sm: 6px;  --r-md: 8px;  --r-lg: 12px;  --r-full: 999px;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
-  --shadow-md: 0 4px 16px rgba(0,0,0,.40);
-  --shadow-lg: 0 24px 60px rgba(0,0,0,.55), 0 4px 16px rgba(0,0,0,.4);
-  --ring: 0 0 0 3px rgba(110,121,244,.22);
+  --shadow-sm: 0 1px 2px rgba(15,23,42,.08);
+  --shadow-md: 0 4px 16px rgba(15,23,42,.10);
+  --shadow-lg: 0 24px 60px rgba(15,23,42,.18), 0 4px 16px rgba(15,23,42,.10);
+  --ring: 0 0 0 3px rgba(79,70,229,.25);
   --mono: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
   --ease: cubic-bezier(.2,.8,.2,1);  --t: 140ms;
 }
@@ -62,13 +64,13 @@ header {
 .btn:active { transform: translateY(.5px); }
 .btn:focus-visible { outline: none; box-shadow: var(--ring); }
 .btn-primary {
-  background: linear-gradient(180deg,#7d87f6,#5f6af0); color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 1px 2px rgba(0,0,0,.4);
+  background: linear-gradient(180deg,#6366f1,#4f46e5); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 1px 2px rgba(15,23,42,.20);
 }
-.btn-primary:hover { background: linear-gradient(180deg,#8b94f8,#6e79f4); }
+.btn-primary:hover { background: linear-gradient(180deg,#6d70f3,#5a51e8); }
 .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
-.btn-ghost:hover { background: var(--bg3); color: var(--text1); border-color: rgba(255,255,255,.2); }
+.btn-ghost:hover { background: var(--bg3); color: var(--text1); border-color: var(--border-strong); }
 .btn-copy { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); padding: 6px 12px; font-size: 12px; }
 .btn-copy:hover { background: var(--green); color: #fff; border-color: var(--green); }
 .btn-copy.copied { background: var(--green); color: #fff; border-color: var(--green); }
@@ -190,13 +192,13 @@ textarea {
   border-radius: var(--r-md); color: var(--text1); font-size: 13px; line-height: 1.6;
   padding: 12px; resize: vertical; font-family: inherit; outline: none;
   min-height: 120px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.3);
+  box-shadow: inset 0 1px 2px rgba(15,23,42,.06);
   transition: border-color var(--t) var(--ease), box-shadow var(--t) var(--ease);
 }
-textarea:focus { border-color: var(--accent); box-shadow: inset 0 1px 2px rgba(0,0,0,.3), var(--ring); }
+textarea:focus { border-color: var(--accent); box-shadow: inset 0 1px 2px rgba(15,23,42,.06), var(--ring); }
 textarea::placeholder { color: var(--text3); }
 .form-group input:focus, .form-group select:focus {
-  border-color: var(--accent); box-shadow: inset 0 1px 2px rgba(0,0,0,.3), var(--ring);
+  border-color: var(--accent); box-shadow: inset 0 1px 2px rgba(15,23,42,.06), var(--ring);
 }
 
 .context-area { flex: 1; display: flex; flex-direction: column; gap: 8px; }
@@ -307,8 +309,8 @@ textarea::placeholder { color: var(--text3); }
   transition: border-color var(--t) var(--ease), transform var(--t) var(--ease);
 }
 .agent-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
-.agent-card.approved { border-color: rgba(61,214,140,.25); background: linear-gradient(180deg, rgba(61,214,140,.04), var(--bg2) 40%); }
-.agent-card.rejected { border-color: rgba(242,85,90,.25);  background: linear-gradient(180deg, rgba(242,85,90,.04), var(--bg2) 40%); }
+.agent-card.approved { border-color: rgba(21,128,61,.35); background: linear-gradient(180deg, rgba(21,128,61,.05), var(--bg2) 40%); }
+.agent-card.rejected { border-color: rgba(220,38,38,.35);  background: linear-gradient(180deg, rgba(220,38,38,.05), var(--bg2) 40%); }
 .agent-card.error    { border-color: rgba(245,185,68,.25); }
 
 .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
@@ -400,7 +402,7 @@ textarea::placeholder { color: var(--text3); }
 /* ── MODAL ── */
 .modal-bg {
   display: none; position: fixed; inset: 0;
-  background: rgba(8,9,12,.6); backdrop-filter: blur(8px); z-index: 100;
+  background: rgba(15,23,42,.35); backdrop-filter: blur(8px); z-index: 100;
   align-items: center; justify-content: center;
 }
 .modal-bg.open { display: flex; }
@@ -759,7 +761,7 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
           🐛 Buggrapport<br><small style="font-weight:400;font-size:11px">Fel → fix-spec</small>
         </button>
       </div>
-      <div id="modeHelp" style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.5;"></div>
+      <div id="modeHelp" style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.5;">Beskriv vad du vill — teamet analyserar, granskar och skriver en färdig beställning till din byggare.</div>
     </div>
 
     <div class="panel-section" style="flex:1;display:flex;flex-direction:column;">
