@@ -460,8 +460,50 @@ body.view-chatt .history-panel { display: none; }
 .attention-banner.show { display: flex; animation: attnPulse 2.4s var(--ease) infinite; }
 
 /* ── ATT BYGGA VIEW ── */
-#attByggaView { flex: 1; overflow-y: auto; padding: 20px 24px; }
+#attByggaView { flex: 1; overflow: hidden; display: flex; gap: 0; }
+.bygga-queue-col { flex: 1; overflow-y: auto; padding: 20px 24px; min-width: 0; }
 .bygga-section { max-width: 980px; margin: 0 auto 26px; }
+
+/* ── QUEUE CHAT PANEL ── */
+.chat-panel {
+  width: 360px; min-width: 320px; border-left: 1px solid var(--border);
+  background: var(--bg2); display: flex; flex-direction: column;
+  transition: width var(--t) var(--ease);
+}
+.chat-panel.hidden { display: none; }
+.chat-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.chat-panel-title { font-size: 13px; font-weight: 700; color: var(--text1); }
+.chat-panel-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.chat-panel-close {
+  background: transparent; border: none; color: var(--text3); cursor: pointer;
+  font-size: 16px; padding: 2px 6px; border-radius: 4px; line-height: 1;
+  transition: color var(--t) var(--ease);
+}
+.chat-panel-close:hover { color: var(--text1); background: var(--bg3); }
+.chat-messages {
+  flex: 1; overflow-y: auto; padding: 12px 14px; display: flex;
+  flex-direction: column; gap: 8px;
+}
+.chat-bubble {
+  padding: 9px 12px; border-radius: 8px; font-size: 12px;
+  line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+}
+.chat-bubble.user { background: var(--accent); color: #fff; align-self: flex-end; max-width: 90%; }
+.chat-bubble.assistant { background: var(--bg); border: 1px solid var(--border); align-self: flex-start; max-width: 90%; }
+.chat-bubble.spec { background: rgba(99,102,241,.07); border: 1px solid var(--border-accent); align-self: stretch; font-family: var(--mono); font-size: 11px; max-height: 200px; overflow-y: auto; }
+.chat-bubble-label { font-size: 10px; color: var(--text3); margin-bottom: 3px; font-weight: 600; }
+.chat-input-row {
+  display: flex; gap: 8px; padding: 10px 14px;
+  border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.chat-input-row textarea {
+  flex: 1; resize: none; min-height: 52px; font-size: 12px;
+  padding: 8px 10px; border-radius: var(--r-md);
+}
+.chat-input-row .btn { align-self: flex-end; padding: 8px 14px; font-size: 12px; }
 .bygga-section-head {
   display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
 }
@@ -762,6 +804,10 @@ body.view-chatt .history-panel { display: none; }
     <div id="mainNoRepoBanner" style="display:none;padding:8px 14px;background:rgba(99,102,241,.08);border-bottom:1px solid rgba(99,102,241,.2);font-size:11px;color:var(--accent2);line-height:1.5;">
       🔗 Main har inget GitHub-repo kopplat. Kör <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;">push_to_github.bat</code> eller <span style="text-decoration:underline;cursor:pointer;" onclick="openEditProject('main')">sätt repo manuellt</span>.
     </div>
+    <div style="padding:6px 10px 4px;">
+      <input id="historySearch" type="search" placeholder="Sök session..." oninput="filterHistory(this.value)"
+        style="width:100%;box-sizing:border-box;padding:5px 8px;font-size:11px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--bg2);color:var(--text1);outline:none;">
+    </div>
     <div class="history-list" id="historyList">
       <div class="history-loading">Laddar...</div>
     </div>
@@ -1014,25 +1060,44 @@ body.view-chatt .history-panel { display: none; }
 
   <!-- ATT BYGGA VIEW — backlog + byggkö, en arbetsyta -->
   <div id="attByggaView">
-    <div class="bygga-section">
-      <div class="bygga-section-head">
-        <span class="bygga-section-title">Nya fynd</span>
-        <div class="bygga-divider"></div>
-        <span class="phase-stat" id="backlogStat"></span>
-        <button class="btn btn-ghost" id="backlogPlanBtn" style="display:none;padding:3px 10px;font-size:11px;color:var(--accent2);" onclick="planBacklog(this)" title="Planeraren (AI) bedömer byggordningen: fundament före påbyggnad, blockerande buggar före features">📐 Planera ordning</button>
-        <button class="btn btn-ghost" id="backlogClearBtn" style="display:none;padding:3px 10px;font-size:11px;color:var(--red);" onclick="clearBacklog()" title="Ta bort ALLA fynd för projektet — t.ex. efter en felaktig körning">🗑 Rensa alla</button>
+    <!-- Vänsterkolumn: backlog + kö -->
+    <div class="bygga-queue-col">
+      <div class="bygga-section">
+        <div class="bygga-section-head">
+          <span class="bygga-section-title">Nya fynd</span>
+          <div class="bygga-divider"></div>
+          <span class="phase-stat" id="backlogStat"></span>
+          <button class="btn btn-ghost" id="backlogPlanBtn" style="display:none;padding:3px 10px;font-size:11px;color:var(--accent2);" onclick="planBacklog(this)" title="Planeraren (AI) bedömer byggordningen: fundament före påbyggnad, blockerande buggar före features">📐 Planera ordning</button>
+          <button class="btn btn-ghost" id="backlogClearBtn" style="display:none;padding:3px 10px;font-size:11px;color:var(--red);" onclick="clearBacklog()" title="Ta bort ALLA fynd för projektet — t.ex. efter en felaktig körning">🗑 Rensa alla</button>
+        </div>
+        <div id="planSummary" style="display:none;font-size:12px;color:var(--text2);background:var(--accent-soft);border:1px solid var(--border-accent);border-radius:var(--r-md);padding:8px 12px;margin-bottom:10px;line-height:1.5;"></div>
+        <div id="backlogBox"><div style="font-size:12px;color:var(--text3);padding:20px 0;">Inga fynd ännu — kör en granskning i Beställ-vyn.</div></div>
       </div>
-      <div id="planSummary" style="display:none;font-size:12px;color:var(--text2);background:var(--accent-soft);border:1px solid var(--border-accent);border-radius:var(--r-md);padding:8px 12px;margin-bottom:10px;line-height:1.5;"></div>
-      <div id="backlogBox"><div style="font-size:12px;color:var(--text3);padding:20px 0;">Inga fynd ännu — kör en granskning i Beställ-vyn.</div></div>
+
+      <div class="bygga-section">
+        <div class="bygga-section-head">
+          <span class="bygga-section-title">Byggkön</span>
+          <div class="bygga-divider"></div>
+          <span class="phase-stat" id="queueStat"></span>
+        </div>
+        <div id="queueBox"><div style="font-size:12px;color:var(--text3);padding:20px 0;">Kön är tom — lägg en spec i byggkön så hamnar den här.</div></div>
+      </div>
     </div>
 
-    <div class="bygga-section">
-      <div class="bygga-section-head">
-        <span class="bygga-section-title">Byggkön</span>
-        <div class="bygga-divider"></div>
-        <span class="phase-stat" id="queueStat"></span>
+    <!-- Höger: chatt-panel (slide-in när byggs-item expanderas) -->
+    <div id="chatPanel" class="chat-panel hidden">
+      <div class="chat-panel-header">
+        <div>
+          <div class="chat-panel-title">💬 Kommunicera med byggaren</div>
+          <div class="chat-panel-sub" id="chatPanelSub">—</div>
+        </div>
+        <button class="chat-panel-close" onclick="closeChatPanel()" title="Stäng">✕</button>
       </div>
-      <div id="queueBox"><div style="font-size:12px;color:var(--text3);padding:20px 0;">Kön är tom — lägg en spec i byggkön så hamnar den här.</div></div>
+      <div id="chatMessages" class="chat-messages"></div>
+      <div class="chat-input-row">
+        <textarea id="chatInput" rows="3" placeholder="Skriv till byggaren..."></textarea>
+        <button class="btn btn-primary" onclick="sendChatMessage()">Skicka</button>
+      </div>
     </div>
   </div>
 
@@ -1408,6 +1473,37 @@ const AGENT_DISPLAY_NAMES = {
   integration:     '🔗 Integrationsanalytikern',
   prompt_smith:    '✍️ Promptsmeden',
   completeness:    '✅ Kompletthetsgranskaren',
+  backend:          '⚙️ Backend-agenten',
+  devops:           '🚀 DevOps/CI-CD-agenten',
+  ai_ml:            '🤖 AI/ML-granskaren',
+  dokumentation:    '📖 Dokumentationsagenten',
+  licens:           '⚖️ Licensgranskaren',
+  i18n:             '🌍 i18n-agenten',
+  observability:    '📡 Observability-agenten',
+  concurrency:      '🧵 Trådsäkerhetsagenten',
+  krypto:           '🔐 Kryptoagenten',
+  agent_arkitektur: '🦾 Agentarkitekturagenten',
+  security:         '🔒 Säkerhetsagenten',
+  frontend:         '🖥️ Frontend-agenten',
+  testing:          '🧪 Testningsagenten',
+  performance:      '⚡ Prestandaagenten',
+  ui_design:        '🎭 UI-designagenten',
+  api:              '🔌 API-agenten',
+  code_quality:     '🏆 Kodkvalitetsagenten',
+  scalability:      '📈 Skalbarhetsagenten',
+  accessibility:    '♿ Tillgänglighetsagenten',
+  data_privacy:     '🔏 Dataintegritetsskyddaren',
+  error_handling:   '🛠️ Felhanteringsagenten',
+  edge_case:        '🔍 Kantfallsagenten',
+  hemlighetsvakten: '🕵️ Hemlighetsvakten',
+  datamigration:    '📦 Datamigreringsagenten',
+  visual_qa:        '👁️ Visuell QA-agenten',
+  rotorsak:         '🔬 Rotorsakanalytikern',
+  backloghallaren:  '📝 Backloghållaren',
+  planeraren:       '🗓️ Planeraren',
+  hotmodelleraren:  '🌡️ Hotmodelleraren',
+  dataskyddsjuristen: '⚖️ Dataskyddsjuristen',
+  bestallarsammanfattaren: '📊 Beställarsammanfattaren',
 };
 
 async function openSettings() {
@@ -2000,7 +2096,10 @@ async function sendSelectedFynd(btn) {
 
 // ── VIEW ROUTER ─────────────────────────────────────────────────
 function switchView(name) {
-  document.body.className = 'view-' + name;
+  // Ta bort gamla view-klasser (bevarar builder-active och andra klasser)
+  document.body.classList.remove('view-bestall', 'view-bygga', 'view-historik', 'view-chatt');
+  // Lägg till ny view-klass
+  document.body.classList.add('view-' + name);
   document.querySelectorAll('.main-tab').forEach(t => t.classList.toggle('active', t.dataset.view === name));
   if (name === 'bygga') loadAttBygga();
   if (name === 'historik') loadHistory();
@@ -2253,9 +2352,10 @@ function renderQueueBox() {
       } else if (it.status === 'byggs') {
         const hasRepo = !!(getActiveProject()?.repo);
         actions = (hasRepo
-          ? `<button class="btn btn-primary" onclick="kontrolleraBuild('${it.id}', this)" title="Hämtar senaste koden från GitHub och låter teamet granska + verifiera mot specen">🔍 Kontrollera</button>
+          ? `<button class="btn btn-primary" onclick="kontrolleraBuild('${it.id}', this)" title="Hämtar senaste koden från GitHub och låter teamet granska + verifiera mot specen">🔍 Kontrollera bygget</button>
              <button class="btn btn-ghost" onclick="openBuildResult('${it.id}')" style="font-size:11px;">📋 ...eller klistra in koden själv</button>`
-          : `<button class="btn btn-primary" onclick="openBuildResult('${it.id}')">✅ Klar? Klistra in resultatet</button>`)
+          : `<button class="btn btn-primary" onclick="kontrolleraBuild('${it.id}', this)" title="Hämtar senaste koden och låter teamet granska">🔍 Kontrollera bygget</button>
+             <button class="btn btn-ghost" onclick="openBuildResult('${it.id}')" style="font-size:11px;">📋 Klistra in resultatet</button>`)
           + `<button class="btn btn-ghost" onclick="queueSetStatus('${it.id}','kö')">↩ Tillbaka till kö</button>`;
       } else if (it.status === 'behover_dig') {
         actions = `<button class="btn btn-primary" onclick="startBuild('${it.id}', this)">🔄 Skicka igen (specen skrivs om med kvarståendena)</button>
@@ -2290,6 +2390,97 @@ function renderQueueBox() {
       </div>`;
   }).join('');
   updateAttentionBanner();
+
+  // Open chat panel for the expanded byggs item
+  const byggItem = items.find((it, idx) => {
+    const isExpandable = idx === 0 || !items.slice(0, idx).some(x => x.status !== 'klar');
+    return it.status === 'byggs' && isExpandable;
+  }) || items.find(it => it.status === 'byggs');
+  if (byggItem) {
+    openChatPanel(byggItem);
+  } else {
+    closeChatPanel();
+  }
+}
+
+// ── QUEUE CHAT PANEL ────────────────────────────────────────────
+let _chatPanelItemId = null;
+
+function openChatPanel(item) {
+  const panel = document.getElementById('chatPanel');
+  const sub = document.getElementById('chatPanelSub');
+  if (!panel) return;
+  _chatPanelItemId = item.id;
+  panel.classList.remove('hidden');
+  if (sub) sub.textContent = item.title || '';
+  loadChatHistory(item);
+}
+
+function closeChatPanel() {
+  const panel = document.getElementById('chatPanel');
+  if (panel) panel.classList.add('hidden');
+  _chatPanelItemId = null;
+}
+
+async function loadChatHistory(item) {
+  const box = document.getElementById('chatMessages');
+  if (!box) return;
+  box.innerHTML = '';
+
+  // Always show spec as first message
+  if (item.spec_markdown) {
+    const specBubble = document.createElement('div');
+    specBubble.innerHTML = `<div class="chat-bubble-label">📋 Spec</div>`;
+    const inner = document.createElement('div');
+    inner.className = 'chat-bubble spec';
+    inner.textContent = item.spec_markdown;
+    specBubble.appendChild(inner);
+    box.appendChild(specBubble);
+  }
+
+  // Try to load existing chat history from backend
+  try {
+    const res = await fetch('/api/chat/' + encodeURIComponent(item.id));
+    if (res.ok) {
+      const data = await res.json();
+      (data.messages || []).forEach(m => appendChatBubble(m.role, m.content));
+    }
+  } catch (_) { /* backend not yet implemented (P2-B) — ignore */ }
+
+  box.scrollTop = box.scrollHeight;
+}
+
+function appendChatBubble(role, content) {
+  const box = document.getElementById('chatMessages');
+  if (!box) return;
+  const el = document.createElement('div');
+  el.className = 'chat-bubble ' + (role === 'user' ? 'user' : 'assistant');
+  el.textContent = content;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chatInput');
+  const msg = input?.value?.trim();
+  if (!msg || !_chatPanelItemId) return;
+  input.value = '';
+  appendChatBubble('user', msg);
+  try {
+    const res = await fetch('/api/chat/' + encodeURIComponent(_chatPanelItemId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.reply) appendChatBubble('assistant', data.reply);
+    } else {
+      appendChatBubble('assistant', '⚠️ Kunde inte skicka — backend ej implementerad ännu (P2-B).');
+    }
+  } catch (_) {
+    appendChatBubble('assistant', '⚠️ Ingen anslutning till backend.');
+  }
 }
 
 async function refreshByggaBadge() {
@@ -2334,14 +2525,16 @@ async function startBuild(id, btn) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
-    // Komplett byggprompt: ev. feedback + spec + obligatorisk slutinstruktion till byggaren
-    const spec = (data.job?.feedback ? data.job.feedback + '\n\n' : '')
-               + (data.job?.spec_markdown || '')
-               + (data.job?.builder_instruktion || '');
+    const spec = data.job?.spec_markdown || '';
+    // Post spec as first chat message
+    await fetch('/api/chat/' + id, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ role: 'spec', content: spec })
+    }).catch(() => {});
+    // Keep clipboard as fallback
     await navigator.clipboard.writeText(spec).catch(() => {});
-    showToast(data.job?.spec_rewritten
-      ? '✍️ Spec OMSKRIVEN med kvarståendena inarbetade och kopierad — klistra in i din byggare!'
-      : '📋 Spec kopierad — klistra in i din byggare. Kom tillbaka med resultatet!', 4500);
+    showToast('▶ Spec skickad till byggaren och kopierad!', 3000);
+    openChatPanel(it || { id, title: '' });
     await loadAttBygga();
   } catch (e) {
     showToast('❌ ' + e.message);
@@ -2379,7 +2572,7 @@ async function kontrolleraBuild(id, btn) {
     refreshByggaBadge();
   } catch (e) {
     showToast('❌ ' + e.message, 6000);
-    if (btn) { btn.disabled = false; btn.textContent = '🔍 Kontrollera'; }
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 Kontrollera bygget'; }
   }
 }
 
@@ -3513,12 +3706,64 @@ let _activeSessionId = null;
 
 let _historyOffset = 0;
 const _historyLimit = 50;
+let _allSessions = [];
+let _historyTotal = 0;
+
+function renderSessionList(sessions) {
+  const list = document.getElementById('historyList');
+  const oldFooter = list.querySelector('.history-footer');
+  if (oldFooter) oldFooter.remove();
+  // Remove existing session items (keep footer placeholder logic separate)
+  list.querySelectorAll('.history-item').forEach(el => el.remove());
+  if (sessions.length === 0) {
+    list.innerHTML = '<div class="history-empty">Inga sessioner hittades.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  list.insertAdjacentHTML('beforeend', sessions.map(s => `
+    <div class="history-item ${s.id === _activeSessionId ? 'active' : ''}" onclick="loadSession('${escHtml(s.id)}')" id="hist-${escHtml(s.id)}">
+      <div class="history-name">${escHtml(s.name)}</div>
+      <div class="history-meta">
+        <span class="history-mode">${escHtml(s.mode)}</span>
+        <span>${formatDate(s.created_at)}</span>
+      </div>
+      <button class="history-del" onclick="deleteSession(event, '${escHtml(s.id)}')" title="Radera">✕</button>
+    </div>
+  `).join(''));
+  const shown = _historyOffset;
+  const total = _historyTotal;
+  if (shown < total) {
+    list.insertAdjacentHTML('beforeend', `
+      <div class="history-footer" style="padding:8px;text-align:center;font-size:12px;color:var(--text-muted)">
+        Visar ${shown} av ${total}
+        <button class="btn-ghost btn" style="margin-left:8px;font-size:11px" onclick="loadHistory(true)">Ladda fler</button>
+      </div>
+    `);
+  } else if (total > 0) {
+    list.insertAdjacentHTML('beforeend', `
+      <div class="history-footer" style="padding:6px;text-align:center;font-size:11px;color:var(--text-muted)">
+        Visar ${shown} av ${total}
+      </div>
+    `);
+  }
+}
+
+function filterHistory(q) {
+  const filtered = q
+    ? _allSessions.filter(s => (s.name + (s.project_id || '')).toLowerCase().includes(q.toLowerCase()))
+    : _allSessions;
+  renderSessionList(filtered);
+}
 
 async function loadHistory(append = false) {
   const list = document.getElementById('historyList');
   if (!append) {
     _historyOffset = 0;
+    _allSessions = [];
+    _historyTotal = 0;
     list.innerHTML = '<div class="history-loading">Laddar...</div>';
+    const searchEl = document.getElementById('historySearch');
+    if (searchEl) searchEl.value = '';
   }
   try {
     const activeProj = getActiveProject();
@@ -3531,43 +3776,14 @@ async function loadHistory(append = false) {
     // Support both new {items, total} format and legacy plain array
     const sessions = Array.isArray(data) ? data : (data.items || []);
     const total = Array.isArray(data) ? sessions.length : (data.total || sessions.length);
-    if (!append) {
-      if (sessions.length === 0) {
-        list.innerHTML = '<div class="history-empty">Inga sparade sessioner ännu.<br><br>Kör en granskning så sparas den automatiskt.</div>';
-        return;
-      }
-      list.innerHTML = '';
+    if (!append && sessions.length === 0) {
+      list.innerHTML = '<div class="history-empty">Inga sparade sessioner ännu.<br><br>Kör en granskning så sparas den automatiskt.</div>';
+      return;
     }
-    const fragment = sessions.map(s => `
-      <div class="history-item ${s.id === _activeSessionId ? 'active' : ''}" onclick="loadSession('${escHtml(s.id)}')" id="hist-${escHtml(s.id)}">
-        <div class="history-name">${escHtml(s.name)}</div>
-        <div class="history-meta">
-          <span class="history-mode">${escHtml(s.mode)}</span>
-          <span>${formatDate(s.created_at)}</span>
-        </div>
-        <button class="history-del" onclick="deleteSession(event, '${escHtml(s.id)}')" title="Radera">✕</button>
-      </div>
-    `).join('');
-    // Remove old load-more footer before appending new items
-    const oldFooter = list.querySelector('.history-footer');
-    if (oldFooter) oldFooter.remove();
-    list.insertAdjacentHTML('beforeend', fragment);
-    _historyOffset += sessions.length;
-    const shown = _historyOffset;
-    if (shown < total) {
-      list.insertAdjacentHTML('beforeend', `
-        <div class="history-footer" style="padding:8px;text-align:center;font-size:12px;color:var(--text-muted)">
-          Visar ${shown} av ${total} totalt
-          <button class="btn-ghost btn" style="margin-left:8px;font-size:11px" onclick="loadHistory(true)">Ladda fler</button>
-        </div>
-      `);
-    } else if (total > _historyLimit) {
-      list.insertAdjacentHTML('beforeend', `
-        <div class="history-footer" style="padding:6px;text-align:center;font-size:11px;color:var(--text-muted)">
-          Visar ${shown} av ${total} totalt
-        </div>
-      `);
-    }
+    _allSessions = append ? _allSessions.concat(sessions) : sessions;
+    _historyOffset = _allSessions.length;
+    _historyTotal = total;
+    renderSessionList(_allSessions);
   } catch(e) {
     list.innerHTML = '<div class="history-empty">Inga sessioner hittades.</div>';
   }
@@ -3647,11 +3863,13 @@ async function deleteSession(e, id) {
 const PROJECTS_KEY = 'pt_projects';
 const ACTIVE_PROJECT_KEY = 'pt_active_project';
 
+let _projectsCache = []; // in-memory cache — loaded from server on startup
+
 function getProjects() {
-  try { return JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]'); } catch { return []; }
+  return _projectsCache;
 }
 function setProjects(arr) {
-  localStorage.setItem(PROJECTS_KEY, JSON.stringify(arr));
+  _projectsCache = arr; // update cache; server sync via API
 }
 function getActiveProject() {
   const id = localStorage.getItem(ACTIVE_PROJECT_KEY);
@@ -3668,7 +3886,7 @@ function setActiveProject(id) {
 }
 
 async function ensureMainProject() {
-  // Always ensure a locked "main" project exists in localStorage, with fixed id "main"
+  // Always ensure a locked "main" project exists on the server, with fixed id "main"
   const projects = getProjects();
   const existing = projects.find(p => p.id === 'main');
 
@@ -3709,6 +3927,11 @@ async function ensureMainProject() {
     if (dirty) {
       const rest = projects.filter(p => p.id !== 'main');
       setProjects([existing, ...rest]);
+      await fetch('/api/projects/main', {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(existing)
+      }).catch(() => {});
       renderProjects();
     }
     return;
@@ -3738,6 +3961,11 @@ async function ensureMainProject() {
   // Always prepend so it stays at top
   const rest = projects.filter(p => p.id !== 'main');
   setProjects([mainProject, ...rest]);
+  await fetch('/api/projects', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(mainProject)
+  }).catch(() => {}); // 409 = already on server, ignore
   renderProjects();
 }
 
@@ -4153,8 +4381,14 @@ async function saveProject() {
     const projects = getProjects();
     const idx = projects.findIndex(p => p.id === _editingProjectId);
     if (idx !== -1) {
-      projects[idx] = { ...projects[idx], name, ...(repo ? { repo, branch } : {}), profile };
+      const updated = { ...projects[idx], name, ...(repo ? { repo, branch } : {}), profile };
+      projects[idx] = updated;
       setProjects(projects);
+      await fetch(`/api/projects/${encodeURIComponent(_editingProjectId)}`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(updated)
+      }).catch(() => {});
       closeProjectModal();
       renderProjects();
       renderHeaderProjectSelect();
@@ -4203,8 +4437,14 @@ async function saveProject() {
 
     const projects = getProjects();
     const id = 'proj_' + Date.now();
-    projects.unshift({ id, name, repo, branch, profile, created: new Date().toISOString(), file_count: data.file_count });
+    const newProj = { id, name, repo, branch, profile, created: new Date().toISOString(), file_count: data.file_count };
+    projects.unshift(newProj);
     setProjects(projects);
+    await fetch('/api/projects', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(newProj)
+    }).catch(() => {});
     setActiveProject(id);
 
     _githubManifest = data.file_manifest || '';
@@ -4254,11 +4494,12 @@ async function fetchActiveProjectCode() {
   }
 }
 
-function deleteProject(id) {
+async function deleteProject(id) {
   if (id === 'main') return; // main project is permanently locked
   if (!confirm('Ta bort projektet? Sessionshistoriken bevaras.')) return;
   const projects = getProjects().filter(p => p.id !== id);
   setProjects(projects);
+  await fetch(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
   const active = getActiveProject();
   if (active && active.id === id) {
     // Switch to main
@@ -4317,7 +4558,32 @@ function showToast(msg, duration = 3000) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  ensureMainProject().then(() => {
+  (async () => {
+    // Migration: if localStorage has projects, push them to server then clear
+    try {
+      const lsRaw = localStorage.getItem(PROJECTS_KEY);
+      if (lsRaw) {
+        const lsProjects = JSON.parse(lsRaw);
+        if (Array.isArray(lsProjects) && lsProjects.length > 0) {
+          for (const p of lsProjects) {
+            await fetch('/api/projects', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify(p)
+            }).catch(() => {}); // 409 = already on server, safe to ignore
+          }
+          localStorage.removeItem(PROJECTS_KEY);
+        }
+      }
+    } catch(e) {}
+
+    // Load projects from server into in-memory cache
+    try {
+      const data = await fetch('/api/projects').then(r => r.json());
+      _projectsCache = Array.isArray(data.projects) ? data.projects : [];
+    } catch(e) { _projectsCache = []; }
+
+    await ensureMainProject();
     renderProjects();
     renderHeaderProjectSelect();
     updateByggsattRow();
@@ -4325,7 +4591,7 @@ window.addEventListener('DOMContentLoaded', () => {
     loadHistory();          // load AFTER project is set so filter is correct
     updateGithubSection();  // setup github row based on active project
     refreshByggaBadge();    // tab badge + attention banner
-  });
+  })();
   setTimeout(() => runHealthCheck(), 800);
 });
 

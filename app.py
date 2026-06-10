@@ -9,6 +9,8 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import hashlib
+import hmac
 import re
 import subprocess
 import threading
@@ -17,7 +19,7 @@ from datetime import datetime
 import httpx
 import uvicorn
 import anthropic
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -33,6 +35,7 @@ executor = ThreadPoolExecutor(max_workers=80)
 @app.on_event("startup")
 async def startup():
     _migrate_sessions()
+    asyncio.ensure_future(_progress_gc_loop())
     # C1: Återställ items som fastnat i "byggs" vid föregående körning.
     # WIP-limiten tillåter bara ett aktivt bygge — ett hängt "byggs"-item
     # låser annars hela byggkön permanent tills servern manuellt rensas.
@@ -305,6 +308,8 @@ _DEFAULT_AGENT_MODELS = {
     # Simple evaluation / translation
     "completeness":    "google/gemini-2.5-flash",  # lite gav OKÄND: thinking åt 800-budgeten → trasig JSON
     "bestallarsammanfattaren": "google/gemini-2.5-flash",
+    # I3: Byggagentens modell — konfigurerbar via settings
+    "builder":         "anthropic/claude-sonnet-4.6",
 }
 
 _settings_cache = {"mtime": None, "data": None}
@@ -314,11 +319,12 @@ def load_settings() -> dict:
     if SETTINGS_FILE.exists():
         try:
             mtime = SETTINGS_FILE.stat().st_mtime
-            if _settings_cache["mtime"] == mtime and _settings_cache["data"] is not None:
-                return dict(_settings_cache["data"])  # copy — callers mutate (key masking)
-            data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-            _settings_cache.update(mtime=mtime, data=data)
-            return dict(data)
+            with _settings_lock:
+                if _settings_cache["mtime"] == mtime and _settings_cache["data"] is not None:
+                    return dict(_settings_cache["data"])  # copy — callers mutate (key masking)
+                data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+                _settings_cache.update(mtime=mtime, data=data)
+                return dict(data)
         except Exception:
             pass
     return {
@@ -398,6 +404,10 @@ _MODEL_PRICES = {
     "x-ai/grok-4.20":                 (1.25, 2.50),
     "meta-llama/llama-4-maverick":    (0.15, 0.60),
 }
+# Aliases so hyphen-variants never raise KeyError on price lookup
+_MODEL_PRICES["anthropic/claude-sonnet-4-6"] = _MODEL_PRICES.get("anthropic/claude-sonnet-4.6", 0)
+_MODEL_PRICES["claude-sonnet-4-6"] = _MODEL_PRICES.get("anthropic/claude-sonnet-4.6", 0)
+_MODEL_PRICES["claude-sonnet-4.6"] = _MODEL_PRICES.get("anthropic/claude-sonnet-4.6", 0)
 
 def _cost_usd(model: str, tok_in: int, tok_out: int):
     p = _MODEL_PRICES.get(model)
@@ -529,10 +539,10 @@ def _sig_tokens(it: dict) -> set:
 
 def _is_same_issue(a_tokens: set, b_tokens: set) -> bool:
     """Overlap fallback — primary regression matching is done semantically by Backloghållaren."""
-    if not a_tokens or not b_tokens:
+    if not a_tokens or not b_tokens or len(a_tokens) < 2 or len(b_tokens) < 2:
         return False
     inter = len(a_tokens & b_tokens)
-    return inter / min(len(a_tokens), len(b_tokens)) >= 0.5
+    return inter >= 3 and inter / min(len(a_tokens), len(b_tokens)) >= 0.65
 
 def backlog_add_items(new_items: list, project_id: str, session_id: str) -> list:
     """Append groomed backlog items with dedup + regression detection.
@@ -791,6 +801,9 @@ async def send_build_queue_item(item_id: str, payload: dict):
         item["status"] = "byggs"
         item["sent_at"] = datetime.now().isoformat(timespec="seconds")
         item["byggsatt_used"] = byggsatt or None
+        # I2/A1: Persistera repo och project_context så SSE-endpointen slipper URL-params (S1)
+        item["repo"] = {"name": profile.get("repo", ""), "branch": profile.get("branch", "main")}
+        item["project_context"] = build_project_context(profile)
         _queue_log(item, "skickad", f"försök {item['attempt_nr']}")
         _queue_write(items)
 
@@ -2492,6 +2505,9 @@ def _parse_agent_json(raw: str) -> dict:
         obj["suggestions"] = [_stringify_finding(x) for x in obj["suggestions"]]
         obj.pop("_error", None)
         return obj
+    repaired = _repair_truncated_json(text)
+    if repaired:
+        return repaired
     return FALLBACK
 
 
@@ -2783,6 +2799,15 @@ def _call_model(model: str, system: str, user: str, max_tokens: int, client,
 # ska den INTE hitta på funktionskrav ur koden — det gav K1–K6 om eval-skriptets interna
 # beteende när buggrapporten bara löd "iterera".
 _KRAV_MODE_DIRECTIVES = {
+    "ny_funktion": (
+        "\n\nLÄGE: NY FUNKTION. Bedöm om idén är tillräckligt konkret för att specialister ska kunna "
+        "granska den meningsfullt. En idé är FÖR VAGT om den saknar minst ett konkret krav — "
+        "t.ex. 'gör appen bättre', 'förbättra UX', 'lägg till något coolt'.\n"
+        "Om idén är för vag: returnera JSON med underlag: \"FÖR_VAGT\" och fyll oklarheter med "
+        "de 2–4 EXAKTA motfrågor beställaren måste svara på för att idén ska bli konkret. "
+        "Sätt krav till [] och tolkad_ide till en kort beskrivning av vad som saknas.\n"
+        "Om idén innehåller minst ett konkret krav: returnera normalt utan underlag-fältet."
+    ),
     "granska_kod": (
         "\n\nLÄGE: KODGRANSKNING. Det inskickade är befintlig kod, inte en funktionsidé. "
         "tolkad_ide = en mening om vad koden gör och vad granskningen ska fokusera på. "
@@ -3111,10 +3136,19 @@ def _progress_set(run_id: str, **kwargs):
         if agents_update:
             entry["agents"][agents_update[0]] = agents_update[1]
         entry["updated"] = datetime.now().timestamp()
-        # GC entries older than 15 min
-        cutoff = entry["updated"] - 900
-        for k in [k for k, v in _progress.items() if v.get("updated", 0) < cutoff]:
-            _progress.pop(k, None)
+        # GC borttagen — sker nu i bakgrundsjobbet
+
+
+async def _progress_gc_loop():
+    while True:
+        await asyncio.sleep(300)
+        cutoff = datetime.now().timestamp() - 900
+        with _progress_lock:
+            stale = [k for k, v in _progress.items() if v.get("updated", 0) < cutoff]
+            for k in stale:
+                _progress.pop(k, None)
+        if stale:
+            logger.debug("_progress GC: rensade %d stale entries", len(stale))
 
 
 @app.get("/api/progress/{run_id}")
@@ -3263,6 +3297,20 @@ async def review(payload: dict):
             krav_task = asyncio.ensure_future(_run_krav())
         else:
             krav_result = await _run_krav()
+            # VAG-INPUT GATE: om kravanalytikern bedömde idén som för vag — kör inte specialistrundan.
+            # Returnera istället motfrågor från promptsmeden så beställaren kan precisera sin idé.
+            if mode == "ny_funktion" and krav_result.get("underlag") == "FÖR_VAGT":
+                smith_result = await loop.run_in_executor(
+                    executor, run_prompt_smith, input_text, [], model, client, synth_usage, profile
+                )
+                return JSONResponse({
+                    "session_id": run_id,
+                    "results": [],
+                    "smith": smith_result,
+                    "krav": krav_result,
+                    "stats": {"total": 0, "approved": 0, "rejected": 0, "errors": 0},
+                    "vag_input": True,
+                })
             if krav_result.get("tolkad_ide") or krav_result.get("krav"):
                 krav_lines = "\n".join(f"- {k}" for k in krav_result.get("krav", []))
                 krav_system_context = (
@@ -4277,7 +4325,7 @@ async def github_fetch(payload: dict):
     try:
         tree_resp = await asyncio.get_running_loop().run_in_executor(
             executor,
-            lambda: __import__("httpx").get(tree_url, headers=headers, timeout=15.0)
+            lambda: httpx.get(tree_url, headers=headers, timeout=15.0)
         )
     except Exception as e:
         return JSONResponse({"error": f"Kunde inte nå GitHub: {e}"}, status_code=502)
@@ -4316,7 +4364,7 @@ async def github_fetch(payload: dict):
         try:
             resp = await asyncio.get_running_loop().run_in_executor(
                 executor,
-                lambda: __import__("httpx").get(url, headers=headers, timeout=10.0)
+                lambda: httpx.get(url, headers=headers, timeout=10.0)
             )
             if resp.status_code != 200:
                 return None
@@ -4341,8 +4389,22 @@ async def github_fetch(payload: dict):
         except Exception:
             return None
 
-    file_results = await asyncio.gather(*[fetch_file(f) for f in selected])
+    BATCH_SIZE = 10
+    batches = [selected[i:i+BATCH_SIZE] for i in range(0, len(selected), BATCH_SIZE)]
+    file_results = []
+    for batch in batches:
+        batch_results = await asyncio.gather(*[fetch_file(f) for f in batch])
+        file_results.extend(batch_results)
+        if len(batches) > 1:
+            await asyncio.sleep(0.3)
+
     files = [f for f in file_results if f]
+    none_count = sum(1 for f in file_results if f is None)
+    if none_count > len(selected) * 0.2:
+        logger.warning(
+            "GitHub fetch: %d/%d filer misslyckades — möjlig rate limit",
+            none_count, len(selected)
+        )
 
     # 3. Apply total char budget
     total_chars = 0
@@ -4383,7 +4445,46 @@ async def github_fetch(payload: dict):
         "file_manifest": file_manifest,
         "repo": repo,
         "branch": branch,
+        "fetch_warnings": f"{none_count} av {len(selected)} filer misslyckades" if none_count > len(selected) * 0.2 else None,
     }
+
+
+@app.post("/api/webhook/github")
+async def github_webhook(request: Request):
+    """Ta emot GitHub push-events och trigga automatisk kod-granskning.
+    Verifiera X-Hub-Signature-256 mot GITHUB_WEBHOOK_SECRET (om satt).
+    Logga push-event och signalera om bygge pågår."""
+    sig_header = request.headers.get("X-Hub-Signature-256", "")
+    body = await request.body()
+    secret = os.getenv("GITHUB_WEBHOOK_SECRET", "").encode()
+    if secret:
+        expected = "sha256=" + hmac.new(secret, body, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig_header, expected):
+            logger.warning("GitHub webhook: ogiltig signatur, avvisar förfrågan")
+            return JSONResponse({"error": "Invalid signature"}, status_code=403)
+    try:
+        payload = json.loads(body)
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON payload"}, status_code=400)
+    ref = payload.get("ref", "")
+    pusher = payload.get("pusher", {}).get("name", "unknown")
+    repo = payload.get("repository", {}).get("full_name", "unknown")
+    logger.info("GitHub webhook: push till %s ref=%s av %s", repo, ref, pusher)
+    # Trigga granskning om push är till main/master
+    if ref in ("refs/heads/main", "refs/heads/master"):
+        with _queue_lock:
+            items = _queue_load()
+        klara = [i for i in items if i.get("status") == "klar" and not i.get("deleted_at")]
+        if klara:
+            for item in klara:
+                asyncio.create_task(build_queue_review(item["id"], {}))
+            logger.info(
+                "GitHub webhook: push till %s — triggar automatisk granskning för %d klart bygge(n)",
+                repo, len(klara),
+            )
+        else:
+            logger.info("GitHub webhook: push till %s mottagen — inga klara byggen att granska", repo)
+    return JSONResponse({"ok": True})
 
 
 @app.get("/api/models")
@@ -4435,13 +4536,7 @@ async def health_check():
         results["openrouter"] = {"ok": False, "msg": "API-nyckel saknas"}
     else:
         try:
-            import openai as _openai
-            or_client = _openai.OpenAI(
-                api_key=or_key,
-                base_url="https://openrouter.ai/api/v1",
-                timeout=15.0,
-                default_headers={"HTTP-Referer": "https://prompt-team.local", "X-Title": "Prompt Team"},
-            )
+            or_client = get_openrouter_client()
             loop = asyncio.get_running_loop()
             resp = await asyncio.wait_for(
                 loop.run_in_executor(executor, lambda: or_client.chat.completions.create(
@@ -4580,7 +4675,7 @@ async def get_project_settings_api(project_id: str):
             {
                 "id": a["id"],
                 "name": a["name"],
-                "emoji": a.get("emoji", ""),
+                      "emoji": a.get("emoji", ""),
                 "phase": a.get("phase"),
                 "layer": a.get("layer"),
                 "modes": a.get("modes", []),
@@ -4592,225 +4687,490 @@ async def get_project_settings_api(project_id: str):
     }
 
 
-@app.post("/api/projects/{project_id}/settings")
-async def post_project_settings_api(project_id: str, payload: dict):
-    """Update per-project agent configuration.
-    payload: { disabled_agents: ["architecture", "i18n", ...] }
-    _ALWAYS_RUN_AGENT_IDS are silently kept active regardless."""
-    all_ids = {a["id"] for a in SPECIALIST_AGENTS}
-    raw_disabled = [a for a in (payload.get("disabled_agents") or [])
-                    if isinstance(a, str) and a in all_ids]
-    # Strip always-run agents — they can never be disabled
-    disabled = [a for a in raw_disabled if a not in _ALWAYS_RUN_AGENT_IDS]
-    patch = {
-        "disabled_agents": disabled,
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-    }
-    try:
-        result = save_project_settings(project_id, patch)
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-    silently_kept = [a for a in raw_disabled if a in _ALWAYS_RUN_AGENT_IDS]
-    return {
-        "ok": True,
-        "project_id": project_id,
-        "settings": result,
-        "silently_kept_active": silently_kept,
-    }
-
-
-@app.get("/api/sessions")
-async def api_list_sessions(project_id: str = "", offset: int = 0, limit: int = 50):
-    # Off the event loop — list_sessions does file I/O (and possibly Supabase)
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(executor, list_sessions, project_id, offset, limit)
-
-@app.post("/api/sessions")
-async def api_create_session(payload: dict):
-    """Save a session directly (used for feedback loop -> main project)."""
-    import uuid as _uuid
-    session_id = payload.get("id") or str(_uuid.uuid4())
-    loop = asyncio.get_running_loop()
-    save_result = await loop.run_in_executor(executor, save_session,
-        session_id,
-        payload.get("name", "Session"),
-        payload.get("mode", "post"),
-        payload.get("input_text", ""),
-        payload.get("context", ""),
-        payload.get("results", []),
-        payload.get("smith", {}),
-        payload.get("stats", {}),
-        payload.get("project_id", ""),
-    )
-    return {"ok": save_result["local"], "cloud": save_result["cloud"], "id": session_id}
-
-@app.get("/api/sessions/{session_id}")
-async def api_get_session(session_id: str):
-    loop = asyncio.get_running_loop()
-    s = await loop.run_in_executor(executor, get_session, session_id)
-    if not s:
-        return JSONResponse({"error": "Hittades inte"}, status_code=404)
-    return s
-
-@app.delete("/api/sessions/{session_id}")
-async def api_delete_session(session_id: str):
-    loop = asyncio.get_running_loop()
-    ok = await loop.run_in_executor(executor, delete_session, session_id)
-    return {"ok": ok}
-
-@app.get("/api/version")
-async def api_version():
-    """Returns mtime of index.html -- used by browser for live-reload polling."""
-    try:
-        mtime = (BASE_DIR / "index.html").stat().st_mtime
-    except Exception:
-        mtime = 0
-    return {"mtime": mtime}
-
-
 # ──────────────────────────────────────────────
-# CHAT ENDPOINTS
+# BUILDER AGENT — SSE-based agentic code builder
 # ──────────────────────────────────────────────
 
-@app.post("/api/chat")
-async def api_chat(payload: dict):
-    """SSE-streaming endpoint. The agent receives the user message, runs tools in a loop,
-    and streams text + tool events back as Server-Sent Events."""
-    chat_id = payload.get("chat_id", "default")
-    user_message = payload.get("message", "")
-    if not user_message.strip():
-        return JSONResponse({"error": "message kravs."}, status_code=400)
+# R2: Keyed by item_id. Capped at MAX_HISTORIES to prevent unbounded growth.
+_active_builders: dict = {}
+_builder_histories: dict = {}
+_builder_lock = threading.Lock()
+_cancel_flags: dict = {}
+MAX_HISTORIES = 50
 
-    api_key = ANTHROPIC_API_KEY or load_settings().get("api_key", "")
-    if not api_key:
-        return JSONResponse({"error": "ANTHROPIC_API_KEY saknas -- konfigurera nyckel i installningar."}, status_code=503)
+# S2: Command whitelist/blacklist for run_cmd in _exec_tool
+_CMD_WHITELIST = ("git ", "python --version", "where python", "dir ", "echo ")
+_CMD_BLACKLIST = ("uvicorn", "python app.py", "start ", "curl ", "wget ",
+                  "rm -rf", "del /s", "format ", "shutdown", "taskkill")
 
-    with _chat_lock:
-        history = _chat_sessions.setdefault(chat_id, [])
-        history.append({"role": "user", "content": user_message})
-        messages = list(history)
 
-    async def stream():
-        client = anthropic.Anthropic(api_key=api_key, timeout=120.0)
-        assistant_content_blocks = []
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-        loop = asyncio.get_event_loop()
-        current_messages = list(messages)
 
-        while True:
-            # Run blocking stream in executor so we don't block the event loop
-            def _run_stream(msgs):
-                collected_content = []
-                events_queue = []
-                with client.messages.stream(
-                    model="claude-sonnet-4-6",
-                    max_tokens=8096,
-                    system=(
-                        "Du ar en erfaren Python/JavaScript-utvecklare och byggassistent. "
-                        "Projektmappen ar C:/innob-agent/prompt-team. "
-                        "Kod pa engelska, UI-strangar pa svenska. "
-                        "Gor minimala, kirurgiska andringar."
-                    ),
-                    messages=msgs,
-                    tools=CHAT_TOOLS,
-                ) as stream_obj:
-                    for event in stream_obj:
-                        if hasattr(event, "type"):
-                            if event.type == "content_block_start":
-                                if event.content_block.type == "tool_use":
-                                    events_queue.append({
-                                        "type": "tool_start",
-                                        "name": event.content_block.name,
-                                        "id": event.content_block.id,
-                                    })
-                            elif event.type == "content_block_delta":
-                                if hasattr(event.delta, "text"):
-                                    events_queue.append({"type": "text", "content": event.delta.text})
-                    final_msg = stream_obj.get_final_message()
-                    collected_content = final_msg.content
-                return events_queue, final_msg, collected_content
+def _sse_err(msg: str) -> str:
+    return _sse({"type": "error", "text": msg})
 
-            events, final_msg, content_blocks = await loop.run_in_executor(
-                executor, _run_stream, current_messages
+
+def _sse_tool(cmd_name: str, cmd: str, result: str) -> str:
+    return _sse({"type": "tool_result", "name": cmd_name, "preview": result[:200]})
+
+
+def _safe_run_cmd(command: str, repo_path: Path) -> str:
+    """Run a shell command inside repo_path with whitelist/blacklist protection."""
+    cmd_lower = command.strip().lower()
+    if any(cmd_lower.startswith(b) for b in _CMD_BLACKLIST):
+        return f"[BLOCKERAT] Ej tillåtet: {command[:80]}"
+    if not any(cmd_lower.startswith(w) for w in _CMD_WHITELIST):
+        return f"[BLOCKERAT] Matchar inte whitelist. Tillåtna prefix: {', '.join(_CMD_WHITELIST)}"
+    try:
+        result = subprocess.run(
+            command, shell=True, cwd=str(repo_path),
+            capture_output=True, text=True, timeout=60
+        )
+        return (result.stdout + result.stderr).strip()[:4000]
+    except subprocess.TimeoutExpired:
+        return "[TIMEOUT] Kommandot tog för lång tid (>60s)."
+    except Exception as e:
+        return f"[FEL] {e}"
+
+
+BUILDER_TOOLS = [
+    {
+        "name": "read_file",
+        "description": "Läs rad-intervall från fil",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "line_start": {"type": "integer"},
+                "line_end": {"type": "integer"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "write_file",
+        "description": "Skriv/ersätt en fil",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "content": {"type": "string"},
+            },
+            "required": ["path", "content"],
+        },
+    },
+    {
+        "name": "search_file",
+        "description": "Sök mönster i fil (grep)",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string"},
+                "path": {"type": "string"},
+            },
+            "required": ["pattern"],
+        },
+    },
+    {
+        "name": "list_dir",
+        "description": "Lista filer i mapp",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "report_done",
+        "description": "Rapportera att bygget är klart",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+            },
+            "required": ["summary"],
+        },
+    },
+]
+
+
+async def _exec_tool(name: str, inp: dict, repo_path: Path) -> str:
+    """Execute a BUILDER_TOOLS call with path-traversal protection (S3)."""
+    repo_resolved = repo_path.resolve()
+
+    if name == "read_file":
+        rel = inp.get("path", "")
+        resolved = (repo_path / rel).resolve()
+        if not str(resolved).startswith(str(repo_resolved)):
+            return "[BLOCKERAT] Sökvägen pekar utanför repot."
+        try:
+            content = resolved.read_text(encoding="utf-8", errors="replace")
+            lines = content.splitlines()
+            line_start = max(0, (inp.get("line_start") or 1) - 1)
+            line_end = inp.get("line_end")
+            if line_end is not None:
+                selected = lines[line_start:line_end]
+            else:
+                selected = lines[line_start:line_start + 200]
+            result = "\n".join(selected)
+            # R6: Enforce 12k char limit server-side
+            MAX_READ_CHARS = 12_000
+            if len(result) > MAX_READ_CHARS:
+                result = result[:MAX_READ_CHARS]
+                result += "\n[TRUNKERAD — använd line_start/line_end för att läsa vidare]"
+            return result
+        except FileNotFoundError:
+            return f"[FEL] Filen hittades inte: {rel}"
+        except Exception as e:
+            return f"[FEL] {e}"
+
+    elif name == "write_file":
+        rel = inp.get("path", "")
+        resolved = (repo_path / rel).resolve()
+        if not str(resolved).startswith(str(repo_resolved)):
+            return "[BLOCKERAT] Sökvägen pekar utanför repot."
+        content = inp.get("content", "")
+        if len(content.encode("utf-8")) > 500 * 1024:
+            return "[BLOCKERAT] Innehållet är för stort (max 500KB)."
+        try:
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            resolved.write_text(content, encoding="utf-8")
+            return f"OK — {rel} skriven ({len(content)} tecken)"
+        except Exception as e:
+            return f"[FEL] {e}"
+
+    elif name == "search_file":
+        pattern = inp.get("pattern", "")
+        rel = inp.get("path", "")
+        if rel:
+            resolved = (repo_path / rel).resolve()
+            if not str(resolved).startswith(str(repo_resolved)):
+                return "[BLOCKERAT] Sökvägen pekar utanför repot."
+            search_target = str(resolved)
+        else:
+            search_target = str(repo_path)
+        try:
+            result = subprocess.run(
+                ["grep", "-rn", "--include=*.py", "--include=*.html", "--include=*.js",
+                 pattern, search_target],
+                capture_output=True, text=True, timeout=30
+            )
+            output = (result.stdout + result.stderr).strip()
+            if len(output) > 6000:
+                output = output[:6000] + "\n[TRUNKERAD]"
+            return output or "(inga träffar)"
+        except subprocess.TimeoutExpired:
+            return "[TIMEOUT]"
+        except Exception as e:
+            return f"[FEL] {e}"
+
+    elif name == "list_dir":
+        rel = inp.get("path", ".")
+        resolved = (repo_path / rel).resolve()
+        if not str(resolved).startswith(str(repo_resolved)):
+            return "[BLOCKERAT] Sökvägen pekar utanför repot."
+        try:
+            entries = sorted(resolved.iterdir(), key=lambda p: (p.is_file(), p.name))
+            lines = [("📁 " if e.is_dir() else "📄 ") + e.name for e in entries[:200]]
+            return "\n".join(lines) or "(tom mapp)"
+        except Exception as e:
+            return f"[FEL] {e}"
+
+    return f"[FEL] Okänt verktyg: {name}"
+
+
+@app.get("/api/builder/stream/{item_id}")
+async def builder_stream(item_id: str, request: Request):
+    """SSE endpoint: agentic code builder streams build progress to the client."""
+
+    async def generate():
+        # R1: always clean up on exit
+        try:
+            yield _sse({"type": "status", "text": "Förbereder..."})
+
+            s = load_settings()
+            repo_path = Path(s.get("local_path") or str(BASE_DIR))
+            if not repo_path.exists():
+                yield _sse_err(f"Lokal sökväg finns inte: {repo_path}"); return
+
+            with _queue_lock:
+                items = _queue_load()
+                item = next((i for i in items
+                             if i.get("id") == item_id and not i.get("deleted_at")), None)
+            if not item:
+                yield _sse_err("Ärende hittades inte."); return
+            if item["status"] != "byggs":
+                yield _sse_err(f"Felaktig status: {item['status']} — förväntat 'byggs'."); return
+
+            # R3: handle server-restart (lost history)
+            if item_id not in _builder_histories:
+                yield _sse({"type": "status", "text":
+                    "Serverhistoriken är borta (omstart?). Kontrollera git-loggen:\n"
+                    "• Har agenten committat? Pusha manuellt och klicka Kontrollera mot GitHub\n"
+                    "• Inget committat? Klicka Avbryt och starta om"})
+
+            # S4: only fetch/pull if remote exists
+            remote_check = _safe_run_cmd("git remote get-url origin", repo_path)
+            has_remote = "fatal" not in remote_check.lower() and bool(remote_check.strip())
+            if has_remote:
+                r = _safe_run_cmd("git fetch origin", repo_path)
+                yield _sse_tool("run_cmd", "git fetch origin", r)
+                r = _safe_run_cmd("git pull --ff-only", repo_path)
+                yield _sse_tool("run_cmd", "git pull --ff-only", r)
+            else:
+                yield _sse({"type": "status", "text": "Inget remote — hoppar över fetch/pull."})
+
+            # R4: WIP-commit if dirty tree before agent starts
+            dirty = _safe_run_cmd("git status --porcelain", repo_path)
+            if dirty.strip():
+                yield _sse({"type": "status", "text": "Committar befintliga ändringar som WIP..."})
+                _safe_run_cmd("git add -A", repo_path)
+                _safe_run_cmd(f'git commit -m "wip: pre-agent [{item["title"][:50]}]"', repo_path)
+
+            api_key = load_settings().get("api_key", "")
+            client = anthropic.AsyncAnthropic(api_key=api_key, timeout=120.0)
+
+            # I3: configurable builder model
+            raw_model = get_agent_model("builder", load_settings().get("model", "claude-sonnet-4-6"))
+            builder_model = raw_model.replace("anthropic/", "")
+
+            # I2: project_context from item (persisted at /send — no URL params needed, fixes S1)
+            project_ctx = item.get("project_context", "")
+
+            system = (
+                "You are an expert software engineer implementing a spec exactly as written.\n\n"
+                f"Project context:\n{project_ctx}\n\n"
+                "Rules:\n"
+                "- app.py and index.html are ~4000 lines each. ALWAYS use search_file first to locate\n"
+                "  relevant sections, then read_file with line_start/line_end. Never read a large file in full.\n"
+                "- Make minimal, focused changes. Do not refactor code outside the spec scope.\n"
+                "- Match the existing code style exactly.\n"
+                "- Do NOT start the server. Do NOT install packages. Do NOT modify .git/ directly.\n"
+                "- When all changes are done, call report_done with a summary of what was built.\n"
             )
 
-            # Yield all streamed events
-            for ev in events:
-                yield f"data: {json.dumps(ev)}\n\n"
+            lv = item.get("last_verdict") or {}
+            kvarstaende = lv.get("kvarstaende") or []
+            retry_prefix = ""
+            if kvarstaende:
+                retry_prefix = (
+                    "FÖREGÅENDE FÖRSÖK UNDERKÄNDES. Kvarstående:\n" +
+                    "\n".join(f"- {k}" for k in kvarstaende[:10]) + "\n\n"
+                )
 
-            assistant_content_blocks = content_blocks
+            full_prompt = retry_prefix + item["spec_markdown"]
+            if item.get("byggsatt_used"):
+                full_prompt += "\n\n" + str(item["byggsatt_used"])
 
-            if final_msg.stop_reason == "end_turn":
-                break
+            messages = [{"role": "user", "content": full_prompt}]
 
-            if final_msg.stop_reason == "tool_use":
+            # R2: cap history size
+            if len(_builder_histories) >= MAX_HISTORIES:
+                oldest = next(iter(_builder_histories))
+                del _builder_histories[oldest]
+            _builder_histories[item_id] = messages.copy()
+
+            yield _sse({"type": "status", "text": "Agenten startar..."})
+
+            MAX_TURNS = 30
+            done = False
+            for turn in range(MAX_TURNS):
+                # R8: check cancel flag
+                if _cancel_flags.get(item_id, asyncio.Event()).is_set():
+                    yield _sse({"type": "status", "text": "Bygget avbröts."})
+                    return
+
+                if await request.is_disconnected():
+                    break
+
+                # R7: keepalive via parallel task
+                api_task = asyncio.create_task(client.messages.create(
+                    model=builder_model,
+                    max_tokens=8192,
+                    system=system,
+                    tools=BUILDER_TOOLS,
+                    messages=messages,
+                ))
+                while not api_task.done():
+                    try:
+                        await asyncio.wait_for(asyncio.shield(api_task), timeout=15)
+                        break
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+                response = api_task.result()
+
+                assistant_content = []
+                for block in response.content:
+                    if block.type == "text":
+                        yield _sse({"type": "text", "text": block.text})
+                        assistant_content.append({"type": "text", "text": block.text})
+                    elif block.type == "tool_use":
+                        assistant_content.append(block.model_dump())
+
+                messages.append({"role": "assistant", "content": assistant_content})
+                _builder_histories[item_id] = messages.copy()
+
+                if response.stop_reason == "end_turn":
+                    break
+                if response.stop_reason != "tool_use":
+                    break
+
                 tool_results = []
-                for block in content_blocks:
-                    if block.type == "tool_use":
-                        try:
-                            result = await loop.run_in_executor(
-                                executor, _execute_chat_tool, block.name, block.input
-                            )
-                        except Exception as e:
-                            result = f"FEL: {e}"
-                        yield f"data: {json.dumps({'type': 'tool_result', 'name': block.name, 'content': result[:2000]})}\n\n"
+                for block in response.content:
+                    if block.type != "tool_use":
+                        continue
+                    bname = block.name
+                    binp = block.input
+
+                    yield _sse({"type": "tool_start", "name": bname, "input": binp})
+
+                    if bname == "report_done":
+                        done = True
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
-                            "content": result,
+                            "content": "Acknowledged. Proceeding to commit locally.",
                         })
+                        yield _sse({"type": "tool_result", "name": bname,
+                                    "preview": binp.get("summary", "")})
+                        break
+                    else:
+                        result = await _exec_tool(bname, binp, repo_path)
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": str(result),
+                        })
+                        yield _sse({"type": "tool_result", "name": bname,
+                                    "preview": str(result)[:300]})
 
-                current_messages.append({"role": "assistant", "content": content_blocks})
-                current_messages.append({"role": "user", "content": tool_results})
-                continue
+                messages.append({"role": "user", "content": tool_results})
+                _builder_histories[item_id] = messages.copy()
 
-            # Unknown stop reason — break to avoid infinite loop
-            break
+                if done:
+                    break
+            else:
+                # R5: max turns — fall through to commit
+                yield _sse({"type": "status",
+                            "text": "Max 30 varv nått — committar ändå det som gjorts."})
 
-        # Save assistant response to session history
-        text_content = " ".join(
-            b.text for b in assistant_content_blocks if hasattr(b, "text")
-        )
-        with _chat_lock:
-            _chat_sessions[chat_id].append({"role": "assistant", "content": text_content})
+            # Step C: local git commit. NEVER push automatically — push is always a manual user action.
+            yield _sse({"type": "status", "text": "Committar ändringar lokalt..."})
+            commit_msg = f"feat: {item['title'][:72]}"
+            _safe_run_cmd("git add -A", repo_path)
+            _safe_run_cmd(f'git commit -m "{commit_msg}"', repo_path)
+            sha_r = _safe_run_cmd("git rev-parse HEAD", repo_path)
+            commit_sha = sha_r.strip()
+            stat_r = _safe_run_cmd("git diff HEAD~1 --stat", repo_path)
 
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            if "nothing to commit" in stat_r.lower() or not commit_sha:
+                yield _sse({"type": "status", "text": "Inga filändringar att committa."})
+                commit_sha = ""
+                stat_r = ""
+            else:
+                yield _sse({"type": "status", "text": f"Commit klar:\n{stat_r[:600]}"})
 
-    return StreamingResponse(stream(), media_type="text/event-stream")
+            # Step D: ready_to_push — stream event and stop. User pushes manually (C2).
+            yield _sse({
+                "type": "ready_to_push",
+                "commit_sha": commit_sha,
+                "diff_stat": stat_r[:600],
+                "text": (
+                    "Klart! Jag har sparat ändringarna lokalt.\n\n"
+                    "Nästa steg:\n"
+                    "  1. git push origin main  (i din terminal)\n"
+                    "  2. Klicka Pusha och kontrollera mot GitHub på kortet"
+                ),
+            })
+
+        finally:
+            _active_builders.pop(item_id, None)
+            _cancel_flags.pop(item_id, None)
+
+    task = asyncio.current_task()
+    if task:
+        _active_builders[item_id] = task
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
-@app.get("/api/chat/diff")
-async def api_chat_diff():
-    """Return full git diff for the working directory."""
-    try:
-        result = subprocess.run(
-            "git diff",
-            shell=True, capture_output=True, text=True,
-            timeout=15, cwd=str(PROJECT_DIR)
-        )
-        return {"diff": result.stdout, "ok": True}
-    except Exception as e:
-        return {"diff": "", "ok": False, "error": str(e)}
+@app.delete("/api/builder/stream/{item_id}")
+async def cancel_builder(item_id: str):
+    """Cancel a running builder — reset item to kö."""
+    # R8: signal via event to avoid corrupting mid-write state
+    flag = asyncio.Event()
+    flag.set()
+    _cancel_flags[item_id] = flag
 
+    task = _active_builders.pop(item_id, None)
+    if task:
+        task.cancel()
 
-@app.get("/api/chat/{chat_id}")
-async def api_chat_history(chat_id: str):
-    """Return message history for a chat session."""
-    with _chat_lock:
-        messages = list(_chat_sessions.get(chat_id, []))
-    return {"messages": messages}
+    with _queue_lock:
+        items = _queue_load()
+        it = next((i for i in items if i.get("id") == item_id), None)
+        if it and it["status"] == "byggs":
+            it["status"] = "kö"
+            _queue_log(it, "avbruten", "manuellt")
+            _queue_write(items)
 
-
-@app.delete("/api/chat/{chat_id}")
-async def api_chat_delete(chat_id: str):
-    """Clear message history for a chat session."""
-    with _chat_lock:
-        _chat_sessions.pop(chat_id, None)
+    _builder_histories.pop(item_id, None)
     return {"ok": True}
 
-if __name__ == "__main__":
-    import sys
-    dev_mode = "--dev" in sys.argv
-    port = int(os.environ.get("PORT", 8001))
-    host = "0.0.0.0" if os.environ.get("RAILWAY_ENVIRONMENT") else "127.0.0.1"
-    uvicorn.run("app:app", host=host, port=port, reload=dev_mode)
+
+@app.post("/api/builder/followup/{item_id}")
+async def builder_followup(item_id: str, payload: dict):
+    """Append a follow-up message to a running build (mid-build only).
+    Post-reject retries use /send instead — that is the only case where spec is rewritten."""
+    message = payload.get("message", "").strip()
+    if not message:
+        return JSONResponse({"error": "Tomt meddelande."}, status_code=400)
+
+    with _queue_lock:
+        items = _queue_load()
+        it = next((i for i in items if i.get("id") == item_id and not i.get("deleted_at")), None)
+    if not it:
+        return JSONResponse({"error": "Item hittades inte."}, status_code=404)
+
+    hist = _builder_histories.get(item_id, [])
+    hist.append({"role": "user", "content": message})
+    _builder_histories[item_id] = hist
+    return {"ok": True}
+
+
+@app.get("/api/builder/history/{item_id}")
+async def builder_history(item_id: str):
+    """Return in-memory message history for a build session (used for reconnect)."""
+    hist = _builder_histories.get(item_id, [])
+    return {"item_id": item_id, "messages": hist}
+ mid-build use only (status = byggs). Post-reject retries use /send instead."""
+    message = payload.get("message", "").strip()
+    if not message:
+        return JSONResponse({"error": "Tomt meddelande."}, status_code=400)
+
+    with _queue_lock:
+        items = _queue_load()
+        it = next((i for i in items if i.get("id") == item_id and not i.get("deleted_at")), None)
+    if not it:
+        return JSONResponse({"error": "Item hittades inte."}, status_code=404)
+
+    # Append to history so it is injected in the next tool-loop iteration
+    hist = _builder_histories.get(item_id, [])
+    hist.append({"role": "user", "content": message})
+    _builder_histories[item_id] = hist
+    return {"ok": True}
+
+
+@app.get("/api/builder/history/{item_id}")
+async def builder_history(item_id: str):
+    """Return the in-memory message history for a build session (for reconnect)."""
+    hist = _builder_histories.get(item_id, [])
+    return {"item_id": item_id, "messages": hist}
