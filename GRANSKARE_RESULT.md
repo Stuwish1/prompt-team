@@ -1,8 +1,5 @@
 # Granskningsresultat
-**Datum:** 2026-06-10 21:32:50
-**Items:**
-- AGENT-FIX-2: review_started_at läcker i early-exit paths — permanent itemlåsning
-- AGENT-FIX-3: Shell injection i git_commit_push + _chat_sessions GC
-- DRY-SPRINT4: R6 (git-identitet från settings) + R7 (_github_headers helper)
+**Datum:** 2026-06-10 21:44:58
+**Items:** UX-SPRINT6: UX-1 (alert×7) + UX-6 (confirm×5) + UX-21 (prompt×2) → barnvänliga e | CHATBOX-POLISH: run_id recovery + project_context vid /send + .gitignore
 **Beslut:** ✅ GODKÄND
-**Commit:** 413f1ee (pushad till main)
+**Commit:** aedd65f (pushad till main)

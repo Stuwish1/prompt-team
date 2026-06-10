@@ -3540,7 +3540,12 @@
       "success": true,
       "files_changed": [],
       "summary": "Alla alert(), confirm() och prompt()-anrop är redan ersatta i index.html — inga ändringar behövdes."
-    }
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:44:51"
+    },
+    "updated_at": "2026-06-10T21:44:51"
   },
   {
     "id": "eac32328-ca6c-4702-bee9-f8e689a48436",
@@ -3559,7 +3564,12 @@
         ".gitignore"
       ],
       "summary": "D2: Step E i builder_stream emittar review_started-event; handleBuilderEvent + fetchBuilderRecovery i frontend; recovery-knapp i renderQueueBox. AM: redan implementerat. G5: .gitignore kompleterad med 5 saknade rader."
-    }
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:44:51"
+    },
+    "updated_at": "2026-06-10T21:44:51"
   },
   {
     "id": "220d7a8b-7634-4aeb-a784-ab567abfed50",
@@ -3567,7 +3577,7 @@
     "title": "KID-SPRINT1: Barnvänliga felmeddelanden + verktygsnamn + git-rubrik i chat",
     "spec_markdown": "## CONTEXT\nKID-agent flaggar att chat-gränssnittet (index.html) visar teknisk jargong och råa felmeddelanden för den primära användaren (10 år, utan teknisk bakgrund). Tre snabba fixar behövs.\n\n## TASK\n\n### KID-1 — Generiska felmeddelanden i chatSend() och chatApprove()\nFil: index.html, catch-block i chatSend() och chatApprove() (~rad 2245 och ~2282)\n\nSök på: assistantBubble.textContent = 'Fel: '\nByt ut alla förekomster från:\n  assistantBubble.textContent = 'Fel: ' + e.message;\ntill:\n  assistantBubble.textContent = 'Något gick fel. Kontrollera din anslutning och försök igen. 🙈';\n\n### KID-2 — Översätt verktygsnamn i chatbubblor\nFil: index.html, appendToolCall() (~rad 2147)\n\nLägg till en toolLabels-mappning direkt i funktionen:\n  const toolLabels = {\n    read_file:    '📖 Läser filer',\n    bash_execute: '🛠️ Kör kommandon',\n    git_status:   '✅ Kontrollerar koden',\n    write_file:   '✏️ Skriver filer',\n    search:       '🔍 Söker...',\n  };\nOch ersätt raden som sätter innerHTML i details-elementet med:\n  details.innerHTML = '<summary>⚙️ ' + (toolLabels[name] || '🔧 Arbetar...') + '</summary><pre>...</pre>';\n\n### KID-3 — Byt \"Ändringar (git diff)\"-rubriken\nFil: index.html, ~rad 1119\n\nÄndra:\n  <h3>Ändringar (git diff)</h3>\ntill:\n  <h3>Förhandsgranska ändringarna</h3>\n\n## ACCEPTANCE CRITERIA\n- [ ] Inga 'Fel: ' + e.message-strängar kvar i chatSend/chatApprove catch-block\n- [ ] appendToolCall() använder toolLabels-mappning — inga råa funktionsnamn visas för användaren\n- [ ] Rubriken \"git diff\" är borttagen och ersatt med barnvänlig text\n",
     "spec_bestallare": "KID-agent fynd (2026-06-10 21:27)",
-    "status": "kö",
+    "status": "byggs",
     "position": 10022,
     "created_at": "2026-06-10T21:34:04",
     "attempt_nr": 0
