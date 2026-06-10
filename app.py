@@ -84,6 +84,8 @@ _DEFAULT_AGENT_MODELS = {
     "rotorsak":        "google/gemini-2.5-flash",
     # Backlog grooming — structuring task, Gemini Flash is fast + reliable JSON
     "backloghallaren": "google/gemini-2.5-flash",
+    # Byggordning + bugg/feature-typning — strukturerande, flash räcker
+    "planeraren":      "google/gemini-2.5-flash",
     # Final user-facing spec — Sonnet as quality anchor + vendor hedge
     "prompt_smith":    "anthropic/claude-sonnet-4.6",
     # Simple evaluation / translation
@@ -399,7 +401,8 @@ def _queue_log(item: dict, event: str, detail: str = ""):
     item["updated_at"] = datetime.now().isoformat(timespec="seconds")
 
 def queue_create_item(project_id: str, title: str, spec_markdown: str,
-                      spec_bestallare: str = "", source: dict = None) -> dict:
+                      spec_bestallare: str = "", source: dict = None,
+                      fas_grupp: str = None, fas_nr: int = None, fas_total: int = None) -> dict:
     now = datetime.now().isoformat(timespec="seconds")
     with _queue_lock:
         items = _queue_load()
@@ -414,6 +417,9 @@ def queue_create_item(project_id: str, title: str, spec_markdown: str,
             "position": (max(proj_positions) + 10) if proj_positions else 10,
             "status": "kö",
             "source": source or {"type": "manuell"},
+            "fas_grupp": fas_grupp,   # delmoment i samma ärende delar grupp-id
+            "fas_nr": fas_nr,         # 1..N — /send vägrar fas N om N-1 inte är klar
+            "fas_total": fas_total,
             "byggsatt_used": None,
             "attempt_nr": 0,
             "sent_at": None,
@@ -467,6 +473,16 @@ async def patch_build_queue(item_id: str, payload: dict):
         if "status" in payload:
             if payload["status"] not in QUEUE_STATUSES:
                 return JSONResponse({"error": f"Ogiltig status. Tillåtna: {', '.join(QUEUE_STATUSES)}"}, status_code=400)
+            # Att friskförklara ett underkänt bygge är ett MEDVETET beslut — kräv motivering,
+            # logga den i ärendehistoriken så beslutet går att granska i efterhand.
+            if payload["status"] == "klar" and item.get("status") == "behover_dig":
+                reason = str(payload.get("override_reason", "")).strip()
+                if len(reason) < 10:
+                    return JSONResponse(
+                        {"error": "Att markera ett underkänt bygge som klart kräver en motivering "
+                                  "(minst 10 tecken) — den loggas i ärendehistoriken."},
+                        status_code=400)
+                _queue_log(item, "friskforklarad_trots_underkant", reason)
             item["status"] = payload["status"]
             _queue_log(item, "status_override", payload["status"])
         if "title" in payload:
@@ -517,6 +533,30 @@ async def send_build_queue_item(item_id: str, payload: dict):
         if busy:
             return JSONResponse({"error": f"Ett bygge pågår redan: '{busy['title']}'. Slutför det först.",
                                  "busy_item_id": busy["id"]}, status_code=409)
+        # GRÖN-GATE: ett underkänt bygge blockerar ALLA andra ärenden i projektet.
+        # Man fixar det röda (omförsök på det är tillåtet) eller markerar det klart
+        # med motivering — men man bygger inte vidare ovanpå något som är trasigt.
+        red = next((i for i in items if i.get("project_id") == item["project_id"]
+                    and i.get("status") == "behover_dig" and not i.get("deleted_at")
+                    and i.get("id") != item_id), None)
+        if red:
+            return JSONResponse(
+                {"error": f"'{red['title']}' är underkänt och måste bli grönt först. "
+                          "Skicka om det, eller markera det klart med motivering.",
+                 "blocking_item_id": red["id"]}, status_code=409)
+        # FAS-LÅS: delmoment byggs i ordning — fas N kräver att fas N-1 är klar
+        if item.get("fas_grupp"):
+            blocking_phase = next((i for i in items
+                                   if i.get("fas_grupp") == item["fas_grupp"]
+                                   and not i.get("deleted_at")
+                                   and (i.get("fas_nr") or 0) < (item.get("fas_nr") or 0)
+                                   and i.get("status") != "klar"), None)
+            if blocking_phase:
+                return JSONResponse(
+                    {"error": f"Fas {blocking_phase.get('fas_nr')} ('{blocking_phase['title']}') "
+                              f"måste vara klar innan fas {item.get('fas_nr')} kan byggas.",
+                     "blocking_item_id": blocking_phase["id"]}, status_code=409)
+        was_retry_after_fail = item["status"] == "behover_dig"
         item["attempt_nr"] = item.get("attempt_nr", 0) + 1
         item["status"] = "byggs"
         item["sent_at"] = datetime.now().isoformat(timespec="seconds")
@@ -524,11 +564,48 @@ async def send_build_queue_item(item_id: str, payload: dict):
         _queue_log(item, "skickad", f"försök {item['attempt_nr']}")
         _queue_write(items)
 
-    feedback = ""
+    # ── SPEC-OMSKRIVNING VID UNDERKÄNT: byggaren ska få en UPPDATERAD spec där
+    # kvarståendena är inarbetade som krav — inte gammal spec + bilaga. Gamla
+    # versioner sparas. Fallerar omskrivningen → fall tillbaka på feedback-lappen.
     lv = item.get("last_verdict") or {}
-    if lv.get("kvarstaende"):
+    kvarstaende = lv.get("kvarstaende") or []
+    spec_rewritten = False
+    if was_retry_after_fail and kvarstaende:
+        try:
+            loop = asyncio.get_running_loop()
+            client = get_client()
+            usage = []
+            new_spec = await asyncio.wait_for(
+                loop.run_in_executor(executor, _rewrite_spec_after_fail,
+                                     item["spec_markdown"], kvarstaende, profile, client, usage),
+                timeout=240.0)
+            if new_spec and len(new_spec.strip()) > 200:
+                with _queue_lock:
+                    items = _queue_load()
+                    it2 = next((i for i in items if i.get("id") == item_id), None)
+                    if it2:
+                        versions = it2.setdefault("spec_versions", [])
+                        versions.append({
+                            "attempt_nr": item["attempt_nr"] - 1,
+                            "spec_markdown": it2["spec_markdown"],
+                            "replaced_at": datetime.now().isoformat(timespec="seconds"),
+                        })
+                        it2["spec_versions"] = versions[-5:]  # behåll max 5 gamla
+                        it2["spec_markdown"] = new_spec.strip()
+                        _queue_log(it2, "spec_omskriven",
+                                   f"{len(kvarstaende)} kvarstående inarbetade (försök {item['attempt_nr']})")
+                        _queue_write(items)
+                        item = it2
+                        spec_rewritten = True
+        except Exception as e:
+            logger.warning("[spec_rewrite] misslyckades, faller tillbaka på feedback-lapp: %s", e)
+
+    feedback = ""
+    if kvarstaende and not spec_rewritten:
         feedback = "FÖREGÅENDE FÖRSÖK UNDERKÄNDES. Kvarstående problem:\n" + \
-                   "\n".join(f"- {k}" for k in lv["kvarstaende"][:10])
+                   "\n".join(f"- {k}" for k in kvarstaende[:10])
+    elif spec_rewritten:
+        feedback = "Specen är OMSKRIVEN efter underkänt bygge — kvarstående problem är nu inarbetade som krav."
 
     job = {
         "queue_item_id": item["id"],
@@ -536,6 +613,7 @@ async def send_build_queue_item(item_id: str, payload: dict):
         "project_id": item["project_id"],
         "title": item["title"],
         "spec_markdown": item["spec_markdown"],
+        "spec_rewritten": spec_rewritten,
         "feedback": feedback,
         "byggsatt": item.get("byggsatt_used") or {},
         "project_context": build_project_context(profile),
@@ -592,7 +670,22 @@ async def advance_build_queue(project_id: str = ""):
              if i.get("project_id") == project_id and not i.get("deleted_at")]
     if any(i.get("status") == "byggs" for i in items):
         return {"next_item": None, "reason": "Ett bygge pågår redan."}
-    queued = sorted([i for i in items if i.get("status") == "kö"],
+    # GRÖN-GATE: ett underkänt bygge stoppar kön — det måste bli grönt först
+    red = next((i for i in items if i.get("status") == "behover_dig"), None)
+    if red:
+        return {"next_item": None,
+                "reason": f"'{red['title']}' är underkänt och måste bli grönt först.",
+                "blocking_item_id": red["id"]}
+
+    def _phase_locked(i):
+        if not i.get("fas_grupp"):
+            return False
+        return any(s.get("fas_grupp") == i["fas_grupp"]
+                   and (s.get("fas_nr") or 0) < (i.get("fas_nr") or 0)
+                   and s.get("status") != "klar"
+                   for s in items if not s.get("deleted_at"))
+
+    queued = sorted([i for i in items if i.get("status") == "kö" and not _phase_locked(i)],
                     key=lambda i: i.get("position", 0))
     return {"next_item": queued[0] if queued else None}
 
@@ -1560,6 +1653,59 @@ BACKLOG_AGENT = {
     ),
 }
 
+# ── Planeraren — AI-bedömd BYGGORDNING (beroenden, inte bara allvar) ──
+# Backloghållaren prioriterar efter allvar (P0/P1/P2); Planeraren svarar på den andra
+# frågan: i vilken ORDNING måste sakerna byggas för att inte bygga på lös grund?
+PLANNER_AGENT = {
+    "id": "planeraren",
+    "name": "Planeraren",
+    "emoji": "📐",
+    "phase": "synth",
+    "model": "google/gemini-2.5-flash",
+    "system": (
+        "Du är teknisk projektledare. Du får en backlog med ärenden och ska bestämma BYGGORDNINGEN — "
+        "vad som måste göras klart först för att resten ska gå att bygga på stabil grund.\n\n"
+        "Regler för ordningen:\n"
+        "• Fundament före påbyggnad — schemaändringar, datamodell, auth och delade verktyg FÖRE features som beror på dem.\n"
+        "• Blockerande buggar före nya features — en bugg i något andra ärenden rör måste fixas först.\n"
+        "• Säkerhetshål tidigt — de blir dyrare att fixa ju mer som byggs ovanpå.\n"
+        "• Oberoende småsaker sist eller var som helst — markera dem med beror_pa: [].\n"
+        "• Prioritet (P0/P1/P2) är EN signal men beroenden trumfar: ett P1-fundament går före en P0 som beror på det.\n\n"
+        "Typa även varje ärende: \"bugg\" (något är trasigt), \"feature\" (ny förmåga) eller \"forbattring\" (refaktorering/kvalitet).\n\n"
+        "Returnera ENBART JSON — id:n EXAKT som i input:\n"
+        '{"ordning":[{"id":"...","ordning_nr":1,"typ":"bugg"|"feature"|"forbattring",'
+        '"beror_pa":["id på ärenden som måste vara klara först"],"motivering":"en mening varför denna plats"}],'
+        '"sammanfattning":"2-3 meningar: vad ska göras först och varför"}'
+    ),
+}
+
+def run_planner_agent(backlog_items: list, model: str, client, usage_out: list = None) -> dict:
+    """Kör Planeraren över öppna backlogfynd → byggordning + typning."""
+    FALLBACK = {"ordning": [], "sammanfattning": ""}
+    if not backlog_items:
+        return FALLBACK
+    lines = []
+    for i in backlog_items[:40]:
+        lines.append(
+            f"id={i['id']} | [{i.get('priority','P2')}/{i.get('effort','M')}] {i.get('title','')}\n"
+            f"  problem: {i.get('finding','')[:200]}\n"
+            f"  åtgärd: {i.get('suggestion','')[:150]}"
+        )
+    combined = "BACKLOG ATT ORDNA:\n" + "\n".join(lines)
+    try:
+        pl_model = get_agent_model("planeraren", PLANNER_AGENT["model"])
+        raw = _call_model(pl_model, PLANNER_AGENT["system"], combined, 3000, client, usage_out=usage_out)
+        first = _extract_first_json(raw.strip())
+        if first:
+            obj = json.loads(first)
+            obj.setdefault("ordning", [])
+            obj.setdefault("sammanfattning", "")
+            return obj
+    except Exception as e:
+        logger.error("[planeraren] failed: %s", e)
+    return FALLBACK
+
+
 # ── Beställarsammanfattaren — klarspråk för icke-kodare (output-lager) ──
 BESTALLARE_AGENT = {
     "id": "bestallarsammanfattaren",
@@ -2100,6 +2246,26 @@ def run_prompt_smith(original_input: str, agent_results: list, model: str, clien
         return {"type": "error", "content": f"Kunde inte generera prompt: {str(e)[:200]}"}
 
 
+def _rewrite_spec_after_fail(spec: str, kvarstaende: list, profile: dict, client,
+                             usage_out: list = None) -> str:
+    """Promptsmeden skriver om en underkänd spec så kvarståendena blir explicita krav.
+    Returnerar ren markdown (ingen JSON)."""
+    model = get_agent_model("prompt_smith", PROMPT_SMITH.get("model", "anthropic/claude-sonnet-4.6"))
+    system = (
+        "Du är Promptsmeden. Bygget enligt specen nedan UNDERKÄNDES i granskning. "
+        "Skriv om HELA specen så att de kvarstående problemen är inarbetade som explicita krav, "
+        "testfall och acceptanskriterier — inte som en bilaga i slutet. "
+        "Behåll struktur och allt som fortfarande gäller. Stryk inget som inte ersätts. "
+        "Returnera ENBART den omskrivna specen i markdown — ingen inledning, ingen JSON."
+        + byggsatt_smith_directives(profile or {})
+    )
+    user = ("KVARSTÅENDE PROBLEM FRÅN GRANSKNINGEN:\n"
+            + "\n".join(f"- {k}" for k in kvarstaende[:10])
+            + f"\n\nSPEC ATT SKRIVA OM:\n{spec[:20000]}")
+    return _call_model(model, system, user, 5000, client, want_json=False,
+                       usage_out=usage_out, timeout_s=220.0)
+
+
 def run_backlog_agent(agent_results: list, model: str, client, project_id: str = "",
                       usage_out: list = None) -> dict:
     """Run Backloghållaren — turns findings into a deduplicated, prioritized backlog.
@@ -2603,11 +2769,12 @@ async def get_backlog(project_id: str = ""):
     items = _backlog_load()
     if project_id:
         items = [i for i in items if i.get("project_id") == project_id]
-    # Sort: open/regressed first, then by priority, then newest
+    # Sort: open/regressed first, then Planerarens byggordning, then priority, then newest
     prio_rank = {"P0": 0, "P1": 1, "P2": 2}
     status_rank = {"återkommit": 0, "öppen": 1, "pågår": 2, "åtgärdad": 3}
     items.sort(key=lambda i: (
         status_rank.get(i.get("status"), 9),
+        i.get("ordning_nr") or 999,
         prio_rank.get(i.get("priority"), 9),
         i.get("created_at", ""),
     ))
@@ -2668,9 +2835,200 @@ async def clear_backlog(payload: dict):
     return {"ok": True, "removed": removed}
 
 
+@app.post("/api/backlog/plan")
+async def plan_backlog(payload: dict):
+    """Planeraren bedömer BYGGORDNING för projektets öppna fynd — fundament före
+    påbyggnad, blockerande buggar före features. Skriver ordning/typ/beroenden på items."""
+    project_id = payload.get("project_id", "")
+    if not project_id:
+        return JSONResponse({"error": "project_id krävs."}, status_code=400)
+
+    s = load_settings()
+    client = get_client()
+    if not s.get("openrouter_key", "").strip() and not client:
+        return JSONResponse({"error": "Ingen API-nyckel konfigurerad."}, status_code=400)
+    model = s.get("model", "google/gemini-2.5-flash")
+
+    with _backlog_lock:
+        all_items = _backlog_load()
+    open_items = [i for i in all_items
+                  if i.get("project_id") == project_id
+                  and i.get("status") in ("öppen", "pågår", "återkommit")]
+    if len(open_items) < 2:
+        return {"ok": True, "planned": 0, "sammanfattning": "Färre än 2 öppna fynd — inget att ordna."}
+
+    loop = asyncio.get_running_loop()
+    usage = []
+    try:
+        plan = await asyncio.wait_for(
+            loop.run_in_executor(executor, run_planner_agent, open_items, model, client, usage),
+            timeout=120.0)
+    except asyncio.TimeoutError:
+        return JSONResponse({"error": "Planeraren svarade inte i tid."}, status_code=504)
+
+    ordering = {o.get("id"): o for o in plan.get("ordning", []) if o.get("id")}
+    if not ordering:
+        return JSONResponse({"error": "Planeraren gav ingen användbar ordning — försök igen."}, status_code=502)
+
+    now = datetime.now().isoformat(timespec="seconds")
+    planned = 0
+    with _backlog_lock:
+        items = _backlog_load()
+        valid_ids = {i["id"] for i in items}
+        for it in items:
+            o = ordering.get(it.get("id"))
+            if not o:
+                continue
+            it["ordning_nr"] = int(o.get("ordning_nr") or 999)
+            it["typ"] = o.get("typ") if o.get("typ") in ("bugg", "feature", "forbattring") else None
+            it["beror_pa"] = [b for b in (o.get("beror_pa") or []) if b in valid_ids and b != it["id"]]
+            it["ordning_motivering"] = str(o.get("motivering", ""))[:300]
+            it["updated_at"] = now
+            planned += 1
+        tmp = BACKLOG_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(BACKLOG_FILE)
+
+    cost = sum(u.get("cost_usd") or 0 for u in usage)
+    return {"ok": True, "planned": planned,
+            "sammanfattning": plan.get("sammanfattning", ""), "cost_usd": round(cost, 5)}
+
+
+_FAS_SPLITTER_SYSTEM = (
+    "Du är teknisk projektledare. Du får ETT stort ärende (effort L) som är för stort att bygga "
+    "och validera i ett svep. Dela det i 2–4 DELMOMENT som byggs i ordning, där varje delmoment:\n"
+    "• är litet nog att byggas och granskas grönt FÖR SIG (max någon dags arbete)\n"
+    "• levererar något testbart — inte 'halva funktionen', utan en verifierbar grund nästa fas bygger på\n"
+    "• kommer i beroendeordning: fundament (datamodell/schema/verktyg) först, påbyggnad sen, polering sist\n\n"
+    "Returnera ENBART JSON:\n"
+    '{"delmoment":[{"titel":"kort handlingsdriven titel","beskrivning":"vad som byggs i denna fas",'
+    '"leverans":"vad som ska vara testbart/klart när fasen är grön"}],'
+    '"motivering":"en mening om varför denna uppdelning"}'
+)
+
+def _run_fas_splitter(item: dict, model: str, client, usage_out: list = None) -> dict:
+    """Dela ett L-ärende i 2–4 byggbara delmoment."""
+    FALLBACK = {"delmoment": [], "motivering": ""}
+    combined = (
+        f"ÄRENDE: {item.get('title','')}\n"
+        f"PROBLEM: {item.get('finding','')}\n"
+        f"FÖRESLAGEN ÅTGÄRD: {item.get('suggestion','')}\n"
+        f"PRIORITET: {item.get('priority','P2')}"
+    )
+    try:
+        sp_model = get_agent_model("planeraren", PLANNER_AGENT["model"])
+        raw = _call_model(sp_model, _FAS_SPLITTER_SYSTEM, combined, 2000, client, usage_out=usage_out)
+        first = _extract_first_json(raw.strip())
+        if first:
+            obj = json.loads(first)
+            dm = [d for d in (obj.get("delmoment") or [])
+                  if isinstance(d, dict) and d.get("titel")][:4]
+            if len(dm) >= 2:
+                return {"delmoment": dm, "motivering": obj.get("motivering", "")}
+    except Exception as e:
+        logger.error("[fas_splitter] failed: %s", e)
+    return FALLBACK
+
+
+async def _to_spec_phased(item: dict, payload: dict, model: str, client):
+    """L-ärende → 2–4 delmoment → EN spec per fas → kö-items i låst ordning.
+    Varje fas är liten nog att byggas och granskas grönt för sig."""
+    loop = asyncio.get_running_loop()
+    usage = []
+    profile = payload.get("profile", {}) or {}
+    item_id = item["id"]
+
+    try:
+        split = await asyncio.wait_for(
+            loop.run_in_executor(executor, _run_fas_splitter, item, model, client, usage),
+            timeout=120.0)
+    except asyncio.TimeoutError:
+        return JSONResponse({"error": "Fas-uppdelningen tog för lång tid — försök igen."}, status_code=504)
+    phases = split.get("delmoment", [])
+    if len(phases) < 2:
+        return JSONResponse(
+            {"error": "Kunde inte dela ärendet i delmoment — försök igen, eller kör som EN spec "
+                      "genom att sätta effort till M på fyndet."}, status_code=502)
+
+    n = len(phases)
+
+    # En spec per fas — parallellt. Varje fas-spec får helheten som kontext så
+    # smeden vet vad som kommer före/efter och inte bygger in nästa fas i förtid.
+    overview = "\n".join(f"  Fas {i+1}/{n}: {p['titel']} — {p.get('leverans','')}"
+                         for i, p in enumerate(phases))
+
+    async def _spec_for_phase(idx: int, phase: dict):
+        seed_results = [{
+            "id": "fas_seed", "name": "Planeraren (fas-uppdelning)", "emoji": "📐",
+            "status": "UNDERKÄND",
+            "findings": [
+                f"Detta är FAS {idx+1} av {n} i ärendet '{item.get('title','')}'.\n"
+                f"HELA FASPLANEN:\n{overview}\n\n"
+                f"DENNA FAS: {phase.get('beskrivning','')}\n"
+                f"KLAR NÄR: {phase.get('leverans','')}\n"
+                f"Ursprungligt problem: {item.get('finding','')[:600]}"
+            ],
+            "severity": {"P0": "HIGH", "P1": "MEDIUM", "P2": "LOW"}.get(item.get("priority"), "MEDIUM"),
+            "suggestions": [f"Bygg ENDAST denna fas — fas {idx+2}+ kommer som egna specar." if idx+1 < n
+                            else "Sista fasen — knyt ihop och verifiera helheten."],
+        }]
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(executor, run_prompt_smith, phase.get("titel", ""),
+                                     seed_results, model, client, usage, profile),
+                timeout=240.0)
+        except asyncio.TimeoutError:
+            return {"type": "error", "content": "timeout"}
+
+    smith_results = await asyncio.gather(*[_spec_for_phase(i, p) for i, p in enumerate(phases)])
+
+    failed = [i+1 for i, r in enumerate(smith_results) if r.get("type") != "prompt" or not r.get("content")]
+    if failed:
+        return JSONResponse(
+            {"error": f"Spec för fas {', '.join(map(str, failed))} kunde inte skrivas — "
+                      "inget köades (allt-eller-inget). Försök igen."}, status_code=502)
+
+    # Allt lyckades → köa faserna i ordning + spara varje spec som session
+    queue_items = []
+    for i, (phase, sr) in enumerate(zip(phases, smith_results)):
+        spec_content = sr["content"]
+        session_id = str(uuid.uuid4())
+        await loop.run_in_executor(executor, save_session,
+            session_id, f"📋 Spec (fas {i+1}/{n}): {phase.get('titel','')[:50]}", "backlog_spec",
+            item.get("finding", ""), item.get("suggestion", ""),
+            [], sr, {"total": 0, "approved": 0, "rejected": 0, "errors": 0},
+            item.get("project_id", ""),
+        )
+        qi = queue_create_item(
+            item.get("project_id", ""),
+            f"Fas {i+1}/{n}: {phase.get('titel','')}",
+            spec_content,
+            phase.get("leverans", ""),
+            {"type": "backlog_fas", "backlog_item_id": item_id, "session_id": session_id},
+            fas_grupp=item_id, fas_nr=i+1, fas_total=n,
+        )
+        queue_items.append(qi)
+
+    with _backlog_lock:
+        bitems = _backlog_load()
+        for b in bitems:
+            if b.get("id") == item_id:
+                b["status"] = "pågår"
+                b["updated_at"] = datetime.now().isoformat(timespec="seconds")
+        tmp = BACKLOG_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(bitems, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(BACKLOG_FILE)
+
+    cost = sum(u.get("cost_usd") or 0 for u in usage)
+    return {"ok": True, "phased": True, "fas_total": n,
+            "motivering": split.get("motivering", ""),
+            "queue_items": queue_items, "cost_usd": round(cost, 4)}
+
+
 @app.post("/api/backlog/{item_id}/to-spec")
 async def backlog_to_spec(item_id: str, payload: dict):
-    """Turn a single backlog item into a complete spec via Promptsmeden — closes the loop."""
+    """Turn a single backlog item into a complete spec via Promptsmeden — closes the loop.
+    L-ärenden delas först i 2–4 delmoment (fas-uppdelning) med en spec per fas."""
     items = _backlog_load()
     item = next((i for i in items if i.get("id") == item_id), None)
     if not item:
@@ -2681,6 +3039,10 @@ async def backlog_to_spec(item_id: str, payload: dict):
     if not s.get("openrouter_key", "").strip() and not client:
         return JSONResponse({"error": "Ingen API-nyckel konfigurerad."}, status_code=400)
     model = s.get("model", "google/gemini-2.5-flash")
+
+    # ── FAS-UPPDELNING: L-ärenden är för stora att bygga och validera i ett svep ──
+    if item.get("effort") == "L" and payload.get("enqueue") and not payload.get("force_single"):
+        return await _to_spec_phased(item, payload, model, client)
 
     # Seed Promptsmeden with the item as a single high-priority finding
     seed_results = [{

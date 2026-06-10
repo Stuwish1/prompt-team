@@ -986,8 +986,10 @@ body:not(.view-bygga)    #attByggaView  { display: none; }
         <span class="bygga-section-title">Nya fynd</span>
         <div class="bygga-divider"></div>
         <span class="phase-stat" id="backlogStat"></span>
+        <button class="btn btn-ghost" id="backlogPlanBtn" style="display:none;padding:3px 10px;font-size:11px;color:var(--accent2);" onclick="planBacklog(this)" title="Planeraren (AI) bedömer byggordningen: fundament före påbyggnad, blockerande buggar före features">📐 Planera ordning</button>
         <button class="btn btn-ghost" id="backlogClearBtn" style="display:none;padding:3px 10px;font-size:11px;color:var(--red);" onclick="clearBacklog()" title="Ta bort ALLA fynd för projektet — t.ex. efter en felaktig körning">🗑 Rensa alla</button>
       </div>
+      <div id="planSummary" style="display:none;font-size:12px;color:var(--text2);background:var(--accent-soft);border:1px solid var(--border-accent);border-radius:var(--r-md);padding:8px 12px;margin-bottom:10px;line-height:1.5;"></div>
       <div id="backlogBox"><div style="font-size:12px;color:var(--text3);padding:20px 0;">Inga fynd ännu — kör en granskning i Beställ-vyn.</div></div>
     </div>
 
@@ -1697,6 +1699,8 @@ async function runReview() {
       const banner = document.getElementById('dbWarningBanner');
       if (banner) banner.style.display = 'block';
     }
+    // Nya fynd i backloggen → låt Planeraren sätta byggordning direkt (tyst, i bakgrunden)
+    if ((data.backlog_items || []).length >= 1) planBacklog(null, true);
   } catch (e) {
     // Webbläsaren kapar fetch vid ~300s men servern kan jobba klart ändå —
     // resultatet stashas per run_id på servern. Nätverksfel ⇒ poll:a hem det.
@@ -1940,6 +1944,12 @@ function renderQueueBox() {
   const active = items.filter(i => i.status !== 'klar');
   if (stat) stat.textContent = `${active.length} kvar · ${items.length} totalt`;
   const anyBuilding = items.some(i => i.status === 'byggs');
+  const redItem = items.find(i => i.status === 'behover_dig');  // grön-gate: rött blockerar resten
+
+  // Fas-lås: fas N är låst tills fas N-1 i samma grupp är klar
+  const phaseLocked = (it) => it.fas_grupp && items.some(s =>
+    s.fas_grupp === it.fas_grupp && (s.fas_nr || 0) < (it.fas_nr || 0) && s.status !== 'klar');
+
   // Det översta körbara kortet expanderas — EN tydlig nästa-handling
   let expandedShown = false;
   box.innerHTML = items.map((it, idx) => {
@@ -1947,18 +1957,24 @@ function renderQueueBox() {
     const expanded = isExpandable && (it.status !== 'kö' || !anyBuilding);
     if (expanded) expandedShown = true;
     const v = it.last_verdict || {};
+    const locked = it.status === 'kö' && (phaseLocked(it) || (redItem && redItem.id !== it.id));
     let body = '';
     if (expanded) {
       let actions = '';
-      if (it.status === 'kö') {
+      if (it.status === 'kö' && locked) {
+        const why = phaseLocked(it)
+          ? `🔒 Väntar på att fas ${(it.fas_nr || 2) - 1} blir klar`
+          : `🔒 '${escHtml(redItem.title)}' är underkänd och måste bli grön först`;
+        actions = `<span style="font-size:12px;color:var(--yellow);font-weight:600;">${why}</span>`;
+      } else if (it.status === 'kö') {
         actions = `<button class="btn btn-primary" onclick="startBuild('${it.id}', this)">▶ Bygg nästa</button>
                    <span style="font-size:11px;color:var(--text3);">Specen kopieras — klistra in i din byggare</span>`;
       } else if (it.status === 'byggs') {
         actions = `<button class="btn btn-primary" onclick="openBuildResult('${it.id}')">✅ Klar? Klistra in resultatet</button>
                    <button class="btn btn-ghost" onclick="queueSetStatus('${it.id}','kö')">↩ Tillbaka till kö</button>`;
       } else if (it.status === 'behover_dig') {
-        actions = `<button class="btn btn-primary" onclick="startBuild('${it.id}', this)">🔄 Skicka igen</button>
-                   <button class="btn btn-ghost" onclick="queueSetStatus('${it.id}','klar')">Markera klar ändå</button>`;
+        actions = `<button class="btn btn-primary" onclick="startBuild('${it.id}', this)">🔄 Skicka igen (specen skrivs om med kvarståendena)</button>
+                   <button class="btn btn-ghost" onclick="queueSetStatus('${it.id}','klar')" title="Kräver motivering — loggas i ärendehistoriken">Markera klar ändå</button>`;
       }
       const verdictHtml = (it.status === 'behover_dig' && (v.kvarstaende || []).length)
         ? `<div class="qc-verdict"><b>Kvarstående:</b>${(v.kvarstaende || []).slice(0, 6).map(k => `<div>• ${escHtml(k)}</div>`).join('')}</div>`
@@ -1978,8 +1994,10 @@ function renderQueueBox() {
             <button onclick="queueMove('${it.id}',1)" title="Flytta ned">▼</button>
           </div>
           <span class="qc-pos">${idx + 1}</span>
-          <span class="qc-title">${escHtml(it.title)}</span>
+          <span class="qc-title">${locked ? '🔒 ' : ''}${escHtml(it.title)}</span>
+          ${it.fas_grupp ? `<span style="font-size:10px;color:var(--accent2);border:1px solid var(--border-accent);border-radius:var(--r-full);padding:1px 7px;white-space:nowrap;">Fas ${it.fas_nr}/${it.fas_total || '?'}</span>` : ''}
           ${it.attempt_nr > 1 ? `<span style="font-size:10px;color:var(--text3);">försök ${it.attempt_nr}</span>` : ''}
+          ${(it.spec_versions || []).length ? `<span style="font-size:10px;color:var(--text3);" title="Specen har skrivits om efter underkänt bygge">✍️ v${(it.spec_versions || []).length + 1}</span>` : ''}
           <span class="qc-status st-${it.status}">${_Q_STATUS_LABEL[it.status] || it.status}</span>
           <button class="btn btn-ghost" style="padding:2px 7px;font-size:11px;color:var(--text3);" onclick="event.stopPropagation();queueDelete('${it.id}')" title="Ta bort från byggkön">🗑</button>
         </div>
@@ -2020,7 +2038,9 @@ function updateAttentionBanner() {
 
 // ── QUEUE ACTIONS ───────────────────────────────────────────────
 async function startBuild(id, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+  const it = _queueItems.find(x => x.id === id);
+  const isRetry = it?.status === 'behover_dig' && (it?.last_verdict?.kvarstaende || []).length;
+  if (btn) { btn.disabled = true; btn.textContent = isRetry ? '⏳ Promptsmeden skriver om specen...' : '⏳...'; }
   try {
     const res = await fetch('/api/build-queue/' + id + '/send', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -2031,7 +2051,9 @@ async function startBuild(id, btn) {
     if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
     const spec = (data.job?.feedback ? data.job.feedback + '\n\n' : '') + (data.job?.spec_markdown || '');
     await navigator.clipboard.writeText(spec).catch(() => {});
-    showToast('📋 Spec kopierad — klistra in i din byggare. Kom tillbaka med resultatet!', 4500);
+    showToast(data.job?.spec_rewritten
+      ? '✍️ Spec OMSKRIVEN med kvarståendena inarbetade och kopierad — klistra in i din byggare!'
+      : '📋 Spec kopierad — klistra in i din byggare. Kom tillbaka med resultatet!', 4500);
     await loadAttBygga();
   } catch (e) {
     showToast('❌ ' + e.message);
@@ -2081,12 +2103,24 @@ async function submitBuildResult() {
 }
 
 async function queueSetStatus(id, status) {
+  const body = { status };
+  // Friskförklara underkänt bygge = medvetet beslut → motivering krävs och loggas
+  const it = _queueItems.find(x => x.id === id);
+  if (status === 'klar' && it?.status === 'behover_dig') {
+    const reason = prompt('Bygget är underkänt. Varför ska det ändå markeras klart?\n(Motiveringen loggas i ärendehistoriken)');
+    if (!reason || reason.trim().length < 10) {
+      if (reason !== null) showToast('Motiveringen måste vara minst 10 tecken.');
+      return;
+    }
+    body.override_reason = reason.trim();
+  }
   try {
     const res = await fetch('/api/build-queue/' + id, {
       method: 'PATCH', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ status })
+      body: JSON.stringify(body)
     });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
     await loadAttBygga();
   } catch (e) { showToast('❌ ' + e.message); }
 }
@@ -2184,21 +2218,30 @@ function renderBestallareBox(b) {
 }
 
 const _PRIO_LABEL = { P0: 'Kritisk', P1: 'Viktig', P2: 'Senare' };
+const _TYP_BADGE = { bugg: '🐛 bugg', feature: '✨ feature', forbattring: '🔧 förbättring' };
+
 function renderBacklogBox(items) {
   const stat = document.getElementById('backlogStat');
   const open = items.filter(i => i.status === 'öppen' || i.status === 'återkommit').length;
   if (stat) stat.textContent = `${open} öppna · ${items.length} totalt`;
   const clearBtn = document.getElementById('backlogClearBtn');
   if (clearBtn) clearBtn.style.display = items.length ? 'inline-flex' : 'none';
+  const planBtn = document.getElementById('backlogPlanBtn');
+  if (planBtn) planBtn.style.display = open >= 2 ? 'inline-flex' : 'none';
   document.getElementById('backlogBox').innerHTML = items.map(it => {
     const pc = it.priority === 'P0' ? 'p0' : it.priority === 'P1' ? 'p1' : 'p2';
     const done = it.status === 'åtgärdad';
     const regressed = it.status === 'återkommit';
+    const ordBadge = (it.ordning_nr && !done)
+      ? `<span title="${escHtml(it.ordning_motivering || 'Planerarens byggordning')}" style="font-weight:800;color:var(--accent);font-size:13px;white-space:nowrap;align-self:center;">#${it.ordning_nr}</span>` : '';
+    const typBadge = it.typ
+      ? ` <span style="font-size:10px;color:var(--text3);border:1px solid var(--border);border-radius:var(--r-full);padding:1px 7px;white-space:nowrap;font-weight:400;">${_TYP_BADGE[it.typ] || it.typ}</span>` : '';
     return `
       <div class="backlog-item ${done ? 'done' : ''} ${it.priority === 'P0' ? 'prio-p0' : ''}">
+        ${ordBadge}
         <span class="bl-prio ${pc}">${it.priority} · ${_PRIO_LABEL[it.priority]||''}</span>
         <div class="bl-main">
-          <div class="bl-title">${escHtml(it.title)}${regressed ? ' <span class="bl-regress">↩ återkommit</span>' : ''}</div>
+          <div class="bl-title">${escHtml(it.title)}${typBadge}${regressed ? ' <span class="bl-regress">↩ återkommit</span>' : ''}</div>
           ${it.suggestion ? `<div class="bl-sugg">${escHtml(it.suggestion)}</div>` : ''}
           ${(it.source_agents && it.source_agents.length) ? `<div class="bl-src">${it.source_agents.length} agenter flaggade · ${escHtml(it.effort||'M')}</div>` : ''}
         </div>
@@ -2226,6 +2269,31 @@ async function updateBacklogStatus(id, status) {
     renderBacklogBox(_lastBacklog || []);
     showToast('Status uppdaterad: ' + status);
   } catch(e) { showToast('❌ Kunde inte uppdatera status'); }
+}
+
+async function planBacklog(btn, silent) {
+  const pid = getActiveProject()?.id || '';
+  if (!pid) return;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Planerar...'; }
+  try {
+    const res = await fetch('/api/backlog/plan', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ project_id: pid })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+    const box = document.getElementById('planSummary');
+    if (box && data.sammanfattning) {
+      box.innerHTML = `📐 <b>Planerarens bedömning:</b> ${escHtml(data.sammanfattning)}`;
+      box.style.display = 'block';
+    }
+    if (!silent) showToast(`📐 Byggordning satt på ${data.planned} ärenden`);
+    await loadAttBygga();
+  } catch (e) {
+    if (!silent) showToast('❌ ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📐 Planera ordning'; }
+  }
 }
 
 async function deleteBacklogItem(id) {
@@ -2270,6 +2338,16 @@ async function backlogToSpec(id, btn) {
       throw new Error(err.error || 'HTTP ' + res.status);
     }
     const data = await res.json();
+    // FAS-UPPDELNING: L-ärende delades i delmoment som köades i låst ordning
+    if (data.phased) {
+      showToast(`📐 Delat i ${data.fas_total} faser och köat — fas 1 byggs först, resten låses upp i ordning.${data.cost_usd ? ` · ~$${data.cost_usd.toFixed(2)}` : ''}`, 6000);
+      if (data.motivering) {
+        const box = document.getElementById('planSummary');
+        if (box) { box.innerHTML = `📐 <b>Fas-uppdelning:</b> ${escHtml(data.motivering)}`; box.style.display = 'block'; }
+      }
+      await loadAttBygga();
+      return;
+    }
     const smith = data.smith || {};
     if (smith.type !== 'prompt' || !data.final_prompt) {
       // Promptsmeden asked questions or errored — don't render an empty spec as success
