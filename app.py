@@ -1721,8 +1721,6 @@ SPECIALIST_AGENTS = [
     },
 ]
 
-]
-
 # Backward-compat views (used by ALL_AGENTS and any legacy mode mapping).
 PRE_BUILD_AGENTS = [a for a in SPECIALIST_AGENTS if a.get("phase") == "pre"]
 POST_BUILD_AGENTS = [a for a in SPECIALIST_AGENTS if a.get("phase") == "post"]
