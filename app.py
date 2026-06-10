@@ -15,6 +15,7 @@ import threading
 import uuid
 from datetime import datetime
 import httpx
+import uvicorn
 import anthropic
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -3320,6 +3321,18 @@ async def review(payload: dict):
         except asyncio.TimeoutError:
             return JSONResponse({"error": "Granskningen tog för lång tid (>320s). Försök med mindre kod eller färre agenter."}, status_code=504)
 
+        # C-SEC: hemlighetsvakten is a hard block — if it found critical secrets, stop immediately.
+        secrets_agent = next((r for r in results if r.get("id") == "hemlighetsvakten"), None)
+        if secrets_agent and secrets_agent.get("status") == "UNDERKÄND":
+            critical = [f for f in secrets_agent.get("findings", [])
+                        if any(kw in f.lower() for kw in ("api key", "api-nyckel", "lösenord", "password", "secret", "token"))]
+            if critical:
+                return JSONResponse({
+                    "error": "Körningen stoppades: Hemlighetsvakten hittade potentiella hemligheter i koden. "
+                             "Ta bort alla hårdkodade nycklar och lösenord innan du kör igen.",
+                    "findings": critical[:5]
+                }, status_code=400)
+
         # Collect krav result if it ran concurrently (review modes)
         if krav_task is not None:
             krav_result = await krav_task
@@ -4795,4 +4808,9 @@ async def api_chat_delete(chat_id: str):
         _chat_sessions.pop(chat_id, None)
     return {"ok": True}
 
-
+if __name__ == "__main__":
+    import sys
+    dev_mode = "--dev" in sys.argv
+    port = int(os.environ.get("PORT", 8001))
+    host = "0.0.0.0" if os.environ.get("RAILWAY_ENVIRONMENT") else "127.0.0.1"
+    uvicorn.run("app:app", host=host, port=port, reload=dev_mode)
