@@ -4,6 +4,7 @@ settings.json
 sessions.json
 backlog.json
 build_queue.json
+projects.json
 build_results/
 ai_eval_results.json
 _blueprint.md

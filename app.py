@@ -31,6 +31,20 @@ executor = ThreadPoolExecutor(max_workers=80)
 @app.on_event("startup")
 async def startup():
     _migrate_sessions()
+    # C1: Återställ items som fastnat i "byggs" vid föregående körning.
+    # WIP-limiten tillåter bara ett aktivt bygge — ett hängt "byggs"-item
+    # låser annars hela byggkön permanent tills servern manuellt rensas.
+    with _queue_lock:
+        items = _queue_load()
+        reset_count = 0
+        for it in items:
+            if it.get("status") == "byggs" and not it.get("deleted_at"):
+                it["status"] = "kö"
+                _queue_log(it, "reset_after_restart", "server startade om under bygge")
+                reset_count += 1
+        if reset_count:
+            _queue_write(items)
+            logger.warning("[startup] %d item(s) återställda från 'byggs' till 'kö'", reset_count)
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
@@ -72,7 +86,8 @@ _DEFAULT_AGENT_MODELS = {
     "error_handling":  "google/gemini-2.5-flash",
     "edge_case":       "google/gemini-2.5-flash",
     "code_quality":    "google/gemini-2.5-flash",  # flash-lite gav för ytliga svar (1 finding på trasig kod)
-    "security":        "google/gemini-2.5-flash",
+    # Security reviews need deep OWASP reasoning — Sonnet catches subtle issues Flash misses
+    "security":        "anthropic/claude-sonnet-4.6",
     "hemlighetsvakten": "google/gemini-2.5-flash",
     "performance":     "google/gemini-2.5-flash",
     "scalability":     "google/gemini-2.5-flash",
@@ -86,6 +101,10 @@ _DEFAULT_AGENT_MODELS = {
     "licens":          "google/gemini-2.5-flash",    # OSS-licenser, SBOM, supply chain
     "i18n":            "google/gemini-2.5-flash",    # internationalisering, Unicode, RTL
     "observability":   "google/gemini-2.5-flash",    # metrics, traces, alerting, SLO
+    "concurrency":     "google/gemini-2.5-flash",    # race conditions, deadlocks, async safety
+    # Cryptographic errors are subtle and dangerous — Sonnet reasons better on cipher modes/timing
+    "krypto":          "anthropic/claude-sonnet-4.6", # kryptoimplementering, cipher modes, timing
+    "agent_arkitektur":"google/gemini-2.5-flash",    # agentic tool safety, sandboxing, resource limits
     # Multimodal (vision) — Gemini 2.5 Flash: also multimodal, fast, reliable JSON.
     # (2.5 Pro burned its budget on reasoning prose → parse failures + timeouts in E2E.)
     "visual_qa":       "google/gemini-2.5-flash",
@@ -121,6 +140,9 @@ def load_settings() -> dict:
         "agent_models": {},
         "supabase_url": "", "supabase_key": "",
         "github_token": "", "self_repo": "", "self_branch": "main",
+        # I1: local_path = mappen byggagenten läser/skriver filer i.
+        # Standard = samma mapp som app.py (fungerar för self-hosted setup).
+        "local_path": str(BASE_DIR),
     }
 
 
@@ -734,11 +756,6 @@ def _local_load() -> dict:
                          "file will NOT be overwritten until next explicit save.", e)
     return {}
 
-def _local_save(data: dict):
-    """Atomic-safe write: holds lock across load→modify→write to prevent lost-update races."""
-    with _sessions_lock:
-        LOCAL_SESSIONS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
 def _atomic_write(data: dict) -> None:
     """Write dict to sessions.json via a temp file — safe against mid-write crashes."""
     tmp = LOCAL_SESSIONS_FILE.with_suffix(".tmp")
@@ -1015,10 +1032,11 @@ SPECIALIST_AGENTS = [
         "name": "Hotmodelleraren",
         "emoji": "🎯",
         "phase": "pre", "layer": "krav",
-        "modes": [M_NY, M_BUGG],
+        "modes": [M_NY, M_GRANSKA, M_BUGG],
         "model": "google/gemini-2.5-flash",
         "system": (
-            "Du är säkerhetsarkitekt som gör threat modeling INNAN bygget. Du föreslår säkerhetskrav, inte buggar i färdig kod.\n"
+            "Du är säkerhetsarkitekt. I NY-läge gör du threat modeling INNAN bygget och föreslår säkerhetskrav. "
+            "I GRANSKA-läge letar du efter saknade säkerhetskontroller i BEFINTLIG KOD.\n"
             "Analysera idén/funktionen och identifiera:\n"
             "• Trust boundaries — var korsar data en gräns mellan betrodd/obetrodd zon?\n"
             "• Abuse cases — hur kan en illvillig användare missbruka funktionen?\n"
@@ -1035,10 +1053,11 @@ SPECIALIST_AGENTS = [
         "name": "Dataskyddsjuristen",
         "emoji": "⚖️",
         "phase": "pre", "layer": "krav",
-        "modes": [M_NY, M_BUGG],
+        "modes": [M_NY, M_GRANSKA, M_BUGG],
         "model": "google/gemini-2.5-flash",
         "system": (
-            "Du är dataskyddsjurist (GDPR/EU). Du formulerar dataskyddskrav INNAN bygget.\n"
+            "Du är dataskyddsjurist (GDPR/EU). I NY-läge formulerar du dataskyddskrav INNAN bygget. "
+            "I GRANSKA-läge granskar du BEFINTLIG KOD för GDPR-efterlevnad.\n"
             "Analysera idén och identifiera krav kring:\n"
             "• Personuppgifter — vilka PII samlas in och behandlas?\n"
             "• Rättslig grund — finns laglig grund (samtycke, avtal, berättigat intresse)?\n"
@@ -1070,6 +1089,8 @@ SPECIALIST_AGENTS = [
             "• God object / Blob anti-pattern — ett objekt vet för mycket?\n"
             "• Tight coupling — ändring i A kräver alltid ändring i B?\n"
             "• Rätt mönster — används rätt designmönster för problemet?\n"
+            "• Event-driven design — används event sourcing/CQRS/message queues rätt, eller skapas osynliga temporala beroenden?\n"
+            "• Distribuerade system-fallgropar — uppstår split-brain, double-write eller inconsistent reads?\n"
             "Formulera varje finding som ett konkret problem, inte en generell observation."
             + _SEVERITY_GUIDE
         ),
@@ -1102,7 +1123,7 @@ SPECIALIST_AGENTS = [
         "name": "Riskvärderaren",
         "emoji": "⚠️",
         "phase": "pre", "layer": "specialist",
-        "modes": [M_NY],
+        "modes": [M_NY, M_GRANSKA],
         "model": "google/gemini-2.5-flash",
         "system": (
             "Du är senior riskanalytiker med erfarenhet av IT-projekt. Identifiera konkreta risker i beskrivningen.\n"
@@ -1140,6 +1161,9 @@ SPECIALIST_AGENTS = [
             "• Destruktiva actions — finns bekräftelsedialog innan radering/irreversibla steg?\n"
             "• Dead ends — kan användaren fastna utan möjlighet att ta sig tillbaka?\n"
             "• Första-gångs-upplevelse — förstår ny användare vad de ska göra?\n"
+            "• Målgruppsanpassning — är UI-text anpassad för den faktiska målgruppen (barn, seniorer, icke-tekniska användare)?\n"
+            "• Teknisk jargong i UI — används termer som 'stacktrace', 'commit', 'endpoint', 'query' i produktionsgränssnittet?\n"
+            "• alert()/confirm() — används webbläsarens inbyggda popups (blockerar UI, ej anpassningsbara)?\n"
             "Formulera varje finding ur användarens perspektiv ('Användaren kan inte förstå...')."
             + _SEVERITY_GUIDE
         ),
@@ -1173,7 +1197,7 @@ SPECIALIST_AGENTS = [
         "name": "Frontend-agenten",
         "emoji": "🧱",
         "phase": "pre", "layer": "specialist",
-        "modes": [M_NY, M_GRANSKA],
+        "modes": [M_NY, M_GRANSKA, M_BUGG],
         "model": "google/gemini-2.5-flash",
         "system": (
             "Du är senior frontend-arkitekt med djup kunskap om React, Vue och vanilla JS. Granska frontend-KODENS struktur (inte hur den ser ut).\n"
@@ -1280,6 +1304,9 @@ SPECIALIST_AGENTS = [
             "• N+1-risk — hämtas poster en-och-en i loop istället för JOIN/IN?\n"
             "• Obegränsade queries — saknas LIMIT på listor som kan växa obegränsat?\n"
             "• Råa SQL-strängar — används string-konkatenering istället för parametriserade queries?\n"
+            "• Connection pool — öppnas ny DB-connection per request istället för att återanvända pool?\n"
+            "• Query-timeout — saknas timeout på långkörande queries (kan blockera hela connection-poolen)?\n"
+            "• Soft-delete-fallgrop — används is_deleted-flagga utan partiellt index, vilket ger full table scan?\n"
             "Rapportera enbart problem med konkret kodbevis — spekulera inte om index, constraints eller "
             "schema som inte syns i underlaget. Svara på svenska.\n"
             "Om beskrivningen inte involverar databas: returnera GODKÄND."
@@ -1348,7 +1375,10 @@ SPECIALIST_AGENTS = [
             "• Timeout & retry — finns timeout på externa anrop och retry på transienta fel?\n"
             "• Finally-block — stängs resurser (DB-connections, file handles) i finally-block?\n"
             "• Observability — finns strukturerad loggning och correlation-ID för att spåra ett request genom systemet?\n"
-            "• Graceful degradation — fortsätter applikationen fungera delvis vid komponent-fel?"
+            "• Graceful degradation — fortsätter applikationen fungera delvis vid komponent-fel?\n"
+            "• SSE/Streaming-fel — hanteras klient-disconnect i streaming-endpoints (generator cleanup, task cancel)?\n"
+            "• asyncio.Task-läckor — avbryts och rensas bakgrundsuppgifter korrekt i finally-block?\n"
+            "• Obegränsade in-memory-strukturer — kan dict/list-cacher växa utan tak tills minnet tar slut?"
             + _SEVERITY_GUIDE
         ),
     },
@@ -1407,13 +1437,20 @@ SPECIALIST_AGENTS = [
             "Du är senior applikationssäkerhetsexpert (OWASP Top 10, CWE). Granska koden systematiskt efter verkliga säkerhetsproblem.\n"
             "Kontrollera specifikt:\n"
             "• Injection — SQL/NoSQL/command injection via string-konkatenering?\n"
+            "• Shell injection — anropas subprocess/exec med user-input utan whitelist?\n"
             "• XSS — okontrollerat HTML-innehåll i DOM (innerHTML, dangerouslySetInnerHTML)?\n"
             "• Auth-kontroll — skyddas alla endpoints/routes som kräver autentisering?\n"
             "• CORS — accepteras origins=* i produktion?\n"
             "• Input-validering — litas okontrollerat på user-supplied data?\n"
             "• Osäker randomness — används Math.random() för säkerhetsändamål?\n"
-            "• Path traversal — används user-input i filsökvägskonstruktion?\n"
+            "• Path traversal — används user-input i fil- eller sökväg? Kontrolleras resolve() mot tillåten rotkatalog?\n"
+            "• Secrets i URL-parametrar — skickas tokens/nycklar som GET-params (hamnar i access-loggar)?\n"
             "• Sårbara beroenden — används paket med kända CVE:er, eller paketnamn som kan kapas?\n"
+            "• SSRF — kan servern göra HTTP-anrop till interna adresser baserat på user-input?\n"
+            "• OAuth/OIDC-fel — valideras state-parameter, redirect_uri och token-audience korrekt?\n"
+            "• JWT-validering — kontrolleras algoritm (alg:none attack), expiry och signatur korrekt?\n"
+            "• Osäker deserialisering — deserialiseras user-supplied data (pickle, YAML.load, eval)?\n"
+            "• Mass assignment — kan klienten sätta fält som password_hash, is_admin via bulk-update?\n"
             "Rapportera enbart verkliga problem — inte hypotetiska risker utan kodbevis."
             + _SEVERITY_GUIDE
         ),
@@ -1570,6 +1607,8 @@ SPECIALIST_AGENTS = [
             "• Session/autentiseringslogik — hanteras token-validering, refresh och revocation korrekt?\n"
             "• Middleware-ordning — är middleware-kedjan i rätt ordning (auth före rate limiting, logging sist)?\n"
             "• Dependency injection — är beroenden injicerade (testbart) eller hårdkodade (ej testbart)?\n"
+            "• Obegränsade in-memory-strukturer — växer globala dict/list-cacher utan tak (max-size, LRU, TTL)?\n"
+            "• Resource cleanup i finally — rensas locks, tasks och externa anslutningar i finally-block?\n"
             "Rapportera enbart backend-specifika problem — överlappa inte med API-agenten (kontrakt) eller DB-agenten (schema)."
             + _SEVERITY_GUIDE
         ),
@@ -1580,7 +1619,7 @@ SPECIALIST_AGENTS = [
         "name": "DevOps/CI-CD-agenten",
         "emoji": "🚀",
         "phase": "post", "layer": "specialist",
-        "modes": [M_NY, M_GRANSKA],
+        "modes": [M_NY, M_GRANSKA, M_BUGG],
         "model": "google/gemini-2.5-flash",
         "system": (
             "Du är senior DevOps-ingenjör med expertis i CI/CD, containerisering och Infrastructure as Code. Granska deploy- och driftsättningsaspekterna.\n"
@@ -1719,6 +1758,79 @@ SPECIALIST_AGENTS = [
             + _SEVERITY_GUIDE
         ),
     },
+    # ── Trådsäkerhetsagenten — concurrency, deadlocks, race conditions ──
+    {
+        "id": "concurrency",
+        "name": "Trådsäkerhetsagenten",
+        "emoji": "🧵",
+        "phase": "post", "layer": "specialist",
+        "modes": [M_NY, M_GRANSKA, M_BUGG],
+        "model": "google/gemini-2.5-flash",
+        "system": (
+            "Du är expert på concurrent programming, thread safety och async-programmering. Granska koden för tråd- och asynkronitetsproblem.\n"
+            "Om koden är single-threaded och ej async: returnera GODKÄND med notering.\n"
+            "Kontrollera specifikt:\n"
+            "• Race conditions — kan två trådar/coroutines läsa-modifiera-skriva samma data utan synkronisering?\n"
+            "• Deadlocks — kan två trådar vänta på varandra i cirkel (A väntar på B, B väntar på A)?\n"
+            "• Shared mutable state — delas föränderlig data mellan trådar utan lås eller atomic-operationer?\n"
+            "• Async/await-fel — glöms await bort, eller blockeras event loop med synkrona CPU-tunga anrop?\n"
+            "• Check-then-act (TOCTOU) — görs if-exists-kontroll och sen insert utan atomicitet?\n"
+            "• Lås-granularitet — hålls lås längre än nödvändigt, eller skyddas för lite data?\n"
+            "• Thread-local vs shared — används thread-local storage korrekt, eller läcker state mellan requests?\n"
+            "• Asynkrona timeouts — kan en hängande coroutine blockera hela systemet utan timeout?\n"
+            "• Global mutable singletons — ändras globala variabler under körning utan synkronisering?"
+            + _SEVERITY_GUIDE
+        ),
+    },
+    # ── Kryptoagenten — kryptografisk implementation ──
+    {
+        "id": "krypto",
+        "name": "Kryptoagenten",
+        "emoji": "🔐",
+        "phase": "post", "layer": "specialist",
+        "modes": [M_NY, M_GRANSKA, M_BUGG],
+        "model": "google/gemini-2.5-flash",
+        "system": (
+            "Du är kryptografiexpert med fokus på implementation, inte teori. Om koden INTE innehåller kryptografisk kod: returnera omedelbart GODKÄND.\n"
+            "Kontrollera specifikt:\n"
+            "• Cipher mode — används ECB-läge (deterministiskt, läcker mönster) istället för GCM eller CBC+HMAC?\n"
+            "• IV/Nonce-återanvändning — återanvänds samma IV/nonce för flera krypteringar med samma nyckel?\n"
+            "• Nyckelstorlek — används svaga nycklar (<128-bit AES, <2048-bit RSA, <256-bit EC)?\n"
+            "• Lösenordshashning — används en riktig KDF (bcrypt/argon2/scrypt) med salt, INTE SHA/MD5?\n"
+            "• Timing-attacker — görs byte-jämförelse med == istället för constant-time compare (hmac.compare_digest)?\n"
+            "• Kryptografisk RNG — används secrets/os.urandom, inte Math.random/random.random för säkerhetsändamål?\n"
+            "• TLS-verifiering — inaktiveras SSL/TLS-certifikatvalidering (verify=False, InsecureRequestWarning)?\n"
+            "• JWT-algoritm — accepteras none-algoritm eller blandas asymmetrisk/symmetrisk verifiering?\n"
+            "• Nyckellagring — lagras privata nycklar i kod, versionshanterat config eller DB i klartext?\n"
+            "Hemlighetsvakten äger secret-scanning; du äger korrekt kryptografisk IMPLEMENTATION."
+            + _SEVERITY_GUIDE
+        ),
+    },
+    # ── Agentarkitekturagenten — agentic tool safety, sandboxing, resource limits ──
+    {
+        "id": "agent_arkitektur",
+        "name": "Agentarkitekturagenten",
+        "emoji": "🦾",
+        "phase": "post", "layer": "specialist",
+        "modes": [M_NY, M_GRANSKA, M_BUGG],
+        "model": "google/gemini-2.5-flash",
+        "system": (
+            "Du är arkitekturexpert på agentic AI-system — system där en LLM har verktyg och utför handlingar autonomt. "
+            "Om systemet INTE innehåller en AI-agent med verktyg (tool_use, function calling): returnera omedelbart GODKÄND.\n"
+            "Kontrollera specifikt:\n"
+            "• Tool-sandboxing — kan agenten köra godtyckliga shell-kommandon, eller finns en whitelist/blacklist?\n"
+            "• Path traversal via file-tools — valideras filsökvägar mot tillåten rotkatalog (resolve() + startswith)?\n"
+            "• Max-turns enforcement — finns en hård gräns för antal agent-iterationer för att förhindra infinite loops?\n"
+            "• Resource cleanup — rensas agent-tasks och histories i finally-block vid klient-disconnect eller krasch?\n"
+            "• Unbounded histories/state — växer agent-historik och in-memory state utan storleksgräns?\n"
+            "• Prompt injection via tool-results — kan ett externt system injicera instruktioner via tool-svar?\n"
+            "• Privilegierade operationer — kan agenten göra destructive actions (delete, drop table) utan bekräftelse?\n"
+            "• Observability — loggas varje tool-anrop med input, output och latens för revision?\n"
+            "• Rollback-möjlighet — kan agentens ändringar ångras om något går fel (t.ex. git revert)?\n"
+            "• Kostnadstak — finns ett token- eller kostnadstak per agent-körning för att förhindra budget-explosioner?"
+            + _SEVERITY_GUIDE
+        ),
+    },
 ]
 
 # Backward-compat views (used by ALL_AGENTS and any legacy mode mapping).
@@ -1728,13 +1840,25 @@ POST_BUILD_AGENTS = [a for a in SPECIALIST_AGENTS if a.get("phase") == "post"]
 # Snabbläge — the core seven + visual QA. Fast iteration; djupläge = full team.
 _QUICK_AGENT_IDS = {"architecture", "security", "ux", "database", "api",
                     "error_handling", "edge_case", "visual_qa", "rotorsak",
-                    "backend", "ai_ml"}
+                    "backend", "ai_ml", "concurrency", "krypto", "agent_arkitektur"}
 
-def agents_for_mode(mode: str, depth: str = "djup") -> list:
-    """Return specialist agents for this mode. depth='snabb' → core subset."""
+# Dessa agenter kors ALLTID oavsett djupläge eller projekt-inaktivering.
+# En exponerad hemlighet eller GDPR-brott är lika allvarliga i snabbläge.
+_ALWAYS_RUN_AGENT_IDS = {"hemlighetsvakten", "dataskyddsjuristen"}
+
+
+def agents_for_mode(mode: str, depth: str = "djup", disabled_agents: list = None) -> list:
+    """Return specialist agents for this mode.
+    depth='snabb'       → core subset only.
+    disabled_agents     → per-project opt-out list (never disables _ALWAYS_RUN_AGENT_IDS)."""
     agents = [a for a in SPECIALIST_AGENTS if mode in a.get("modes", [])]
     if depth == "snabb":
-        agents = [a for a in agents if a["id"] in _QUICK_AGENT_IDS]
+        always = {a["id"] for a in agents if a["id"] in _ALWAYS_RUN_AGENT_IDS}
+        agents = [a for a in agents if a["id"] in _QUICK_AGENT_IDS | always]
+    # Per-project disabled agents — security/GDPR agents are non-negotiable
+    if disabled_agents:
+        disabled_set = set(disabled_agents) - _ALWAYS_RUN_AGENT_IDS
+        agents = [a for a in agents if a["id"] not in disabled_set]
     return agents
 
 PROMPT_SMITH = {
@@ -1834,20 +1958,28 @@ BACKLOG_AGENT = {
     "model": "google/gemini-2.5-flash",
     "system": (
         "Du är leveransansvarig (product owner). Du får alla fynd från ett granskningsteam och formar dem "
-        "till en prioriterad, deduplicerad backlog där varje item kan bli fröet till EN buildbar spec.\n\n"
-        "Gör så här:\n"
-        "• Deduplicera — slå ihop fynd som flera agenter rapporterat om samma sak till ETT item (lista källagenterna).\n"
-        "• Prioritera enligt regel: säkerhet & dataförlust (P0) > korrekthet/buggar (P0/P1) > prestanda (P1) > UX (P1/P2) > kodkvalitet (P2).\n"
-        "• Effort — uppskatta S/M/L per item.\n"
+        "till en prioriterad, deduplicerad backlog där varje item är EN atomisk, buildbar uppgift.\n\n"
+        "REGLER:\n"
+        "• Atomisk uppdelning — om ett fynd berör flera filer ELLER oberoende logiska förändringar: DELA upp "
+        "det i separata items. Varje item ska kunna utföras av en byggare i EN session utan att blockera en annan.\n"
+        "• Deduplicera — slå ihop fynd som flera agenter rapporterat om EXAKT samma sak till ETT item (lista källagenterna).\n"
+        "• Prioritera: säkerhet & dataförlust (P0) > korrekthet/buggar (P0/P1) > prestanda (P1) > UX (P1/P2) > kodkvalitet (P2).\n"
+        "• Effort — S (<30 min), M (30 min–2h), L (>2h).\n"
         "• Titel — kort, handlingsdriven ('Lägg till rate limiting på /login').\n"
+        "• files — lista de EXAKTA filnamnen som ska ändras (t.ex. ['app.py', 'index.html']). Om okänt: [].\n"
+        "• dod — Definition of Done: 1–3 konkreta, verifierbara kriterier som bevisar att itemet är klart "
+        "(t.ex. 'Unit-test passerar', 'Sidan laddas utan 401', 'Rate-limit returnerar 429 vid >10 req/s').\n"
+        "• can_parallelize — true om itemet INTE rör samma filer som andra öppna items och kan byggas parallellt.\n"
         "• REGRESSION — om prompten listar TIDIGARE ÅTGÄRDADE problem och ett nytt fynd är SAMMA underliggande "
-        "problem (även om det formuleras annorlunda): sätt \"regression\": true på det itemet.\n"
+        "problem (även omformulerat): sätt \"regression\": true.\n"
         "• DUBBLETT — om prompten listar REDAN ÖPPNA backlog-items och ett fynd är samma underliggande "
-        "problem (även omformulerat): utelämna det helt ur ditt svar.\n"
-        "• Cappa till de ~10 viktigaste actionable items; nämn i en not om fler rullades till 'senare'.\n\n"
+        "problem (även omformulerat): utelämna det helt.\n"
+        "• Cappa till de ~12 viktigaste actionable items; nämn i en not om fler rullades till 'senare'.\n\n"
         "Returnera ENBART JSON:\n"
         '{"items":[{"title":"...","priority":"P0"|"P1"|"P2","effort":"S"|"M"|"L",'
-        '"finding":"konkret problem","suggestion":"konkret åtgärd","source_agents":["Säkerheten"],"regression":false}],'
+        '"finding":"konkret problem en mening","suggestion":"konkret åtgärd en mening",'
+        '"files":["app.py"],"dod":["kriterium 1","kriterium 2"],'
+        '"can_parallelize":false,"source_agents":["Säkerheten"],"regression":false}],'
         '"note":"ev. kommentar om vad som rullades till senare"}'
     ),
 }
@@ -1862,19 +1994,32 @@ PLANNER_AGENT = {
     "phase": "synth",
     "model": "google/gemini-2.5-flash",
     "system": (
-        "Du är teknisk projektledare. Du får en backlog med ärenden och ska bestämma BYGGORDNINGEN — "
-        "vad som måste göras klart först för att resten ska gå att bygga på stabil grund.\n\n"
+        "Du är teknisk projektledare. Du får en backlog med ärenden och ska bestämma BYGGORDNINGEN "
+        "samt identifiera vad som kan byggas PARALLELLT.\n\n"
         "Regler för ordningen:\n"
         "• Fundament före påbyggnad — schemaändringar, datamodell, auth och delade verktyg FÖRE features som beror på dem.\n"
         "• Blockerande buggar före nya features — en bugg i något andra ärenden rör måste fixas först.\n"
         "• Säkerhetshål tidigt — de blir dyrare att fixa ju mer som byggs ovanpå.\n"
-        "• Oberoende småsaker sist eller var som helst — markera dem med beror_pa: [].\n"
+        "• Oberoende småsaker sist eller var som helst — beror_pa: [].\n"
         "• Prioritet (P0/P1/P2) är EN signal men beroenden trumfar: ett P1-fundament går före en P0 som beror på det.\n\n"
-        "Typa även varje ärende: \"bugg\" (något är trasigt), \"feature\" (ny förmåga) eller \"forbattring\" (refaktorering/kvalitet).\n\n"
+        "Parallelisering:\n"
+        "• parallel_with — lista id:n som KAN byggas i SAMMA sprint/session. "
+        "Villkor: (1) inga delade beroenden, (2) de rör INTE samma filer (kontrollera 'files'-fältet i input).\n"
+        "• Filkonflikter — om två items berör samma fil: lägg det ena i beror_pa för det andra, "
+        "sätt file_conflict: true, förklara i motivering.\n\n"
+        "Dynamisk uppdatering:\n"
+        "• Om prompten innehåller NYA FYND sedan sist (märkta 'NYTT FYND:'): re-evaluera HELA ordningen. "
+        "Items som beror på det nya fyndet kan behöva flyttas bakåt; items som löser det nya fyndet lyfts "
+        "framåt. Sätt reordered: true på items vars position ändrats jämfört med tidigare körning.\n\n"
+        "Typa varje ärende: \"bugg\" (trasigt), \"feature\" (ny förmåga) eller \"forbattring\" (refaktorering/kvalitet).\n\n"
         "Returnera ENBART JSON — id:n EXAKT som i input:\n"
         '{"ordning":[{"id":"...","ordning_nr":1,"typ":"bugg"|"feature"|"forbattring",'
-        '"beror_pa":["id på ärenden som måste vara klara först"],"motivering":"en mening varför denna plats"}],'
-        '"sammanfattning":"2-3 meningar: vad ska göras först och varför"}'
+        '"beror_pa":["id"],"parallel_with":["id"],"file_conflict":false,'
+        '"reordered":false,"motivering":"en mening varför denna plats"}],'
+        '"sammanfattning":"2-3 meningar: vad ska göras först och varför",'
+        '"parallella_sprintar":[["id1","id2"],["id3"]]}' 
+        "\n\nFältet parallella_sprintar grupperar items som kan byggas i samma omgång — "
+        "varje lista är en parallell sprint-grupp."
     ),
 }
 
@@ -1928,6 +2073,53 @@ BESTALLARE_AGENT = {
 ALL_AGENTS = {a["id"]: a for a in (
     [KRAV_AGENT] + SPECIALIST_AGENTS + [PROMPT_SMITH, BACKLOG_AGENT, COMPLETENESS_AGENT, BESTALLARE_AGENT]
 )}
+
+# ──────────────────────────────────────────────
+# PER-PROJECT SETTINGS — per-projekt agent enable/disable
+# ──────────────────────────────────────────────
+# projects.json: { "<project_id>": { "disabled_agents": [...], "updated_at": "..." } }
+# _ALWAYS_RUN_AGENT_IDS kan aldrig inaktiveras.
+
+PROJECTS_FILE = BASE_DIR / "projects.json"
+_projects_lock = threading.Lock()
+
+
+def _projects_load() -> dict:
+    if PROJECTS_FILE.exists():
+        try:
+            data = json.loads(PROJECTS_FILE.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception as e:
+            logger.error("projects.json corrupt (%s) — returning empty", e)
+    return {}
+
+
+def _projects_write(data: dict) -> None:
+    """Atomic write — caller must hold _projects_lock."""
+    tmp = PROJECTS_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(PROJECTS_FILE)
+
+
+def get_project_settings(project_id: str) -> dict:
+    """Return stored per-project settings (empty dict if not yet configured)."""
+    if not project_id:
+        return {}
+    with _projects_lock:
+        return dict(_projects_load().get(project_id, {}))
+
+
+def save_project_settings(project_id: str, patch: dict) -> dict:
+    """Merge patch into existing project settings and persist atomically."""
+    if not project_id:
+        raise ValueError("project_id required")
+    with _projects_lock:
+        data = _projects_load()
+        existing = dict(data.get(project_id, {}))
+        existing.update(patch)
+        data[project_id] = existing
+        _projects_write(data)
+    return existing
 
 
 # ──────────────────────────────────────────────
@@ -2654,6 +2846,8 @@ async def post_settings(payload: dict):
         s["self_repo"] = payload["self_repo"]
     if "self_branch" in payload:
         s["self_branch"] = payload["self_branch"]
+    if "local_path" in payload:
+        s["local_path"] = payload["local_path"]
     save_settings(s)
     key = s.get("api_key", "")
     if key:
@@ -2762,7 +2956,12 @@ async def review(payload: dict):
     depth = payload.get("depth", "djup")
     if depth not in ("snabb", "djup"):
         depth = "djup"
-    agents = agents_for_mode(mode, depth)
+    # Merge per-project disabled_agents (stored server-side) with any sent in the request
+    proj_settings = get_project_settings(project_id) if project_id else {}
+    stored_disabled = proj_settings.get("disabled_agents") or []
+    request_disabled = payload.get("disabled_agents") or []
+    disabled_agents = list(set(stored_disabled) | set(request_disabled))
+    agents = agents_for_mode(mode, depth, disabled_agents)
     is_review_mode = mode in ("granska_kod", "buggrapport")
 
     # Build full input for agents
@@ -2964,7 +3163,9 @@ async def review(payload: dict):
     }
 
     session_id = str(uuid.uuid4())
-    session_name = auto_name(input_text)
+    # C5: tolkad_ide från Kravanalytikern är mer beskrivande än råtextens första 7 ord.
+    _tolkad = (krav_result or {}).get("tolkad_ide", "").strip()
+    session_name = _tolkad[:60] if _tolkad else auto_name(input_text)
     skipped_count = sum(1 for r in results if r.get("skipped"))
     stats_dict = {"total": len(results), "approved": approved, "rejected": rejected,
                   "errors": errors, "skipped": skipped_count}
@@ -3596,13 +3797,24 @@ async def build_queue_review(item_id: str, payload: dict):
             verify_verdict = v.get("verdict", {})
             fixad = bool(verify_verdict.get("fixad"))
 
-    # The verdict rule: klar = no new P0 AND (no source finding OR source finding fixed)
-    is_klar = (len(new_p0) == 0) and (fixad is None or fixad)
+    # C3: hemlighetsvakten-fynd är icke-förhandlingsbara — hårdblockera oavsett P0s.
+    # En exponerad API-nyckel får aldrig bli "klar".
+    secret_findings = [
+        r for r in (review_res.get("results") or [])
+        if r.get("id") == "hemlighetsvakten" and r.get("status") == "UNDERKÄND"
+    ]
+    # The verdict rule: klar = no new P0 AND no secrets AND (no source finding OR fixed)
+    is_klar = (len(new_p0) == 0) and (not secret_findings) and (fixad is None or fixad)
+    secret_titles = [f"🔐 HEMLIGHET HITTAD: {f}" for sf in secret_findings
+                     for f in (sf.get("findings") or [sf.get("name", "okänd hemlighet")])[:2]]
     verdict = {
         "fixad": fixad,
         "motivering": verify_verdict.get("motivering", ""),
-        "kvarstaende": (verify_verdict.get("kvarstaende") or []) + [i.get("title", "") for i in new_p0],
+        "kvarstaende": (secret_titles
+                        + (verify_verdict.get("kvarstaende") or [])
+                        + [i.get("title", "") for i in new_p0]),
         "new_p0": len(new_p0),
+        "secrets_blocked": len(secret_findings),
         "review_session_id": review_res.get("session_id"),
     }
 
@@ -4055,6 +4267,69 @@ async def health_check():
     all_ok = all(v["ok"] for v in results.values())
     return {"ok": all_ok, "services": results}
 
+# ──────────────────────────────────────────────
+# PER-PROJECT SETTINGS ENDPOINTS
+# ──────────────────────────────────────────────
+
+@app.get("/api/projects")
+async def list_all_projects():
+    """List all configured projects and their stored settings."""
+    with _projects_lock:
+        data = _projects_load()
+    return {"projects": data}
+
+
+@app.get("/api/projects/{project_id}/settings")
+async def get_project_settings_api(project_id: str):
+    """Per-project settings + full agent catalogue with disabled status."""
+    s = get_project_settings(project_id)
+    return {
+        "project_id": project_id,
+        "disabled_agents": s.get("disabled_agents", []),
+        "always_run_agent_ids": list(_ALWAYS_RUN_AGENT_IDS),
+        "agent_catalogue": [
+            {
+                "id": a["id"],
+                "name": a["name"],
+                "emoji": a.get("emoji", ""),
+                "phase": a.get("phase"),
+                "layer": a.get("layer"),
+                "modes": a.get("modes", []),
+                "always_run": a["id"] in _ALWAYS_RUN_AGENT_IDS,
+                "disabled": a["id"] in s.get("disabled_agents", []),
+            }
+            for a in SPECIALIST_AGENTS
+        ],
+    }
+
+
+@app.post("/api/projects/{project_id}/settings")
+async def post_project_settings_api(project_id: str, payload: dict):
+    """Update per-project agent configuration.
+    payload: { disabled_agents: ["architecture", "i18n", ...] }
+    _ALWAYS_RUN_AGENT_IDS are silently kept active regardless."""
+    all_ids = {a["id"] for a in SPECIALIST_AGENTS}
+    raw_disabled = [a for a in (payload.get("disabled_agents") or [])
+                    if isinstance(a, str) and a in all_ids]
+    # Strip always-run agents — they can never be disabled
+    disabled = [a for a in raw_disabled if a not in _ALWAYS_RUN_AGENT_IDS]
+    patch = {
+        "disabled_agents": disabled,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    try:
+        result = save_project_settings(project_id, patch)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    silently_kept = [a for a in raw_disabled if a in _ALWAYS_RUN_AGENT_IDS]
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "settings": result,
+        "silently_kept_active": silently_kept,
+    }
+
+
 @app.get("/api/sessions")
 async def api_list_sessions(project_id: str = ""):
     # Off the event loop — list_sessions does file I/O (and possibly Supabase)
@@ -4107,4 +4382,5 @@ async def api_version():
 if __name__ == "__main__":
     import uvicorn
     # 127.0.0.1 only — 0.0.0.0 exposed the unauthenticated API (and stored keys) to the LAN
-    uvicorn.run("app:app", host="127.0.0.1", port=8001, reload=True)
+    # reload=False i drift — reload=True startar om servern vid varje filsparning
+    uvicorn.run("app:app", host="127.0.0.1", port=8001, reload=False)
