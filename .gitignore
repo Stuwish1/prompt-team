@@ -17,3 +17,8 @@ start_background.vbs
 stop_app.bat
 interim_result*.jso.github/workflows/
 .github/
+intrim_result_concrete.json
+test_intrim.py
+ARKITEKTUR_ANALYS.md
+KID_USER_PROMPT.md
+AGENT_CHATBOX_BUILD.md

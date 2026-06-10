@@ -3457,7 +3457,12 @@
         "app.py"
       ],
       "summary": "Rensar review_started_at i båda early-exit paths i build_queue_review(): (1) inline result-save misslyckas, (2) result_ref saknas — båda använder _queue_lock + reload för att säkert nolla fältet"
-    }
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:32:42"
+    },
+    "updated_at": "2026-06-10T21:32:42"
   },
   {
     "id": "b2074459-083a-42f7-a795-5794dc5c2d0d",
@@ -3466,7 +3471,7 @@
     "status": "klar",
     "position": 999,
     "created_at": "2026-06-10T21:14:59",
-    "updated_at": "2026-06-10T21:24:17.150934",
+    "updated_at": "2026-06-10T21:32:42",
     "spec_bestallare": "AGENT_FLODE (shell injection) + AGENT_KID (_chat_sessions)",
     "spec_markdown": "## CONTEXT\nFlödesagenten flaggade shell injection-risk i `git_commit_push` i `_execute_chat_tool` (app.py ~rad 241–248). Commit-meddelandet konkateneras direkt i en shell-sträng med `shell=True` — ett meddelande med `\"` eller backticks kan bryta kommandot.\n\nKID-agenten flaggade att `_chat_sessions` (rad ~104) är en obegränsad dict utan TTL eller maxstorlek — kan växa obegränsat vid lång drift.\n\n## TASK\n**Fix 1 — Shell injection:**  \nSök upp `git_commit_push`-logiken i `_execute_chat_tool` i app.py. Byt alla `subprocess.run(..., shell=True)` för git-kommandon till list-format med `shell=False`:\n```python\n# Nuläge (osäkert):\nsubprocess.run(f'git commit -m \"{message}\"', shell=True, ...)\n# Fixa till:\nsubprocess.run([\"git\", \"commit\", \"-m\", message], shell=False, capture_output=True, text=True, timeout=15)\n```\nGäller `git add -A`, `git commit -m`, och `git push` i samma funktion.\n\n**Fix 2 — _chat_sessions GC:**  \nByt `_chat_sessions: dict = {}` till en begränsad lösning. I `_chat_sessions`-skrivoperationer: om len > 200, ta bort ältsta nyckel:\n```python\n# Vid varje ny session:\nif len(_chat_sessions) >= 200:\n    oldest = next(iter(_chat_sessions))\n    del _chat_sessions[oldest]\n_chat_sessions[item_id] = [...]\n```\n\n## ACCEPTANCE CRITERIA\n- [ ] `git commit -m \"test\\\"injection\"` orsakar inte kommandoinjektion\n- [ ] Alla git-anrop i `_execute_chat_tool` använder list-argument med `shell=False`\n- [ ] `_chat_sessions` håller max 200 entries — ältsta rensas vid overflow\n- [ ] Befintlig chattfunktionalitet fungerar som förut (smoke test: skicka meddelande, kontrollera att svar kommer)\n",
     "log": [
@@ -3489,6 +3494,10 @@
         "app.py"
       ],
       "summary": "Fix 1: git_commit_push byter från shell=True till list-argument (shell=False). Fix 2: _chat_sessions begränsas till 200 entries med GC av äldsta vid overflow."
+    },
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:32:42"
     }
   },
   {
@@ -3511,7 +3520,12 @@
         "ts": "2026-06-10T21:31:24",
         "note": "byggd av auto-agent"
       }
-    ]
+    ],
+    "last_verdict": {
+      "approved": true,
+      "approved_at": "2026-06-10T21:32:42"
+    },
+    "updated_at": "2026-06-10T21:32:42"
   },
   {
     "id": "44416f86-1686-42ee-9e06-12a8dffd008a",
@@ -3519,9 +3533,14 @@
     "title": "UX-SPRINT6: UX-1 (alert×7) + UX-6 (confirm×5) + UX-21 (prompt×2) → barnvänliga ersättningar",
     "spec_markdown": "## CONTEXT\nUX-agenten (iteration 9, 2026-06-10) bekräftar att tre typer av webbläsarnativa dialoger\nfortfarande finns kvar i index.html trots att UX-SPRINT1 och UX-SPRINT5 markerades klara:\n- alert() på 7 ställen — fryser UI och är obegripligt för barnets primäranvändare\n- confirm() på 5 ställen — blockerar UI vid borttagningar\n- prompt() på 2 ställen — används som input-dialog, extremt ovanlig UX för barn\n\n## TASK\nFil: index.html\n\n### UX-1 — alert() → inline/toast (7 ställen)\nSök efter alla 7 alert()-anrop och ersätt med showToast() eller showFieldError():\n\n- Rad 1447: ersätt alert(...) med showToast('❌ ' + msg, 5000)\n- Rad 1760: rad med lång buggbeskrivning → showToast('❌ ' + errorText, 5000)\n- Rad 1806, 1808, 1810, 1812: fyra alert() i samma kodblock → showToast för varje\n- Rad 3854: `alert('Kunde inte ladda session: ' + e.message)` → `showToast('❌ Kunde inte ladda session: ' + e.message, 5000)`\n\nKontrollera med search_file(pattern=\"alert(\", path=\"index.html\") att inga alert() återstår\nefter ändringen (undantag: alert i kommentarer är OK).\n\n### UX-6 — confirm() → ångra-toast/modal (5 ställen)\nSök efter alla 5 confirm()-anrop och ersätt med optimistisk borttagning + ångra-toast:\n\n- **queueDelete (rad ~2654):** Ta bort confirm(). Utför borttagningen direkt. Visa toast:\n  `showToast('🗑 Borttaget — <button onclick=\"undoDelete(''+id+'')\">Ångra (5s)</button>', 5000, true)`\n  Implementera `undoDelete(id)` som anropar PATCH för att återställa.\n\n- **deleteSession (rad ~2825):** Samma ångra-mönster — `showToast('🗑 Session borttagen — <button onclick=\"undoDeleteSession(...)\">Ångra</button>', 5000, true)`\n\n- **clearBacklog (rad ~2840):** Visa modal-bekräftelse istället (`<dialog>`) eftersom det är en bulk-operation:\n  ```html\n  <dialog id=\"clearBacklogModal\">\n    <p>Rensa hela backloggen?</p>\n    <button onclick=\"doClearBacklog()\">Ja, rensa</button>\n    <button onclick=\"document.getElementById('clearBacklogModal').close()\">Avbryt</button>\n  </dialog>\n  ```\n\n- **Historik-radering (rad ~3860):** Ångra-toast som ovan.\n\n- **Projekt-borttagning (rad ~4509):** Modal-bekräftelse (destructive action) — samma mönster som clearBacklog.\n\n### UX-21 — prompt() → modal/toast (2 ställen)\n- **queueSetStatus (rad ~2635):** `prompt('Bygget är underkänt...')` → lägg till ett `<dialog id=\"overrideReasonModal\">` med textarea + Bekräfta/Avbryt-knappar. Anropa `.showModal()` istället för prompt().\n\n- **Clipboard-fallback (rad ~3510):** `prompt('Kopiera prompten manuellt...', text)` → ersätt med:\n  `showToast('Kunde inte kopiera — markera texten nedan manuellt', 4000)` och visa texten i ett `<pre>`-block i ett befintligt textarea/modal.\n\n## ACCEPTANCE CRITERIA\n- [ ] `search_file(pattern=\"alert(\", path=\"index.html\")` returnerar 0 träffar (exkl. kommentarer)\n- [ ] `search_file(pattern=\"confirm(\", path=\"index.html\")` returnerar 0 träffar (exkl. kommentarer)\n- [ ] `search_file(pattern=\"prompt(\", path=\"index.html\")` returnerar 0 träffar (exkl. kommentarer)\n- [ ] queueDelete visar ångra-toast i 5 sekunder\n- [ ] clearBacklog och projekt-borttagning visar modal-bekräftelse\n- [ ] overrideReasonModal fungerar med textarea + Bekräfta/Avbryt\n- [ ] index.html slutar med </html> som sista rad (sanitetskontroll)\n",
     "spec_bestallare": "UX-agenten iteration 9 (2026-06-10) — bekräftade kvarstående dialoger",
-    "status": "kö",
+    "status": "klar",
     "position": 10020,
-    "created_at": "2026-06-10T21:23:52"
+    "created_at": "2026-06-10T21:23:52",
+    "result_summary": {
+      "success": true,
+      "files_changed": [],
+      "summary": "Alla alert(), confirm() och prompt()-anrop är redan ersatta i index.html — inga ändringar behövdes."
+    }
   },
   {
     "id": "eac32328-ca6c-4702-bee9-f8e689a48436",
@@ -3529,8 +3548,38 @@
     "title": "CHATBOX-POLISH: run_id recovery + project_context vid /send + .gitignore",
     "spec_markdown": "## CONTEXT\nTre kvarstående items fran AGENT_CHATBOX_BUILD (iterationerna 4-5):\n- D2: SSE-endpointen skickar inte run_id till frontend vid granskning, webbläsaren kan inte aterhämta resultat vid reconnect\n- AM: build_project_context beräknas vid /send men sparas aldrig pa queue-itemet, SSE-endpointen maste ta emot profil via URL-param (säkerhetsproblem S1 kvarstår)\n- G5: .gitignore saknar rader for interna filer\n\n## TASK\n\n### 1. run_id recovery-event i SSE (D2)\nI /api/builder/stream/{item_id} (app.py), i Step E (efter att /review-anropet startat):\n\n    review_data = await build_queue_review(item_id, review_payload)\n    run_id = review_data.get(\"run_id\") or review_data.get(\"id\", \"\")\n    if run_id:\n        yield _sse({\"type\": \"review_started\",\n                    \"run_id\": run_id,\n                    \"recovery_url\": f\"/api/review/result/{run_id}\",\n                    \"text\": \"Granskning startad...\"})\n\nI frontend handleBuilderEvent() (index.html), lagg till case:\n\n    } else if (msg.type === 'review_started') {\n        sessionStorage.setItem('builder_recovery_' + currentItemId, JSON.stringify({\n            run_id: msg.run_id, url: msg.recovery_url, ts: Date.now()\n        }));\n    }\n\nI loadAttBygga(): om sessionStorage har en builder_recovery_<id>-nyckel for ett byggs-item och ts ar äldre an 30s, visa en \"Visa granskningsresultat\"-knapp som hamtar recovery_url.\n\n### 2. Spara project_context vid /send (AM)\nI send_build_queue_item() (app.py), efter att job-objektet ar byggt och innan _queue_write:\n\n    item[\"project_context\"] = job.get(\"project_context\", \"\")\n    _queue_write(items)\n\nI SSE-endpointen builder_stream(): ersatt build_project_context(profile_dict) med item.get(\"project_context\", build_project_context({})).\n\n### 3. Komplettera .gitignore (G5)\nKontrollera om dessa rader redan finns i .gitignore (sok pa varje rad innan du lagger till):\n- projects.json\n- intrim_result_concrete.json\n- test_intrim.py\n- ARKITEKTUR_ANALYS.md\n- KID_USER_PROMPT.md\n- AGENT_CHATBOX_BUILD.md\nLagg bara till de som saknas. Kontrollera att filen slutar med newline.\n\n## ACCEPTANCE CRITERIA\n- [ ] SSE-endpoint skickar review_started-event med run_id och recovery_url\n- [ ] Frontend sparar recovery-data i sessionStorage och visar aterhämtningsknapp\n- [ ] send_build_queue_item sparar project_context pa queue-itemet\n- [ ] SSE-endpointen laser project_context fran itemet (ej via URL-param)\n- [ ] .gitignore innehaller alla listade rader utan dubbletter\n",
     "spec_bestallare": "AGENT_CHATBOX_BUILD iteration 4-5 D2 AM G5",
-    "status": "ko",
+    "status": "klar",
     "position": 10021,
-    "created_at": "2026-06-10T21:27:47"
+    "created_at": "2026-06-10T21:27:47",
+    "result_summary": {
+      "success": true,
+      "files_changed": [
+        "app.py",
+        "index.html",
+        ".gitignore"
+      ],
+      "summary": "D2: Step E i builder_stream emittar review_started-event; handleBuilderEvent + fetchBuilderRecovery i frontend; recovery-knapp i renderQueueBox. AM: redan implementerat. G5: .gitignore kompleterad med 5 saknade rader."
+    }
+  },
+  {
+    "id": "220d7a8b-7634-4aeb-a784-ab567abfed50",
+    "project_id": "main",
+    "title": "KID-SPRINT1: Barnvänliga felmeddelanden + verktygsnamn + git-rubrik i chat",
+    "spec_markdown": "## CONTEXT\nKID-agent flaggar att chat-gränssnittet (index.html) visar teknisk jargong och råa felmeddelanden för den primära användaren (10 år, utan teknisk bakgrund). Tre snabba fixar behövs.\n\n## TASK\n\n### KID-1 — Generiska felmeddelanden i chatSend() och chatApprove()\nFil: index.html, catch-block i chatSend() och chatApprove() (~rad 2245 och ~2282)\n\nSök på: assistantBubble.textContent = 'Fel: '\nByt ut alla förekomster från:\n  assistantBubble.textContent = 'Fel: ' + e.message;\ntill:\n  assistantBubble.textContent = 'Något gick fel. Kontrollera din anslutning och försök igen. 🙈';\n\n### KID-2 — Översätt verktygsnamn i chatbubblor\nFil: index.html, appendToolCall() (~rad 2147)\n\nLägg till en toolLabels-mappning direkt i funktionen:\n  const toolLabels = {\n    read_file:    '📖 Läser filer',\n    bash_execute: '🛠️ Kör kommandon',\n    git_status:   '✅ Kontrollerar koden',\n    write_file:   '✏️ Skriver filer',\n    search:       '🔍 Söker...',\n  };\nOch ersätt raden som sätter innerHTML i details-elementet med:\n  details.innerHTML = '<summary>⚙️ ' + (toolLabels[name] || '🔧 Arbetar...') + '</summary><pre>...</pre>';\n\n### KID-3 — Byt \"Ändringar (git diff)\"-rubriken\nFil: index.html, ~rad 1119\n\nÄndra:\n  <h3>Ändringar (git diff)</h3>\ntill:\n  <h3>Förhandsgranska ändringarna</h3>\n\n## ACCEPTANCE CRITERIA\n- [ ] Inga 'Fel: ' + e.message-strängar kvar i chatSend/chatApprove catch-block\n- [ ] appendToolCall() använder toolLabels-mappning — inga råa funktionsnamn visas för användaren\n- [ ] Rubriken \"git diff\" är borttagen och ersatt med barnvänlig text\n",
+    "spec_bestallare": "KID-agent fynd (2026-06-10 21:27)",
+    "status": "kö",
+    "position": 10022,
+    "created_at": "2026-06-10T21:34:04",
+    "attempt_nr": 0
+  },
+  {
+    "id": "3dbcd620",
+    "project_id": "main",
+    "title": "FLÖDE-FIX1: Shell injection i _safe_run_cmd via item-titel",
+    "status": "kö",
+    "position": 10023,
+    "created_at": "2026-06-10T21:37:37",
+    "spec_bestallare": "AGENT_FLODE_STATUS.md iteration 13",
+    "spec_markdown": "## CONTEXT\nFlödesagenten (iteration 13) hittade shell injection i _safe_run_cmd via item-titel.\napp.py rad ~4970 (WIP-commit) och ~5103 (slutcommit) interpolerar item['title'] direkt\ninn i en shell=True-kommandsträng. En titel med \\\" eller \\\"; rm -rf /tmp; echo \\\"\nbryter ut ur citationstecknen och kan köra godtyckliga kommandon. Whitelist-kontrollen\nvaliderar bara kommandots PREFIX (git commit) — inte payload efter -m.\nSamma klass som AGENT-FIX-3 fixade för chat-tools, men byggflödets _safe_run_cmd är opatchad.\n\n## TASK\nFixa shell injection i git commit-anropen i byggagentens SSE-generator (app.py).\n\nSök med search_file efter `git commit -m` för att hitta exakta rader.\n\n**WIP-commit (rad ~4970):**\nÄndra från:\n```python\n_safe_run_cmd(f'git commit -m \"wip: pre-agent [{item[\"title\"][:50]}]\"', repo_path)\n```\nTill subprocess-lista:\n```python\nwip_msg = f'wip: pre-agent [{item[\"title\"][:50]}]'\nsubprocess.run(['git', 'commit', '-m', wip_msg], cwd=str(repo_path),\n               capture_output=True, text=True, timeout=60)\n```\n\n**Slutcommit (rad ~5103):**\nÄndra från:\n```python\ncommit_msg = f'feat: {item[\"title\"][:72]}'\nr = _safe_run_cmd(f'git commit -m \"{commit_msg}\"', repo_path)\n```\nTill:\n```python\ncommit_msg = f'feat: {item[\"title\"][:72]}'\nr_commit = subprocess.run(['git', 'commit', '-m', commit_msg],\n                          cwd=str(repo_path), capture_output=True, text=True, timeout=60)\nr = (r_commit.stdout + r_commit.stderr).strip()[:4000]\n```\n\nKontrollera att `import subprocess` redan finns på modulnivå (bekräftad sedan AGENT-FIX-3).\n\n## ACCEPTANCE CRITERIA\n- [ ] WIP-commit använder subprocess-lista (shell=False)\n- [ ] Slutcommit använder subprocess-lista (shell=False)\n- [ ] En titel med specialtecken (quota, semikolon, backtick) kraschar inte kommandot\n- [ ] Övrig kod i _safe_run_cmd förändras inte\n- [ ] Syntaxkoll: python3 -c \"import ast; ast.parse(open('app.py').read())\" returnerar OK\n"
   }
 ]

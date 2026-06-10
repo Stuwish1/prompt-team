@@ -613,6 +613,24 @@ _queue_lock = threading.Lock()
 QUEUE_STATUSES = ("kö", "byggs", "behover_dig", "klar")
 
 def _queue_load() -> list:
+    # Primär: Supabase om konfigurerat — Railway tappar build_queue.json vid omstart.
+    if _sb_available():
+        try:
+            headers = _sb_headers()
+            resp = httpx.get(
+                _sb_url("build_queue_items"),
+                headers=headers,
+                params={"select": "data", "deleted_at": "is.null", "order": "updated_at.asc"},
+                timeout=5.0,
+            )
+            if resp.status_code == 200:
+                rows = resp.json()
+                items = [r["data"] for r in rows if isinstance(r.get("data"), dict)]
+                if items:
+                    return items
+        except Exception as e:
+            logger.warning("Supabase queue read failed (%s) — falling back to file", e)
+    # Fallback: lokal fil
     if BUILD_QUEUE_FILE.exists():
         try:
             data = json.loads(BUILD_QUEUE_FILE.read_text(encoding="utf-8"))
@@ -682,6 +700,16 @@ async def get_build_queue(project_id: str = ""):
     items = [i for i in items if not i.get("deleted_at")]
     items.sort(key=lambda i: i.get("position", 0))
     return {"items": items}
+
+
+@app.get("/api/dashboard-data")
+async def get_dashboard_data():
+    """Serve dashboard_data.json — used by the pipeline dashboard artifact as offline fallback."""
+    from fastapi.responses import FileResponse
+    p = BASE_DIR / "dashboard_data.json"
+    if not p.exists():
+        return {"generated_at": "", "source": "missing", "queue": {"byggs": [], "ko": [], "klar": [], "behover_dig": []}, "sanitet": {}, "git": {}, "agents": []}
+    return FileResponse(str(p), media_type="application/json")
 
 
 @app.post("/api/build-queue")
@@ -4491,8 +4519,10 @@ async def github_webhook(request: Request):
             items = _queue_load()
         byggs_items = [i for i in items if i.get("status") == "byggs" and not i.get("deleted_at")]
         if byggs_items:
-            # Prioritera item vars result_ref matchar push-SHA
-            sha_match = [i for i in byggs_items if i.get("result_ref") == after_sha and after_sha]
+            # Prioritera item vars commit_sha (från builder SSE ready_to_push) matchar push-SHA.
+            # result_ref lagras som "{item_id}_{attempt}.json" — aldrig ett git-SHA.
+            sha_match = [i for i in byggs_items
+                         if after_sha and i.get("result_summary", {}).get("commit_sha") == after_sha]
             if sha_match:
                 chosen = sha_match[0]
                 reason = f"SHA-match ({after_sha[:8]})"
@@ -4967,7 +4997,11 @@ async def builder_stream(item_id: str, request: Request):
             if dirty.strip():
                 yield _sse({"type": "status", "text": "Committar befintliga ändringar som WIP..."})
                 _safe_run_cmd("git add -A", repo_path)
-                _safe_run_cmd(f'git commit -m "wip: pre-agent [{item["title"][:50]}]"', repo_path)
+                # shell=False: undviker injection via item["title"] (specialtecken som " $ ` bryter annars ut)
+                subprocess.run(
+                    ["git", "commit", "-m", f"wip: pre-agent [{item['title'][:50]}]"],
+                    cwd=str(repo_path), capture_output=True, text=True, timeout=30
+                )
 
             api_key = load_settings().get("api_key", "")
             client = anthropic.AsyncAnthropic(api_key=api_key, timeout=120.0)
@@ -5100,7 +5134,11 @@ async def builder_stream(item_id: str, request: Request):
             yield _sse({"type": "status", "text": "Committar ändringar lokalt..."})
             commit_msg = f"feat: {item['title'][:72]}"
             _safe_run_cmd("git add -A", repo_path)
-            _safe_run_cmd(f'git commit -m "{commit_msg}"', repo_path)
+            # shell=False: undviker injection via item["title"] (specialtecken som " $ ` bryter annars ut)
+            subprocess.run(
+                ["git", "commit", "-m", commit_msg],
+                cwd=str(repo_path), capture_output=True, text=True, timeout=30
+            )
             sha_r = _safe_run_cmd("git rev-parse HEAD", repo_path)
             commit_sha = sha_r.strip()
             stat_r = _safe_run_cmd("git diff HEAD~1 --stat", repo_path)
@@ -5124,6 +5162,19 @@ async def builder_stream(item_id: str, request: Request):
                     "  2. Klicka Pusha och kontrollera mot GitHub på kortet"
                 ),
             })
+
+            # Step E: trigger review and emit run_id for recovery (D2)
+            try:
+                review_data = await build_queue_review(item_id, {})
+                if isinstance(review_data, dict):
+                    run_id = review_data.get("run_id") or review_data.get("id", "")
+                    if run_id:
+                        yield _sse({"type": "review_started",
+                                    "run_id": run_id,
+                                    "recovery_url": f"/api/review/result/{run_id}",
+                                    "text": "Granskning startad..."})
+            except Exception:
+                pass
 
         finally:
             _active_builders.pop(item_id, None)
@@ -5176,62 +5227,4 @@ async def builder_followup(item_id: str, payload: dict):
         items = _queue_load()
         it = next((i for i in items if i.get("id") == item_id and not i.get("deleted_at")), None)
     if not it:
-        return JSONResponse({"error": "Item hittades inte."}, status_code=404)
-
-    if it.get("status") != "byggs":
-        return JSONResponse({"error": "Bygget är inte aktivt."}, status_code=409)
-
-    item_id_safe = item_id.replace("..", "").replace("/", "")
-    history = _builder_histories.get(item_id_safe)
-    if not history:
-        return JSONResponse({"error": "Ingen aktiv bygghistorik."}, status_code=404)
-
-    history.append({"role": "user", "content": message})
-    return {"ok": True}
-# ──────────────────────────────────────────────
-# CHAT ENDPOINTS — per-item meddelande-historik
-# ──────────────────────────────────────────────
-
-@app.get("/api/chat/{item_id}")
-async def api_chat_get(item_id: str):
-    """Return stored chat messages for a build queue item."""
-    if not _CHAT_ID_RE.match(item_id):
-        return JSONResponse({"error": "Ogiltigt item_id-format."}, status_code=400)
-    with _chat_lock:
-        messages = list(_chat_sessions.get(item_id, []))
-    return {"messages": messages}
-
-
-@app.post("/api/chat/{item_id}")
-async def api_chat_post(item_id: str, payload: dict):
-    """Append a chat message for a build queue item."""
-    if not _CHAT_ID_RE.match(item_id):
-        return JSONResponse({"error": "Ogiltigt item_id-format."}, status_code=400)
-    role = payload.get("role", "user")
-    content_val = payload.get("content") or payload.get("message", "")
-    if not content_val:
-        return JSONResponse({"error": "Tomt innehåll."}, status_code=400)
-    now = datetime.now().timestamp()
-    with _chat_lock:
-        _chat_sessions.setdefault(item_id, []).append({"role": role, "content": content_val})
-        _chat_sessions_last_used[item_id] = now
-    return {"ok": True}
-
-
-@app.delete("/api/chat/{item_id}")
-async def api_chat_delete(item_id: str):
-    """Clear chat history for a build queue item."""
-    if not _CHAT_ID_RE.match(item_id):
-        return JSONResponse({"error": "Ogiltigt item_id-format."}, status_code=400)
-    with _chat_lock:
-        _chat_sessions.pop(item_id, None)
-        _chat_sessions_last_used.pop(item_id, None)
-    return {"ok": True}
-
-
-if __name__ == "__main__":
-    import sys
-    dev_mode = "--dev" in sys.argv
-    port = int(os.environ.get("PORT", 8001))
-    host = "0.0.0.0" if os.environ.get("RAILWAY_ENVIRONMENT") else "127.0.0.1"
-    uvicorn.run("app:app", host=host, port=port, reload=dev_mode)
+        return JSONRespons

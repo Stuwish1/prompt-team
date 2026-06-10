@@ -2378,11 +2378,16 @@ function renderQueueBox() {
                    <span style="font-size:11px;color:var(--text3);">Tryck för att börja bygga 🚀</span>`;
       } else if (it.status === 'byggs') {
         const hasRepo = !!(getActiveProject()?.repo);
+        // D2: check sessionStorage for review recovery data (set by handleBuilderEvent)
+        const _rec = (() => { try { return JSON.parse(sessionStorage.getItem('builder_recovery_' + it.id) || 'null'); } catch(e) { return null; } })();
+        const _showRec = _rec && (Date.now() - _rec.ts) > 30000;
+        const _recBtn = _showRec ? `<button class="btn btn-ghost" onclick="fetchBuilderRecovery('${it.id}', '${escHtml(_rec.url || '')}')" style="font-size:11px;">📊 Visa granskningsresultat</button>` : '';
         actions = (hasRepo
           ? `<button class="btn btn-primary" onclick="kontrolleraBuild('${it.id}', this)" title="Hämtar senaste koden från GitHub och låter teamet granska + verifiera mot specen">🔍 Kontrollera bygget</button>
              <button class="btn btn-ghost" onclick="openBuildResult('${it.id}')" style="font-size:11px;">📋 ...eller klistra in koden själv</button>`
           : `<button class="btn btn-primary" onclick="kontrolleraBuild('${it.id}', this)" title="Hämtar senaste koden och låter teamet granska">🔍 Kontrollera bygget</button>
              <button class="btn btn-ghost" onclick="openBuildResult('${it.id}')" style="font-size:11px;">📋 Klistra in resultatet</button>`)
+          + _recBtn
           + `<button class="btn btn-ghost" onclick="queueSetStatus('${it.id}','kö')">← Avbryt, vänta istället</button>`;
       } else if (it.status === 'behover_dig') {
         actions = `<button class="btn btn-primary" onclick="startBuild('${it.id}', this)">🔄 Försök igen</button>
@@ -2432,6 +2437,18 @@ function renderQueueBox() {
 
 // ── QUEUE CHAT PANEL ────────────────────────────────────────────
 let _chatPanelItemId = null;
+
+// D2: handle SSE events from /api/builder/stream — stores recovery data in sessionStorage
+function handleBuilderEvent(msg) {
+  if (msg.type === 'review_started') {
+    const currentItemId = _chatPanelItemId;
+    if (currentItemId) {
+      sessionStorage.setItem('builder_recovery_' + currentItemId, JSON.stringify({
+        run_id: msg.run_id, url: msg.recovery_url, ts: Date.now()
+      }));
+    }
+  }
+}
 
 function openChatPanel(item) {
   const panel = document.getElementById('chatPanel');
@@ -2609,6 +2626,26 @@ async function kontrolleraBuild(id, btn) {
   } catch (e) {
     showToast('❌ ' + e.message, 6000);
     if (btn) { btn.disabled = false; btn.textContent = '🔍 Kontrollera bygget'; }
+  }
+}
+
+// D2: fetch recovery result from builder SSE recovery URL
+async function fetchBuilderRecovery(id, url) {
+  if (!url) return;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data?.verdict) {
+      const status = data.new_status || (data.verdict.kvarstaende?.length ? 'behover_dig' : 'klar');
+      showToast(status === 'klar' ? '🟢 Granskning klar — godkänt!' : `🔴 Granskning klar — ${(data.verdict.kvarstaende || []).length} kvarstående problem`, 6000);
+      sessionStorage.removeItem('builder_recovery_' + id);
+      await loadAttBygga();
+    } else {
+      showToast('Granskningsresultatet är inte klart ännu — försök igen om en stund.');
+    }
+  } catch (e) {
+    showToast('❌ ' + e.message);
   }
 }
 
@@ -4735,48 +4772,7 @@ document.addEventListener('paste', (e) => {
     } catch {}
   };
   await poll();
-  setInterval(poll, 1000);
-})();
-</script>
-
-<dialog id="overrideReasonDialog"><form method="dialog">
-  <p style="margin:0 0 8px;font-size:14px;">Varför ska bygget markeras klart ändå?</p>
-  <textarea id="overrideReasonInput" rows="3" style="width:100%;box-sizing:border-box;"></textarea>
-  <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end;">
-    <button type="button" onclick="document.getElementById('overrideReasonDialog').close('')">Avbryt</button>
-    <button type="submit">OK</button>
-  </div>
-</form></dialog>
-
-<div id="agentPulse" style="
-  position:fixed; bottom:8px; right:12px;
-  font-size:11px; color:var(--text3);
-  background:var(--surface2,rgba(0,0,0,0.04));
-  padding:3px 8px; border-radius:10px;
-  opacity:0; transition:opacity 0.5s;
-  pointer-events:none; z-index:9;
-" title="Senaste agentaktivitet"></div>
-
-<script>
-(async function agentPulse() {
-  const el = document.getElementById('agentPulse');
-  if (!el) return;
-  try {
-    const r = await fetch('/api/agent-log');
-    const { entries } = await r.json();
-    if (!entries?.length) return;
-    const last = entries[entries.length - 1];
-    const names = { projektledare: '🗂', snickare: '🔨', granskare: '✅', specskrivare: '📝', logg: '📋' };
-    const icon = names[last.agent] || '🤖';
-    const note = last.note || (last.added?.length ? `+${last.added.length} task` : 'körde');
-    el.textContent = `${icon} ${last.ts.slice(11,16)} — ${note}`;
-    el.style.opacity = '0.7';
-    // Blinka till vid ny post
-    el.style.transition = 'none';
-    el.style.opacity = '1';
-    setTimeout(() => { el.style.transition = 'opacity 2s'; el.style.opacity = '0.5'; }, 2000);
-  } catch {}
-  setTimeout(agentPulse, 30_000);
+  setInterval(poll, 2000);
 })();
 </script>
 

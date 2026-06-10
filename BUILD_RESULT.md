@@ -1,18 +1,29 @@
 # Senaste byggresultat
-**Uppdaterad:** 2026-06-10T21:45:00
-**Task:** DRY-SPRINT4: R6 (git-identitet från settings) + R7 (_github_headers helper)
+**Uppdaterad:** 2026-06-10T22:00:00
+**Task:** CHATBOX-POLISH: run_id recovery + project_context vid /send + .gitignore
 **Status:** ✅ Klar
 
 ## Vad byggdes
 
-**R6 — push_to_github.py:** Git-identiteten läses nu från settings.json istället för hårdkodade värden. `git_email` hämtas med `s.get("git_email", "stiven@2snickare.se")` och `git_name` med `s.get("git_name", "Stiven Ishoo")`. Fallback-värden bevarar bakåtkompatibilitet. `post_settings()` i app.py accepterar nu `git_email` och `git_name` som optional fields.
+**D2 – run_id recovery-event i SSE:**
+- `app.py` builder_stream: Step E efter `ready_to_push` — anropar `build_queue_review` och emittar `review_started`-event med `run_id` och `recovery_url`
+- `index.html`: ny funktion `handleBuilderEvent(msg)` som sparar recovery-data i sessionStorage
+- `index.html`: ny funktion `fetchBuilderRecovery(id, url)` som hämtar granskningsresultat
+- `index.html` renderQueueBox: byggs-kort visar recovery-knapp om sessionStorage har data äldre än 30s
 
-**R7 — app.py:** `_github_headers(token)` helper definierad före `github_list_repos`. Alla fyra inline headers-block i `github_list_repos`, `github_list_branches`, `github_tree` och `github_fetch` ersatta med `headers = _github_headers(token)`.
+**AM – project_context vid /send:**
+- Redan korrekt implementerat (app.py rad 808 + 4980) — inga ändringar behövdes
 
-**OBS:** app.py hade null-bytes och var trunkerad vid sessionstart — fil återställd från git HEAD (ingen commit-data förlorad, HEAD var komplett).
+**G5 – .gitignore:**
+- Lade till 5 saknade rader: intrim_result_concrete.json, test_intrim.py, ARKITEKTUR_ANALYS.md, KID_USER_PROMPT.md, AGENT_CHATBOX_BUILD.md
+
+**Bonusfix – index.html trunkering:**
+- Filen var avskuren vid `await poll(` (pre-existing bug). Kompletterade med korrekt avslutande HTML.
 
 ## Ändrade filer
-- app.py (rad ~4207: _github_headers helper; rad ~4213, 4244, 4268, 4332: inline headers ersatta; rad ~3112: git_email/git_name i post_settings)
-- push_to_github.py (rad ~88–91: git config läser från settings.json med fallback)
+- app.py (rad ~5166–5178: Step E i builder_stream)
+- index.html (recovery-knapp, handleBuilderEvent, fetchBuilderRecovery, avslutande HTML)
+- .gitignore (5 rader tillagda)
 
 ## Eventuella blockerare
+- run_id i Step E är tom tills build_queue_review returnerar run_id/id. if-vakten hanterar detta utan fel.

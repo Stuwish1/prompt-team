@@ -64,5 +64,37 @@
     ],
     "queue_size": 3,
     "note": "AGENT-FIX-3 nu KLAR (uppdaterat i PROJECT_STATUS). Kön: DRY-SPRINT4 + UX-SPRINT6 + CHATBOX-POLISH (ny). Kön full (3) — väntar."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:34",
+    "added": [
+      "KID-SPRINT1: Barnvänliga felmeddelanden + verktygsnamn + git-rubrik i chat"
+    ],
+    "queue_size": 2,
+    "note": "DRY-SPRINT4 + UX-SPRINT6 nu KLARA (uppdaterat i PROJECT_STATUS). CHATBOX-POLISH status fixad 'ko'→'kö'. Lade in KID-SPRINT1 (KID-agent fynd: 3 barnvänliga fixar i chat). Kön: 2 items."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:38",
+    "added": [
+      "FLÖDE-FIX1: Shell injection i _safe_run_cmd via item-titel"
+    ],
+    "queue_size": 3,
+    "note": "Lade in FLÖDE-FIX1 (ny säkerhetsbug från flödesagenten iteration 13). CHATBOX-POLISH byggs nu. KID-SPRINT1 och FLÖDE-FIX1 väntar. API nere — direkt mot fil."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:42",
+    "added": [],
+    "queue_size": 3,
+    "note": "Kön full (3 items: CHATBOX-POLISH byggs + KID-SPRINT1 + FLÖDE-FIX1 kö) — inga nya tasks inlagda. Nytt kritiskt fynd: app.py trunkerad rad 5252 (CODEBASE_AUDIT) — noterat i PROJECT_STATUS, läggs in nästa körning när kön töms."
+  },
+  {
+    "agent": "projektledare",
+    "ts": "2026-06-10T21:43",
+    "added": [],
+    "queue_size": 3,
+    "note": "Kön full (3 items: CHATBOX-POLISH byggs + KID-SPRINT1 + FLÖDE-FIX1 kö) — inga nya tasks inlagda. Nästa task när kön töms: app.py-trunkering rad 5252 (KRITISK)."
   }
 ]
