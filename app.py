@@ -5192,6 +5192,56 @@ async def _exec_tool(name: str, inp: dict, repo_path: Path) -> str:
     return f"[FEL] Okänt verktyg: {name}"
 
 
+
+@app.get("/api/chat/{item_id}")
+async def get_item_chat(item_id: str):
+    """Return chat history for a specific build item."""
+    with _chat_histories_lock:
+        history = list(_chat_histories.get(f"item_{item_id}", []))
+    messages = [{"role": m["role"], "content": m["content"]} for m in history]
+    return {"messages": messages}
+
+
+@app.post("/api/chat/{item_id}")
+async def post_item_chat(item_id: str, payload: dict):
+    """Send a message to the builder for a specific item. Returns JSON reply."""
+    message = str(payload.get("message", "")).strip()
+    if not message:
+        return JSONResponse({"error": "message required"}, status_code=400)
+
+    chat_key = f"item_{item_id}"
+    with _chat_histories_lock:
+        history = list(_chat_histories.get(chat_key, []))
+
+    history.append({"role": "user", "content": message})
+
+    try:
+        loop = asyncio.get_event_loop()
+        settings = load_settings()
+        model = settings.get("model_chat") or settings.get("model") or "anthropic/claude-sonnet-4.6"
+
+        def _call():
+            return _or_chat(model, history, max_tokens=2048, want_json=False)
+
+        reply = await loop.run_in_executor(None, _call)
+        new_hist = history + [{"role": "assistant", "content": reply}]
+        with _chat_histories_lock:
+            _chat_histories[chat_key] = new_hist[-40:]
+        return {"reply": reply}
+    except Exception as e:
+        logger.exception("item_chat error")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.delete("/api/chat/{item_id}")
+async def delete_item_chat(item_id: str):
+    """Clear chat history for a specific build item."""
+    chat_key = f"item_{item_id}"
+    with _chat_histories_lock:
+        _chat_histories.pop(chat_key, None)
+    return {"ok": True}
+
+
 @app.get("/api/builder/stream/{item_id}")
 async def builder_stream(item_id: str, request: Request):
     """SSE endpoint: agentic code builder streams build progress to the client."""

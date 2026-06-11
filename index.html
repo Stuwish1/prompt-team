@@ -1443,7 +1443,8 @@ function updateSourceStatusLine() {
     textEl.textContent = '📋 Inget GitHub-repo kopplat — klistra in kod under Avancerat, eller koppla ett repo i projektinställningarna';
     if (actionEl) actionEl.textContent = 'Öppna ▾';
     const d = document.getElementById('advancedPost');
-    if (d && !manual) d.open = true; // utan repo MÅSTE man dit — öppna direkt
+    const _manualCode = document.getElementById('codeInput')?.value?.trim() || '';
+    if (d && !_manualCode) d.open = true; // utan repo MÅSTE man dit — öppna direkt
   }
 }
 
