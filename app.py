@@ -325,7 +325,7 @@ def load_settings() -> dict:
         "openrouter_key": os.environ.get("OPENROUTER_KEY", ""),
         "agent_models": {},
         "supabase_url": os.environ.get("SUPABASE_URL", ""),
-        "supabase_key": os.environ.get("SUPABASE_KEY", ""),
+        "supabase_key": os.environ.get("SUPABASE_KEY", os.environ.get("SUPABASE_ANON_KEY", "")),
         "github_token": os.environ.get("GITHUB_TOKEN", ""),
         "self_repo": os.environ.get("SELF_REPO", ""),
         "self_branch": os.environ.get("SELF_BRANCH", "main"),
