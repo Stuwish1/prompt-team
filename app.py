@@ -34,6 +34,29 @@ executor = ThreadPoolExecutor(max_workers=80)
 
 @app.on_event("startup")
 async def startup():
+    # Bootstrap settings.json from env vars on Railway (file is gitignored)
+    env_map = {
+        "api_key":        os.environ.get("ANTHROPIC_API_KEY", ""),
+        "openrouter_key": os.environ.get("OPENROUTER_KEY", ""),
+        "supabase_url":   os.environ.get("SUPABASE_URL", ""),
+        "supabase_key":   os.environ.get("SUPABASE_KEY", os.environ.get("SUPABASE_ANON_KEY", "")),
+        "github_token":   os.environ.get("GITHUB_TOKEN", ""),
+        "self_repo":      os.environ.get("SELF_REPO", ""),
+        "self_branch":    os.environ.get("SELF_BRANCH", "main"),
+        "local_path":     os.environ.get("LOCAL_PATH", str(BASE_DIR)),
+    }
+    if any(env_map.values()):
+        try:
+            existing = json.loads(SETTINGS_FILE.read_text(encoding="utf-8")) if SETTINGS_FILE.exists() else {}
+            for k, v in env_map.items():
+                if v:
+                    existing[k] = v
+            if not existing.get("model"):
+                existing["model"] = "claude-sonnet-4-6"
+            SETTINGS_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+            logger.info("[startup] settings.json bootstrapped from env vars")
+        except Exception as e:
+            logger.warning("[startup] Could not bootstrap settings: %s", e)
     _migrate_sessions()
     asyncio.ensure_future(_progress_gc_loop())
     # C1: Återställ items som fastnat i "byggs" vid föregående körning.
