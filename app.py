@@ -317,28 +317,38 @@ _DEFAULT_AGENT_MODELS = {
 _settings_cache = {"mtime": None, "data": None}
 
 def load_settings() -> dict:
-    """mtime-cached settings read — called dozens of times per review run."""
+    """mtime-cached settings read — called dozens of times per review run.
+    Env vars override file settings so Railway Variables work without settings.json."""
+    defaults = {
+        "api_key": os.environ.get("ANTHROPIC_API_KEY", ""),
+        "model": os.environ.get("MODEL", "claude-sonnet-4-6"),
+        "openrouter_key": os.environ.get("OPENROUTER_KEY", ""),
+        "agent_models": {},
+        "supabase_url": os.environ.get("SUPABASE_URL", ""),
+        "supabase_key": os.environ.get("SUPABASE_KEY", ""),
+        "github_token": os.environ.get("GITHUB_TOKEN", ""),
+        "self_repo": os.environ.get("SELF_REPO", ""),
+        "self_branch": os.environ.get("SELF_BRANCH", "main"),
+        "local_path": os.environ.get("LOCAL_PATH", str(BASE_DIR)),
+    }
     if SETTINGS_FILE.exists():
         try:
             mtime = SETTINGS_FILE.stat().st_mtime
             with _settings_lock:
                 if _settings_cache["mtime"] == mtime and _settings_cache["data"] is not None:
-                    return dict(_settings_cache["data"])  # copy — callers mutate (key masking)
-                data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-                _settings_cache.update(mtime=mtime, data=data)
-                return dict(data)
+                    data = dict(_settings_cache["data"])
+                else:
+                    data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+                    _settings_cache.update(mtime=mtime, data=data)
+                    data = dict(data)
+            # Env vars override file values if set
+            for k, v in defaults.items():
+                if v and not data.get(k):
+                    data[k] = v
+            return data
         except Exception:
             pass
-    return {
-        "api_key": "", "model": "claude-sonnet-4-6",
-        "openrouter_key": "",
-        "agent_models": {},
-        "supabase_url": "", "supabase_key": "",
-        "github_token": "", "self_repo": "", "self_branch": "main",
-        # I1: local_path = mappen byggagenten läser/skriver filer i.
-        # Standard = samma mapp som app.py (fungerar för self-hosted setup).
-        "local_path": str(BASE_DIR),
-    }
+    return defaults
 
 
 def save_settings(s: dict):
